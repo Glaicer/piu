@@ -9,4 +9,5 @@
 - [ ] Tab cycles focus across Panels in Layout order, Shift+Tab reverses, and the frame shows which Panel is focused
 - [ ] With the agent Panel focused, arrows scroll it and Enter expands the selected tool card
 - [ ] A fixture `keybindings` remap changes which key opens the model picker
+- [ ] An unknown action name in `keybindings` is a startup error with the field path
 - [ ] Hidden Panels (below `hideBelow`) are skipped by Tab
