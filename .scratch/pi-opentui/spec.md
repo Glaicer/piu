@@ -221,6 +221,7 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 - Diff view for `edit`, images in messages, pasting images into the input.
 - Subagent cards and live subagent streams (Pi-Bolt only).
 - Replaceable per-message renderers (a second extension point for message types).
+- Messages that Pi extensions add to the conversation (`role: "custom"`, `display: true`, e.g. `/in` and subagent results). The chat shows only user and assistant messages, so these stay invisible. Revisit after the MVP.
 - Loading Extensions from anywhere other than `builtin/` and `extensions/`. No package distribution of Extensions.
 - Reimplementing Pi's `/settings`, `/hotkeys`, `/login` and other built-in TUI commands not listed above.
 - Pi extensions that need Pi's own TUI (`custom()`, `setFooter`, `setHeader`, `setEditorComponent`, autocomplete providers). They are no-ops over RPC.
