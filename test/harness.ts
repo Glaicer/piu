@@ -30,6 +30,22 @@ function withBackend(backend: object, config: unknown) {
 	return { ...rest, backend: { ...backend, ...override } };
 }
 
+export function panelText(frame: string, column: number, row = 0) {
+	const rows = frame.split("\n");
+	let top = row;
+	while (top > 0 && (rows[top] ?? "").lastIndexOf("┌", column) < 0) top--;
+	const border = rows[top] ?? "";
+	const left = border.lastIndexOf("┌", column);
+	const right = border.indexOf("┐", column);
+	const bottom = rows.findIndex(
+		(text, index) => index > top && [...text][left] === "└",
+	);
+	return rows
+		.slice(top + 1, bottom)
+		.map((text) => [...text].slice(left + 1, right - 1).join(""))
+		.join("\n");
+}
+
 export async function startPiu(options: {
 	script: FauxScript;
 	args?: string[];

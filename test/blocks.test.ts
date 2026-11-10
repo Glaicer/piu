@@ -48,7 +48,7 @@ test("a tool call is a card that runs, finishes with a duration, and opens and c
 					toolCalls: [
 						{
 							name: "bash",
-							args: { command: "sleep 0.6; echo zebra-$((1+1))" },
+							args: { command: "sleep 2; echo zebra-$((1+1))" },
 						},
 					],
 				},
@@ -58,9 +58,10 @@ test("a tool call is a card that runs, finishes with a duration, and opens and c
 	});
 
 	await send(piu, "Run it");
-	const running = await piu.waitForFrame((f) => f.includes("running"));
-	expect(running).toContain("bash");
-	expect(running).toContain("sleep 0.6");
+	const running = await piu.waitForFrame(
+		(f) => f.includes("running") && f.includes("bash") && f.includes("sleep 2"),
+	);
+	expect(running).toContain("running");
 
 	const finished = await piu.waitForFrame((f) =>
 		f.includes("Finished the job"),
@@ -71,7 +72,7 @@ test("a tool call is a card that runs, finishes with a duration, and opens and c
 
 	await clickOn(piu, finished, "bash");
 	const open = await piu.waitForFrame((f) => f.includes("zebra-2"));
-	expect(open).toContain("sleep 0.6");
+	expect(open).toContain("sleep 2");
 
 	await clickOn(piu, open, "bash");
 	await piu.waitForFrame((f) => !f.includes("zebra-2"));

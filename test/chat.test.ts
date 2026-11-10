@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getTreeSitterClient, RGBA } from "@opentui/core";
 import { defaultTheme } from "../src/theme.ts";
-import { startPiu } from "./harness.ts";
+import { panelText, startPiu } from "./harness.ts";
 
 const FAUX_CHARS_PER_TOKEN = 4;
 
@@ -53,20 +53,6 @@ function spyOnHighlights() {
 		contents: () => spy.mock.calls.map(([content]) => content),
 		[Symbol.dispose]: () => spy.mockRestore(),
 	};
-}
-
-function panelText(frame: string, column: number) {
-	const rows = frame.split("\n");
-	const top = rows[0] ?? "";
-	const left = top.lastIndexOf("┌", column);
-	const right = top.indexOf("┐", column);
-	const bottom = rows.findIndex(
-		(row, index) => index > 0 && [...row][left] === "└",
-	);
-	return rows
-		.slice(1, bottom)
-		.map((row) => [...row].slice(left + 1, right - 1).join(""))
-		.join("\n");
 }
 
 const agentPanel = (frame: string) => panelText(frame, 10);
