@@ -11,3 +11,7 @@
 - [ ] Esc and a click outside each close the Modal
 - [ ] Typing while a Modal is open doesn't change the input underneath
 - [ ] A Modal opened from a Modal stacks, and Esc closes only the top one
+
+## Comments
+
+- From 08: the input Module's Esc aborts the run whenever `working` is true. An open Modal must take Esc first, so Esc closes the Modal and does not abort.

@@ -10,3 +10,7 @@
 - [ ] Typing narrows the list, and Enter inserts the chosen entry
 - [ ] An app command runs locally and doesn't reach the model, while a prompt template expands and reaches the model
 - [ ] `@` lists files of a fixture folder, narrows as I type, and inserts the chosen path
+
+## Comments
+
+- From 08: an open autocomplete list must take Esc first, so Esc closes the list and does not abort the run. The input is a `<textarea>` with its own key routing in `onKeyDown`, where Enter, Up and Down are already taken (send/steer, history on the first or last visual line); the list needs them while it is shown.
