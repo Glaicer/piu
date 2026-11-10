@@ -1,6 +1,6 @@
-# 19: Command and autocomplete polish
+# 19: Command, autocomplete and state polish
 
-**What to build:** Small user-visible gaps left by tickets 09–11. A refused model or reasoning switch says why instead of closing the picker silently. Autocomplete behaves with mixed case and with the cursor inside a word. Tree opens on the current position. App commands receive the text after their name, so `/compact <instructions>` works.
+**What to build:** Small user-visible gaps left by tickets 09–11. A refused model or reasoning switch says why instead of closing the picker silently. Autocomplete behaves with mixed case and with the cursor inside a word. Tree opens on the current position. App commands receive the text after their name, so `/compact <instructions>` works. The shown conversation, model and reasoning level stay in sync when Pi changes them on its own, and a failing Pi extension is reported instead of ignored.
 
 **Blocked by:** 09, 10, 11, 12
 
@@ -10,6 +10,9 @@
 - [ ] `/MODEL` + Enter runs `/model` (command matching is case-insensitive, like the list filter)
 - [ ] Completing with the cursor inside a word (`/mo|del`) replaces the whole word, leaving no tail
 - [ ] The Tree Modal opens with the current leaf's prompt selected
+- [ ] After an automatic compaction (`compaction_end` with reason `threshold` or `overflow`), the message list matches Pi's `get_messages`, as it already does after `/compact`
+- [ ] A test Pi extension command that changes the thinking level updates the shown level (`thinking_level_changed`), and one that changes the model updates the shown model once the command finishes
+- [ ] An `extension_error` event shows a Toast naming the Pi extension and its error
 - [ ] `/compact focus on the tests` passes `focus on the tests` to Pi's compaction as custom instructions, and the command's `run` receives the argument text
 
 ## Comments
@@ -17,3 +20,6 @@
 - From 09: `setModel` and `setThinkingLevel` in `src/pi-state.ts` ignore the response; only a dead Backend is caught.
 - From 10: exact-match for Enter and local dispatch of app commands are case-sensitive, while matching is not. Completion with the cursor mid-word replaces only the text before the cursor.
 - From 11: `get_tree` returns `leafId`, but the Modal starts on its first row. `run` gets no arguments, and the prompt dispatches an app command only for a bare `/name`.
+- From 11: only `/compact` reloads `get_messages`; Compact's reload and service-row re-anchoring in `src/pi-state.ts` can be reused for `compaction_end` of any reason.
+- From 09: Pi has `thinking_level_changed` but no model-change event (`docs/json.md`, Queue and state events), so the model has to be re-read with `get_state`, e.g. after a Backend command's prompt settles. The author's `/mode` Pi extension switches models, so this shows up in daily use. The store handles neither today.
+- `extension_error` (`docs/json.md`, RPC-only events) carries `extensionPath`, `event` and `error`; the store ignores it today.
