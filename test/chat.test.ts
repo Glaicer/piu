@@ -30,6 +30,9 @@ const formatted = [
 function isFormatted(frame: string) {
 	return (
 		frame.includes("Release notes") &&
+		frame.includes("first item") &&
+		frame.includes("second item") &&
+		frame.includes("const answer: number = 42;") &&
 		frame.includes("Done") &&
 		!frame.includes("# ") &&
 		!frame.includes("**") &&

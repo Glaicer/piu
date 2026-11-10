@@ -1,15 +1,24 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { JsonObject } from "@earendil-works/pi-ai";
 import { testRender } from "@opentui/solid";
 import { createApp } from "../src/app.tsx";
 
 const piBin = join(import.meta.dir, "../node_modules/.bin/pi");
 const fauxBackend = join(import.meta.dir, "fixtures/faux-backend.ts");
 
+export type FauxStep = {
+	thinking?: string;
+	text?: string;
+	toolCalls?: { name: string; args: JsonObject }[];
+	error?: string;
+};
+
 export type FauxScript = {
-	replies: string[];
+	replies: (string | FauxStep)[];
 	crash?: { code: number; stderr: string };
+	compactCommand?: boolean;
 	tokensPerSecond?: number;
 	tokenSize?: number;
 };
@@ -35,6 +44,15 @@ export async function startPiu(options: {
 	const dir = options.dir ?? mkdtempSync(join(tmpdir(), "piu-test-"));
 	const scriptPath = join(dir, "script.json");
 	writeFileSync(scriptPath, JSON.stringify(options.script));
+	// why: Pi waits retry.baseDelayMs before an automatic retry and refuses to compact a session shorter than keepRecentTokens, so tests shrink both.
+	mkdirSync(join(dir, "agent"), { recursive: true });
+	writeFileSync(
+		join(dir, "agent", "settings.json"),
+		JSON.stringify({
+			retry: { baseDelayMs: 20 },
+			compaction: { keepRecentTokens: 1 },
+		}),
+	);
 
 	const backend = {
 		command: "env",

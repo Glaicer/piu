@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
 import {
+	type FauxContentBlock,
 	fauxAssistantMessage,
 	fauxProvider,
 	fauxText,
+	fauxThinking,
+	fauxToolCall,
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { FauxScript } from "../harness.ts";
+import type { FauxScript, FauxStep } from "../harness.ts";
 
 export default function (pi: ExtensionAPI) {
 	const scriptPath = process.env.PIU_FAUX_SCRIPT;
@@ -19,27 +22,48 @@ export default function (pi: ExtensionAPI) {
 			? { min: script.tokenSize, max: script.tokenSize }
 			: undefined,
 	});
-	faux.setResponses(
-		script.replies.map(
-			(reply) => (context, _options, _state, model) =>
-				fauxAssistantMessage(
-					fauxText(
-						reply
-							.replaceAll("{model}", model.id)
-							.replaceAll(
-								"{messages}",
-								String(
-									context.messages.filter(
-										(message) =>
-											message.role === "user" || message.role === "assistant",
-									).length,
-								),
-							),
-					),
+	const substitute = (
+		text: string,
+		context: { messages: { role: string }[] },
+		modelId: string,
+	) =>
+		text
+			.replaceAll("{model}", modelId)
+			.replaceAll(
+				"{messages}",
+				String(
+					context.messages.filter(
+						(message) =>
+							message.role === "user" || message.role === "assistant",
+					).length,
 				),
-		),
+			);
+	faux.setResponses(
+		script.replies.map((reply) => (context, _options, _state, model) => {
+			const step: FauxStep =
+				typeof reply === "string" ? { text: reply } : reply;
+			const blocks: FauxContentBlock[] = [];
+			if (step.thinking) blocks.push(fauxThinking(step.thinking));
+			if (step.text)
+				blocks.push(fauxText(substitute(step.text, context, model.id)));
+			for (const call of step.toolCalls ?? [])
+				blocks.push(fauxToolCall(call.name, call.args));
+			return step.error
+				? fauxAssistantMessage(blocks, {
+						stopReason: "error",
+						errorMessage: step.error,
+					})
+				: fauxAssistantMessage(blocks);
+		}),
 	);
 	pi.registerProvider(faux.provider);
+	if (script.compactCommand) {
+		pi.registerCommand("compact-now", {
+			handler: async (_args, ctx) => {
+				ctx.compact();
+			},
+		});
+	}
 	if (script.crash) {
 		const { code, stderr } = script.crash;
 		pi.registerCommand("crash", {

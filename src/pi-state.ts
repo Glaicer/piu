@@ -11,8 +11,16 @@ type AssistantUpdate = Extract<
 	{ type: "message_update" }
 >["assistantMessageEvent"];
 
+export type ServiceRow = {
+	readonly kind: "compaction" | "retry";
+	readonly position: number;
+	readonly status: "active" | "ok" | "failed";
+	readonly text: string;
+};
+
 export type PiState = {
 	readonly messages: readonly PiMessage[];
+	readonly serviceRows: readonly ServiceRow[];
 	readonly streamingMessage: PiMessage | null;
 	readonly backendHealth: BackendHealth;
 };
@@ -27,10 +35,12 @@ const ignoreDeadBackend = () => {};
 export function createPiState(launch: (extraArgs: string[]) => Backend) {
 	const [state, setState] = createStore<{
 		messages: PiMessage[];
+		serviceRows: ServiceRow[];
 		streamingMessage: PiMessage | null;
 		backendHealth: BackendHealth;
 	}>({
 		messages: [],
+		serviceRows: [],
 		streamingMessage: null,
 		backendHealth: { status: "running" },
 	});
@@ -50,6 +60,7 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 			offHealth();
 		};
 		setState("streamingMessage", null);
+		setState("serviceRows", []);
 		setState("backendHealth", reconcile({ status: "running" }));
 		backend
 			.request({ type: "get_messages" })
@@ -82,7 +93,59 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 				);
 				setState("streamingMessage", null);
 				break;
+			case "compaction_start":
+				startRow("compaction", `Compacting context (${record.reason})…`);
+				break;
+			case "compaction_end":
+				finishRow("compaction", compactionOutcome(record));
+				break;
+			case "auto_retry_start":
+				startRow(
+					"retry",
+					`Retrying (${record.attempt}/${record.maxAttempts}) in ${record.delayMs}ms: ${record.errorMessage}`,
+				);
+				break;
+			case "auto_retry_end":
+				finishRow(
+					"retry",
+					record.success
+						? {
+								status: "ok",
+								text: `Retry succeeded (attempt ${record.attempt})`,
+							}
+						: {
+								status: "failed",
+								text: `Retry failed: ${record.finalError ?? "unknown error"}`,
+							},
+				);
+				break;
 		}
+	}
+
+	function startRow(kind: ServiceRow["kind"], text: string) {
+		const active = state.serviceRows.findIndex(
+			(row) => row.kind === kind && row.status === "active",
+		);
+		if (active >= 0) {
+			setState("serviceRows", active, { text });
+			return;
+		}
+		setState("serviceRows", state.serviceRows.length, {
+			kind,
+			position: state.messages.length,
+			status: "active",
+			text,
+		});
+	}
+
+	function finishRow(
+		kind: ServiceRow["kind"],
+		outcome: { status: "ok" | "failed"; text: string },
+	) {
+		const active = state.serviceRows.findIndex(
+			(row) => row.kind === kind && row.status === "active",
+		);
+		if (active >= 0) setState("serviceRows", active, outcome);
 	}
 
 	attach([]);
@@ -110,6 +173,25 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 	};
 }
 
+function compactionOutcome(
+	record: Extract<BackendRecord, { type: "compaction_end" }>,
+): { status: "ok" | "failed"; text: string } {
+	if (record.aborted) return { status: "failed", text: "Compaction aborted" };
+	if (!record.result) {
+		return {
+			status: "failed",
+			text: record.errorMessage ?? "Compaction failed",
+		};
+	}
+	const { tokensBefore, estimatedTokensAfter } = record.result;
+	const after =
+		estimatedTokensAfter === undefined ? "?" : `~${estimatedTokensAfter}`;
+	return {
+		status: "ok",
+		text: `Compacted context (${tokensBefore} → ${after} tokens)`,
+	};
+}
+
 function applyUpdate(message: PiMessage | undefined, update: AssistantUpdate) {
 	if (message?.role !== "assistant") return;
 	switch (update.type) {
@@ -126,6 +208,31 @@ function applyUpdate(message: PiMessage | undefined, update: AssistantUpdate) {
 				type: "text",
 				text: update.content,
 			};
+			break;
+		case "thinking_start":
+			message.content[update.contentIndex] = { type: "thinking", thinking: "" };
+			break;
+		case "thinking_delta": {
+			const block = message.content[update.contentIndex];
+			if (block?.type === "thinking") block.thinking += update.delta;
+			break;
+		}
+		case "thinking_end":
+			message.content[update.contentIndex] = {
+				type: "thinking",
+				thinking: update.content,
+			};
+			break;
+		case "toolcall_start":
+			message.content[update.contentIndex] = {
+				type: "toolCall",
+				id: update.id,
+				name: update.toolName,
+				arguments: {},
+			};
+			break;
+		case "toolcall_end":
+			message.content[update.contentIndex] = update.toolCall;
 			break;
 	}
 }
