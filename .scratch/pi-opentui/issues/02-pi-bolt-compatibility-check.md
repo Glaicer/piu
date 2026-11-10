@@ -6,10 +6,10 @@
 
 **Status:** ready-for-agent
 
-- [ ] Running the script against `pi-bolt --mode rpc` with a tiny `-e` Pi extension that registers `ask_user_question` reports which implementation the model call reaches
-- [ ] The script reports any non-protocol output on stdout and any startup errors from compiled-in Pi extensions
-- [ ] ADR-0001's Consequences say what was verified, and the workaround if precedence fails (e.g. how to exclude the compiled-in one for `piu`)
-- [ ] The script skips with a clear message when `pi-bolt` is not installed
+- [x] Running the script against `pi-bolt --mode rpc` with a tiny `-e` Pi extension that registers `ask_user_question` reports which implementation the model call reaches
+- [x] The script reports any non-protocol output on stdout and any startup errors from compiled-in Pi extensions
+- [x] ADR-0001's Consequences say what was verified, and the workaround if precedence fails (e.g. how to exclude the compiled-in one for `piu`)
+- [x] The script skips with a clear message when `pi-bolt` is not installed
 
 ## Comments
 

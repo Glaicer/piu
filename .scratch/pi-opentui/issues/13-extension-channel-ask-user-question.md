@@ -12,3 +12,7 @@
 - [ ] Dismissing sends a declined result
 - [ ] Removing the Extension's Module from Placement stops passing its Pi extension to the Backend
 - [ ] A reserved-title `editor` request never shows the generic editor Modal
+
+## Comments
+
+- From 02: on Pi-Bolt 1.1.6 an `-e` tool with the same name as a package's `ask_user_question` does not win. Pi-Bolt fails to start (exit 1, conflict message on stderr). The "call reaches ours" criterion holds only on stock Pi, or on Pi-Bolt once the user removes the package or adds `-ne` to `backend.args`. Decide before building: ship the workaround in the README, or give our tool another name. See ADR-0001.

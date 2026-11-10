@@ -16,3 +16,4 @@
 - From 01: `Backend.stop()` in `src/backend.ts` only ends the child's stdin (Pi's documented orderly shutdown) and never kills it. Confirm `pi-bolt` exits on stdin EOF (see 02), and decide whether a kill fallback is needed.
 - From 01: the input Module calls `void actions.prompt(...)`, so a prompt sent to a dead Backend is an unhandled rejection. Backend health should own that failure.
 - From 01: the Backend client already keeps a 64 KB stderr tail (`stderrTail()`) for the error card.
+- From 02: `pi-bolt --mode rpc` exits (code 0, ~10 ms) when stdin closes while idle; closing it mid-run is not checked. A tool-name conflict between an `-e` Pi extension and a Pi-Bolt package makes the Backend exit with code 1 before answering any command, with `Tool "<name>" conflicts with <file>` on stderr. The error card should show `stderrTail()` for that case.
