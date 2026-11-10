@@ -18,6 +18,7 @@ export type ModalRequest = {
 	height: Cells;
 	left?: number;
 	top?: number;
+	onDismiss?(): void;
 };
 
 export function moduleModal(
@@ -45,7 +46,10 @@ export function createModals() {
 			setStack((entries) => [...entries, entry]);
 			return () => close(entry);
 		},
-		close,
+		dismiss(entry: Entry) {
+			entry.request.onDismiss?.();
+			close(entry);
+		},
 	};
 }
 
@@ -71,7 +75,7 @@ export function ModalLayer(props: { modals: Modals; context: SharedContext }) {
 		const top = props.modals.stack().at(-1);
 		if (top && event.name === "escape") {
 			event.preventDefault();
-			props.modals.close(top);
+			props.modals.dismiss(top);
 			return;
 		}
 		trap(event);
@@ -121,7 +125,7 @@ function ModalView(props: {
 			justifyContent="center"
 			onMouseDown={(event) => {
 				event.preventDefault();
-				props.modals.close(props.entry);
+				props.modals.dismiss(props.entry);
 			}}
 		>
 			<box

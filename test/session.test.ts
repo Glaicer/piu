@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { panelText, startPiu } from "./harness.ts";
+import { inputArea, panelText, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -92,7 +92,7 @@ test("/resume lists the saved sessions, and picking one shows its conversation",
 	expect(agentPanel(switched)).toContain("> Alpha question");
 });
 
-test("/tree shows a branched session, and picking an earlier prompt forks from it", async () => {
+test("/tree shows a branched session, and picking an earlier prompt forks from it and puts that prompt back in the input", async () => {
 	await using piu = await startPiu({
 		script: {
 			replies: ["Trunk reply", "Left reply", "Right reply"],
@@ -119,10 +119,21 @@ test("/tree shows a branched session, and picking an earlier prompt forks from i
 	const { x, y } = locate(open, "Right prompt");
 	await piu.mockMouse.click(x + 20, y);
 	const forked = await piu.waitForFrame(
-		(f) => !f.includes("Right") && !f.includes("Left"),
+		(f) =>
+			!agentPanel(f).includes("Right") &&
+			!agentPanel(f).includes("Left") &&
+			inputArea(f).includes("Right prompt"),
 	);
 	expect(agentPanel(forked)).toContain("> Trunk prompt");
 	expect(agentPanel(forked)).toContain("Trunk reply");
+});
+
+test("/resume with no saved sessions says so in a Toast", async () => {
+	await using piu = await startPiu({ script: { replies: [] } });
+
+	await send(piu, "/resume");
+
+	await piu.waitForFrame((f) => f.includes("No saved sessions"));
 });
 
 test("/ autocomplete lists the four session commands", async () => {

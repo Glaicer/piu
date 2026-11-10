@@ -21,7 +21,10 @@ async function tree(context: CommandContext) {
 
 async function resume(context: CommandContext) {
 	const sessions = await listSessions(context.pi.sessionFile);
-	if (sessions.length === 0) return;
+	if (sessions.length === 0) {
+		context.actions.showToast("No saved sessions");
+		return;
+	}
 	openPicker<SessionSummary>(context, {
 		id: "resume-picker",
 		width: 70,

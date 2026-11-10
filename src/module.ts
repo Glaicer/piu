@@ -3,6 +3,7 @@ import type { Accessor } from "solid-js";
 import type { ModalRequest } from "./modal.tsx";
 import type { PiActions, PiState } from "./pi-state.ts";
 import type { Theme } from "./theme.ts";
+import type { ToastKind } from "./toast.tsx";
 
 export type Presence = "hidden" | "shown" | "exclusive";
 
@@ -10,6 +11,7 @@ export type ModuleSettings = Readonly<Record<string, unknown>>;
 
 export type UiActions = {
 	openModal(request: ModalRequest): () => void;
+	showToast(message: string, kind?: ToastKind): void;
 };
 
 export type CommandContext = {

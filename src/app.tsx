@@ -1,12 +1,15 @@
-import { onCleanup } from "solid-js";
+import { useRenderer } from "@opentui/solid";
+import { createEffect, onCleanup } from "solid-js";
 import { startBackend } from "./backend.ts";
 import { type Config, loadConfig } from "./config.ts";
+import { bridgeDialogs } from "./dialogs.tsx";
 import { builtinDir, findExtensions, resolvePlacement } from "./extensions.ts";
 import { SlotView } from "./layout.tsx";
 import { createModals, ModalLayer } from "./modal.tsx";
 import type { Command, CommandContext, PlacedModule } from "./module.ts";
 import { createPiState } from "./pi-state.ts";
 import { defaultTheme } from "./theme.ts";
+import { createToasts, ToastLayer } from "./toast.tsx";
 
 export async function createApp(options: {
 	configPath: string;
@@ -36,18 +39,27 @@ function App(props: {
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	commands: readonly Command[];
 }) {
-	const pi = createPiState((extraArgs) =>
-		startBackend(
-			props.config.backend,
-			[...extraArgs, ...props.args],
-			props.cwd,
-		),
+	const toasts = createToasts();
+	onCleanup(toasts.dispose);
+	const pi = createPiState(
+		(extraArgs) =>
+			startBackend(
+				props.config.backend,
+				[...extraArgs, ...props.args],
+				props.cwd,
+			),
+		toasts.show,
 	);
 	onCleanup(pi.dispose);
 	const modals = createModals();
+	bridgeDialogs(pi, modals);
+	const renderer = useRenderer();
+	createEffect(() => {
+		if (pi.state.title !== null) renderer.setTerminalTitle(pi.state.title);
+	});
 	const commandContext: CommandContext = {
 		pi: pi.state,
-		actions: { ...pi.actions, openModal: modals.open },
+		actions: { ...pi.actions, openModal: modals.open, showToast: toasts.show },
 		theme: defaultTheme,
 	};
 	const context = {
@@ -67,6 +79,7 @@ function App(props: {
 				context={context}
 			/>
 			<ModalLayer modals={modals} context={context} />
+			<ToastLayer toasts={toasts} theme={defaultTheme} />
 		</box>
 	);
 }

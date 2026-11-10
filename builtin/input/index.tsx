@@ -115,6 +115,14 @@ function Prompt(props: { context: ModuleContext }) {
 		field?.gotoBufferEnd();
 	}
 
+	createEffect(
+		on(
+			() => props.context.pi.editorText.seq,
+			() => show(props.context.pi.editorText.text),
+			{ defer: true },
+		),
+	);
+
 	function take() {
 		const value = field?.plainText ?? "";
 		if (!value.trim()) return;
@@ -156,10 +164,18 @@ function Prompt(props: { context: ModuleContext }) {
 			const command = props.context.commands.find(
 				(c) => `/${c.name}` === value.trim(),
 			);
-			if (command) command.run();
-			else if (event.meta) void actions.followUp(value);
-			else if (pi.working) void actions.steer(value);
-			else void actions.prompt(value);
+			if (command) {
+				command.run();
+				return;
+			}
+			const accepted = event.meta
+				? actions.followUp(value)
+				: pi.working
+					? actions.steer(value)
+					: actions.prompt(value);
+			void accepted.then((ok) => {
+				if (!ok && field && !field.plainText) show(value);
+			});
 		}
 	}
 

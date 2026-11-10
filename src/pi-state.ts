@@ -6,6 +6,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { createStore, produce, reconcile } from "solid-js/store";
 import type { Backend, BackendHealth, BackendRecord } from "./backend.ts";
+import type { ToastKind } from "./toast.tsx";
 
 export type PiMessage = Extract<
 	JsonAgentSessionEvent,
@@ -41,6 +42,23 @@ export type SessionTree = {
 	readonly leafId: string | null;
 };
 
+export type Dialog = {
+	readonly id: string;
+	readonly title: string;
+} & (
+	| { readonly method: "select"; readonly options: readonly string[] }
+	| { readonly method: "confirm"; readonly message: string }
+	| { readonly method: "input"; readonly placeholder?: string }
+	| { readonly method: "editor"; readonly prefill?: string }
+);
+
+export type DialogAnswer =
+	| { readonly value: string }
+	| { readonly confirmed: boolean }
+	| { readonly cancelled: true };
+
+export type EditorText = { readonly seq: number; readonly text: string };
+
 export type PiState = {
 	readonly sessionFile: string | null;
 	readonly commands: readonly BackendCommand[];
@@ -53,12 +71,17 @@ export type PiState = {
 	readonly streamingMessage: PiMessage | null;
 	readonly working: boolean;
 	readonly backendHealth: BackendHealth;
+	readonly dialogs: readonly Dialog[];
+	readonly statuses: Readonly<Record<string, string>>;
+	readonly title: string | null;
+	readonly editorText: EditorText;
 };
 
 export type PiActions = {
-	prompt(text: string): Promise<void>;
-	steer(text: string): Promise<void>;
-	followUp(text: string): Promise<void>;
+	prompt(text: string): Promise<boolean>;
+	steer(text: string): Promise<boolean>;
+	followUp(text: string): Promise<boolean>;
+	answerDialog(id: string, answer: DialogAnswer): void;
 	abort(): Promise<void>;
 	setModel(model: ModelInfo): Promise<void>;
 	setThinkingLevel(level: ThinkingLevel): Promise<void>;
@@ -72,7 +95,10 @@ export type PiActions = {
 
 const ignoreDeadBackend = () => {};
 
-export function createPiState(launch: (extraArgs: string[]) => Backend) {
+export function createPiState(
+	launch: (extraArgs: string[]) => Backend,
+	notify: (message: string, kind: ToastKind) => void,
+) {
 	const [state, setState] = createStore<{
 		sessionFile: string | null;
 		commands: BackendCommand[];
@@ -85,6 +111,10 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 		streamingMessage: PiMessage | null;
 		working: boolean;
 		backendHealth: BackendHealth;
+		dialogs: Dialog[];
+		statuses: Record<string, string>;
+		title: string | null;
+		editorText: EditorText;
 	}>({
 		sessionFile: null,
 		commands: [],
@@ -97,15 +127,45 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 		streamingMessage: null,
 		working: false,
 		backendHealth: { status: "running" },
+		dialogs: [],
+		statuses: {},
+		title: null,
+		editorText: { seq: 0, text: "" },
 	});
 
 	let backend: Backend;
 	let detach = () => {};
+	const runningTools = new Set<string>();
+	// why: the protocol never says which tool call raised a dialog, so a dialog belongs to the tool calls running when it arrived and closes once all of them have ended; one raised with no tool running lasts until the run ends.
+	const dialogOwners = new Map<string, ReadonlySet<string>>();
 
 	function clearRun() {
 		setState("streamingMessage", null);
 		setState("working", false);
 		setState("serviceRows", []);
+	}
+
+	function clearExtensionUi() {
+		runningTools.clear();
+		dialogOwners.clear();
+		setState("dialogs", []);
+		setState("statuses", reconcile({}));
+	}
+
+	function closeDialogs(shouldClose: (id: string) => boolean) {
+		const closing = state.dialogs.filter((dialog) => shouldClose(dialog.id));
+		if (closing.length === 0) return;
+		const ids = new Set(closing.map((dialog) => dialog.id));
+		for (const id of ids) dialogOwners.delete(id);
+		setState("dialogs", (dialogs) =>
+			dialogs.filter((dialog) => !ids.has(dialog.id)),
+		);
+	}
+
+	function answerDialog(id: string, answer: DialogAnswer) {
+		if (!state.dialogs.some((dialog) => dialog.id === id)) return;
+		closeDialogs((dialogId) => dialogId === id);
+		backend.send({ type: "extension_ui_response", id, ...answer });
 	}
 
 	function attach(extraArgs: string[]) {
@@ -121,6 +181,7 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 			offHealth();
 		};
 		clearRun();
+		clearExtensionUi();
 		setState("backendHealth", reconcile({ status: "running" }));
 		void loadMessages();
 		backend
@@ -221,6 +282,27 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 				);
 				setState("streamingMessage", null);
 				break;
+			case "tool_execution_start":
+				runningTools.add(record.toolCallId);
+				break;
+			case "tool_execution_end":
+				runningTools.delete(record.toolCallId);
+				closeDialogs((id) => {
+					const owners = dialogOwners.get(id);
+					return (
+						owners !== undefined &&
+						owners.size > 0 &&
+						[...owners].every((toolCallId) => !runningTools.has(toolCallId))
+					);
+				});
+				break;
+			case "agent_end":
+				runningTools.clear();
+				closeDialogs(() => true);
+				break;
+			case "extension_ui_request":
+				applyUiRequest(record);
+				break;
 			case "compaction_start":
 				startRow("compaction", `Compacting context (${record.reason})…`);
 				break;
@@ -248,6 +330,73 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 				);
 				break;
 		}
+	}
+
+	function applyUiRequest(
+		record: Extract<BackendRecord, { type: "extension_ui_request" }>,
+	) {
+		switch (record.method) {
+			case "select":
+				openDialog({
+					id: record.id,
+					method: "select",
+					title: record.title,
+					options: record.options,
+				});
+				break;
+			case "confirm":
+				openDialog({
+					id: record.id,
+					method: "confirm",
+					title: record.title,
+					message: record.message,
+				});
+				break;
+			case "input":
+				openDialog({
+					id: record.id,
+					method: "input",
+					title: record.title,
+					placeholder: record.placeholder,
+				});
+				break;
+			case "editor":
+				openDialog({
+					id: record.id,
+					method: "editor",
+					title: record.title,
+					prefill: record.prefill,
+				});
+				break;
+			case "notify":
+				notify(record.message, record.notifyType ?? "info");
+				break;
+			case "setStatus":
+				setState(
+					"statuses",
+					produce((statuses) => {
+						if (record.statusText)
+							statuses[record.statusKey] = record.statusText;
+						else delete statuses[record.statusKey];
+					}),
+				);
+				break;
+			case "setTitle":
+				setState("title", record.title);
+				break;
+			case "set_editor_text":
+				setEditorText(record.text);
+				break;
+		}
+	}
+
+	function openDialog(dialog: Dialog) {
+		dialogOwners.set(dialog.id, new Set(runningTools));
+		setState("dialogs", state.dialogs.length, dialog);
+	}
+
+	function setEditorText(text: string) {
+		setState("editorText", { seq: state.editorText.seq + 1, text });
 	}
 
 	function startRow(kind: ServiceRow["kind"], text: string) {
@@ -282,8 +431,13 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 			{ type: "new_session" | "switch_session" | "fork" }
 		>,
 	) {
+		clearExtensionUi();
 		const response = await backend.request(command).catch(ignoreDeadBackend);
-		if (!response?.success) return;
+		if (!response) return;
+		if (!response.success) {
+			notify(response.error, "error");
+			return;
+		}
 		if (
 			(response.command === "new_session" ||
 				response.command === "switch_session" ||
@@ -294,6 +448,7 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 		}
 		clearRun();
 		await Promise.all([loadMessages(), loadCommands(), refreshSession()]);
+		return response;
 	}
 
 	// why: Pi drops compacted messages from get_messages, so rows anchored past the new end would never render; the finished compaction row moves to the end, where the compaction happened.
@@ -316,17 +471,24 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 	const send = (
 		text: string,
 		streamingBehavior?: "steer" | "followUp",
-	): Promise<void> =>
+	): Promise<boolean> =>
 		backend
 			.request({ type: "prompt", message: text, streamingBehavior })
-			.then(() => {})
-			.catch(ignoreDeadBackend);
+			.then((response) => {
+				if (response.success) return true;
+				notify(response.error, "error");
+				return false;
+			})
+			// why: a dead Backend is already shown by the error card, so only Pi's own refusal hands the text back to the input.
+			.catch(() => true);
 
 	const actions: PiActions = {
 		prompt: (text) => send(text),
 		steer: (text) => send(text, "steer"),
 		followUp: (text) => send(text, "followUp"),
+		answerDialog,
 		async abort() {
+			for (const { id } of state.dialogs) answerDialog(id, { cancelled: true });
 			await backend.request({ type: "abort" }).catch(ignoreDeadBackend);
 		},
 		async setModel({ provider, id }) {
@@ -341,10 +503,19 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 				.catch(ignoreDeadBackend);
 			await refreshSession();
 		},
-		newSession: () => replaceSession({ type: "new_session" }),
-		switchSession: (sessionFile) =>
-			replaceSession({ type: "switch_session", sessionPath: sessionFile }),
-		fork: (entryId) => replaceSession({ type: "fork", entryId }),
+		async newSession() {
+			await replaceSession({ type: "new_session" });
+		},
+		async switchSession(sessionFile) {
+			await replaceSession({
+				type: "switch_session",
+				sessionPath: sessionFile,
+			});
+		},
+		async fork(entryId) {
+			const response = await replaceSession({ type: "fork", entryId });
+			if (response?.command === "fork") setEditorText(response.data.text);
+		},
 		async compact() {
 			const session = backend;
 			await session.request({ type: "compact" }).catch(ignoreDeadBackend);

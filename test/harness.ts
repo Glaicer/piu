@@ -21,6 +21,8 @@ export type FauxScript = {
 	compactCommand?: boolean;
 	branchBackCommand?: boolean;
 	extensionCommands?: string[];
+	uiTool?: boolean;
+	statusOnStart?: string;
 	tokensPerSecond?: number;
 	tokenSize?: number;
 };

@@ -34,6 +34,12 @@ export default function (pi: ExtensionAPI) {
 						.join(""),
 		);
 	};
+	const lastToolResult = (context: { messages: Message[] }) => {
+		const message = context.messages.findLast((m) => m.role === "toolResult");
+		return (message?.content ?? [])
+			.map((block) => (block.type === "text" ? block.text : ""))
+			.join("");
+	};
 	const substitute = (
 		text: string,
 		context: { messages: Message[] },
@@ -42,6 +48,7 @@ export default function (pi: ExtensionAPI) {
 		text
 			.replaceAll("{model}", modelId)
 			.replaceAll("{lastUser}", lastUser(context))
+			.replaceAll("{toolResult}", lastToolResult(context))
 			.replaceAll(
 				"{messages}",
 				String(
@@ -70,6 +77,13 @@ export default function (pi: ExtensionAPI) {
 		}),
 	);
 	pi.registerProvider(faux.provider);
+	if (script.uiTool) registerUiTool(pi);
+	if (script.statusOnStart) {
+		const text = script.statusOnStart;
+		pi.on("session_start", async (_event, ctx) =>
+			ctx.ui.setStatus("boot", text),
+		);
+	}
 	if (script.compactCommand) {
 		pi.registerCommand("compact-now", {
 			handler: async (_args, ctx) => {
@@ -108,4 +122,98 @@ export default function (pi: ExtensionAPI) {
 			},
 		});
 	}
+}
+
+type UiParams = {
+	method: string;
+	title?: string;
+	options?: string[];
+	message?: string;
+	placeholder?: string;
+	prefill?: string;
+	text?: string;
+	key?: string;
+	ms?: number;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// why: one tool lets a script drive every extension UI method after startup, so a test can spy on the renderer first and no `/command` list gets in the way.
+function registerUiTool(pi: ExtensionAPI) {
+	let armed: { title: string; options: string[] } | undefined;
+	pi.on("turn_start", async (_event, ctx) => {
+		if (!armed) return;
+		const { title, options } = armed;
+		armed = undefined;
+		void ctx.ui.select(title, options);
+	});
+	pi.registerTool({
+		name: "ui",
+		label: "UI",
+		description: "Raises an extension UI request",
+		parameters: {
+			type: "object",
+			properties: {
+				method: { type: "string" },
+				title: { type: "string" },
+				options: { type: "array", items: { type: "string" } },
+				message: { type: "string" },
+				placeholder: { type: "string" },
+				prefill: { type: "string" },
+				text: { type: "string" },
+				key: { type: "string" },
+				ms: { type: "number" },
+			},
+			required: ["method"],
+		},
+		async execute(_id, args, signal, _onUpdate, ctx) {
+			const params = args as UiParams;
+			const { ui } = ctx;
+			const title = params.title ?? "";
+			const done = (value: unknown) => ({
+				content: [{ type: "text" as const, text: JSON.stringify({ value }) }],
+				details: {},
+			});
+			switch (params.method) {
+				case "select":
+					return done(
+						(await ui.select(title, params.options ?? [], { signal })) ?? null,
+					);
+				case "confirm":
+					return done(
+						await ui.confirm(title, params.message ?? "", { signal }),
+					);
+				case "input":
+					return done(
+						(await ui.input(title, params.placeholder, { signal })) ?? null,
+					);
+				case "editor":
+					return done((await ui.editor(title, params.prefill)) ?? null);
+				case "stubborn":
+					return done((await ui.select(title, params.options ?? [])) ?? null);
+				case "abandon":
+					await Promise.race([
+						ui.select(title, params.options ?? []),
+						sleep(params.ms ?? 100),
+					]);
+					return done("abandoned");
+				case "later":
+					armed = { title, options: params.options ?? [] };
+					return done("armed");
+				case "notify":
+					ui.notify(params.message ?? "", "info");
+					break;
+				case "setStatus":
+					ui.setStatus(params.key ?? "", params.text);
+					break;
+				case "setTitle":
+					ui.setTitle(title);
+					break;
+				case "setEditorText":
+					ui.setEditorText(params.text ?? "");
+					break;
+			}
+			return done("ok");
+		},
+	});
 }
