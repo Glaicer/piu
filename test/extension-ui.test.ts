@@ -151,6 +151,11 @@ const unhandledChannelRequests: [string, string, string][] = [
 	],
 	["an unknown payload version", "opentui:ask-user-question/ask", '{"v":2}'],
 	["a payload that is not JSON", "opentui:ask-user-question/ask", "v1"],
+	[
+		"a payload its Module cannot read",
+		"opentui:ask-user-question/ask",
+		'{"v":1}',
+	],
 ];
 
 for (const [what, title, prefill] of unhandledChannelRequests) {

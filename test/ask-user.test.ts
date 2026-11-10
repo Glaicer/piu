@@ -192,6 +192,41 @@ test("the input Panel grows to fit the card and returns to the input's height af
 	expect(cornerRows(answered)).toEqual([0, 22, 27]);
 });
 
+test("ask_user_question stays out after a tool call and in the next run", async () => {
+	await using piu = await startPiu({
+		script: {
+			replies: [
+				{ toolCalls: [{ name: "bash", args: { command: "true" } }] },
+				"Tools: {tools} end",
+				"Tools: {tools} end",
+			],
+		},
+		installedPiExtensions: [installedAskUserQuestion],
+	});
+	await send(piu, "first");
+	const afterTool = await piu.waitForFrame((f) =>
+		offeredTools(f).includes("bash"),
+	);
+	expect(offeredTools(afterTool)).toContain("ask_user");
+	expect(offeredTools(afterTool)).not.toContain("ask_user_question");
+
+	await send(piu, "second");
+	const nextRun = await piu.waitForFrame(
+		(f) =>
+			agentPanel(f).includes("second") &&
+			agentPanel(f).split("Tools: ").length === 3,
+	);
+	const [, second = ""] =
+		agentPanel(nextRun)
+			.split("\n")
+			.map((line) => line.trim())
+			.join("")
+			.match(/Tools: \S+ end/g) ?? [];
+	const tools = second.slice("Tools: ".length, -" end".length).split(",");
+	expect(tools).toContain("ask_user");
+	expect(tools).not.toContain("ask_user_question");
+});
+
 test("without its Module in the Placement, the Extension's Pi extension is not loaded", async () => {
 	await using piu = await startPiu({
 		script: { replies: ["Tools: {tools} end"] },

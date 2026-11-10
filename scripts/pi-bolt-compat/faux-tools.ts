@@ -2,6 +2,7 @@ import {
 	fauxAssistantMessage,
 	fauxProvider,
 	fauxText,
+	fauxToolCall,
 	getCurrentTools,
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -13,7 +14,9 @@ export default function (pi: ExtensionAPI) {
 		provider: "faux",
 		models: [{ id: "faux-1" }],
 	});
+	// why: the second request, after a tool result, shows whether a replaced tool returns mid-run.
 	faux.setResponses([
+		fauxAssistantMessage(fauxToolCall("bash", { command: "true" })),
 		(context) =>
 			fauxAssistantMessage(
 				fauxText(
