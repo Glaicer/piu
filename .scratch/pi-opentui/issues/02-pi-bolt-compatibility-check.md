@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] Running the script against `pi-bolt --mode rpc` with a tiny `-e` Pi extension that registers `ask_user_question` reports which implementation the model call reaches
 - [x] The script reports any non-protocol output on stdout and any startup errors from compiled-in Pi extensions

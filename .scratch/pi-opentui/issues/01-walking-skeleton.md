@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] `pnpm` install, `tsc`, Biome check and `bun test` all pass from a clean checkout
 - [x] A test boots the app in the test renderer against the real pinned `pi --mode rpc` (isolated via `PI_CODING_AGENT_DIR`, `PI_OFFLINE=1`, `--no-session`) with a scripted faux reply, types a prompt, presses Enter, and the frame shows the prompt and the full scripted reply
