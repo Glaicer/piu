@@ -20,11 +20,13 @@ export async function createApp(options: {
 	const cwd = options.cwd ?? process.cwd();
 	const config = loadConfig(options.configPath);
 	const folders = findExtensions([builtinDir, options.extensionsDir]);
-	const { panels, commands } = await resolvePlacement(config, folders);
+	const { panels, commands, channelTitles, piExtensions } =
+		await resolvePlacement(config, folders);
 	return () => (
 		<App
 			config={config}
-			args={options.args}
+			args={[...piExtensions.flatMap((path) => ["-e", path]), ...options.args]}
+			channelTitles={channelTitles}
 			cwd={cwd}
 			panels={panels}
 			commands={commands}
@@ -35,6 +37,7 @@ export async function createApp(options: {
 function App(props: {
 	config: Config;
 	args: string[];
+	channelTitles: readonly string[];
 	cwd: string;
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	commands: readonly Command[];
@@ -49,6 +52,7 @@ function App(props: {
 				props.cwd,
 			),
 		toasts.show,
+		new Set(props.channelTitles),
 	);
 	onCleanup(pi.dispose);
 	const modals = createModals();

@@ -15,6 +15,7 @@ export function Picker<T>(props: {
 	selected: number;
 	theme: Theme;
 	onPick(value: T): void;
+	onCancel?(): void;
 }) {
 	const [index, setIndex] = createSignal(Math.max(0, props.selected));
 	const rows: BoxRenderable[] = [];
@@ -43,6 +44,7 @@ export function Picker<T>(props: {
 				if (event.name === "up") move(-1);
 				else if (event.name === "down") move(1);
 				else if (event.name === "return") pick(index());
+				else if (event.name === "escape") props.onCancel?.();
 			}}
 		>
 			<For each={props.items}>

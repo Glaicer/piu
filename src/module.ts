@@ -1,5 +1,6 @@
 import type { JSX } from "@opentui/solid";
 import type { Accessor } from "solid-js";
+import type { Channel } from "./channel.ts";
 import type { ModalRequest } from "./modal.tsx";
 import type { PiActions, PiState } from "./pi-state.ts";
 import type { Theme } from "./theme.ts";
@@ -35,6 +36,7 @@ export type ModuleContext = {
 	readonly actions: PiActions & UiActions;
 	readonly theme: Theme;
 	readonly settings: ModuleSettings;
+	readonly channel: Channel;
 	onCleanup(cleanup: () => void): void;
 	reportPresence(presence: Accessor<Presence>): void;
 };
@@ -49,6 +51,7 @@ export type Module = {
 export type Extension = {
 	readonly modules: readonly Module[];
 	readonly commands?: readonly Command[];
+	readonly channels?: readonly string[];
 };
 
 export type PlacedModule = {

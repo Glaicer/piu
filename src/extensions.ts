@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { channelTitle } from "./channel.ts";
 import { type Config, fieldError } from "./config.ts";
 import type { Command, Extension, Module, PlacedModule } from "./module.ts";
 import { StartupError } from "./startup-error.ts";
@@ -35,7 +36,12 @@ function extensionNames(root: string) {
 export async function resolvePlacement(
 	config: Pick<Config, "placement" | "modules">,
 	folders: ExtensionFolders,
-): Promise<{ panels: Map<string, PlacedModule[]>; commands: Command[] }> {
+): Promise<{
+	panels: Map<string, PlacedModule[]>;
+	commands: Command[];
+	channelTitles: string[];
+	piExtensions: string[];
+}> {
 	const extensions = new Map<string, Extension>();
 	const placedIds = new Set<string>();
 	const panels = new Map<string, PlacedModule[]>();
@@ -90,7 +96,17 @@ export async function resolvePlacement(
 			);
 		}
 	}
-	return { panels, commands: collectCommands(extensions) };
+	return {
+		panels,
+		commands: collectCommands(extensions),
+		channelTitles: [...extensions].flatMap(([name, extension]) =>
+			(extension.channels ?? []).map((channel) => channelTitle(name, channel)),
+		),
+		piExtensions: [...folders]
+			.filter(([name]) => extensions.has(name))
+			.map(([, dir]) => join(dir, "pi-extension.ts"))
+			.filter((path) => existsSync(path)),
+	};
 }
 
 function collectCommands(extensions: ReadonlyMap<string, Extension>) {

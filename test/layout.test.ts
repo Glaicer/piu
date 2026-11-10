@@ -172,6 +172,46 @@ test("a hidden Module takes no rows and a shown one takes its own", async () => 
 	expect(lineOf(shown, "Bye")).toBe(lineOf(shown, "Hello Ada") + 2);
 });
 
+test("a content-sized Panel fits its shown Modules and takes no rows when they are all hidden", async () => {
+	setNote("hidden");
+	await using piu = await startPiu({
+		script: none,
+		extensionsDir,
+		config: {
+			layout: {
+				kind: "container",
+				id: "root",
+				direction: "column",
+				size: "rest",
+				children: [
+					panel("fit", "content"),
+					panel("below", "rest"),
+					{
+						kind: "container",
+						id: "bottom",
+						direction: "column",
+						size: "content",
+						children: [panel("last", "content")],
+					},
+				],
+			},
+			placement: {
+				fit: ["presence.note"],
+				below: ["greeter.bye"],
+				last: ["greeter.hello"],
+			},
+			modules: { "greeter.hello": { name: "Ada" } },
+		},
+	});
+
+	const hidden = await piu.waitForFrame((f) => f.includes("Bye"));
+	expect(cornerRows(hidden, 0)).toEqual([0, 27]);
+
+	setNote("shown");
+	const shown = await piu.waitForFrame((f) => f.includes("Note"));
+	expect(cornerRows(shown, 0)).toEqual([0, 3, 27]);
+});
+
 test("an exclusive Module hides its siblings until it stops claiming the Panel", async () => {
 	setTakeover("hidden");
 	await using piu = await startPiu({

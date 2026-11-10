@@ -54,6 +54,10 @@ _Avoid_: Server, engine
 A Pi extension's `select`, `confirm`, `input` or `editor` request, which stays pending until answered or closed; the app shows each as a Modal.
 _Avoid_: Using it as a synonym for Modal
 
+**Extension channel**:
+The request/response path between an Extension's Pi extension and its Modules: an `editor` Dialog with the reserved title `opentui:<extension>/<channel>`, which the app routes to the Modules instead of a Modal.
+_Avoid_: Bridge, socket
+
 **Toast**:
 A short notice that appears over the Layout and disappears on its own.
 _Avoid_: Notification, alert

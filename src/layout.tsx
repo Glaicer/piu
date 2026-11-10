@@ -1,8 +1,9 @@
 import { useTerminalDimensions } from "@opentui/solid";
 import { type Accessor, createSignal, For, onCleanup } from "solid-js";
+import { channelFor } from "./channel.ts";
 import type { ModuleContext, PlacedModule, Presence } from "./module.ts";
 
-export type Size = number | `${number}%` | "rest";
+export type Size = number | `${number}%` | "rest" | "content";
 type Direction = "row" | "column";
 type SlotBase = {
 	id: string;
@@ -15,7 +16,7 @@ export type Slot =
 	| (SlotBase & { kind: "container"; children: readonly Slot[] })
 	| (SlotBase & { kind: "panel" });
 
-type PanelContext = Omit<ModuleContext, "onCleanup" | "settings">;
+type PanelContext = Omit<ModuleContext, "onCleanup" | "settings" | "channel">;
 export type SharedContext = Omit<PanelContext, "reportPresence">;
 
 type SlotProps = {
@@ -63,6 +64,31 @@ export function SlotView(props: SlotProps) {
 	};
 	const followsOutput = () =>
 		entries.some((entry) => shown(entry) && entry.placed.module.followsOutput);
+	const modules = (
+		<For each={entries}>
+			{(entry) => (
+				<box visible={shown(entry)}>
+					<ModuleView
+						placed={entry.placed}
+						context={{ ...props.context, reportPresence: entry.setPresence }}
+					/>
+				</box>
+			)}
+		</For>
+	);
+	if (slot.size === "content") {
+		return (
+			<box
+				{...sizing}
+				visible={visible() && entries.some(shown)}
+				border
+				borderColor={props.context.theme.border}
+				flexDirection={slot.direction}
+			>
+				{modules}
+			</box>
+		);
+	}
 	return (
 		<scrollbox
 			{...sizing}
@@ -73,16 +99,7 @@ export function SlotView(props: SlotProps) {
 			stickyStart="bottom"
 			contentOptions={{ flexDirection: slot.direction }}
 		>
-			<For each={entries}>
-				{(entry) => (
-					<box visible={shown(entry)}>
-						<ModuleView
-							placed={entry.placed}
-							context={{ ...props.context, reportPresence: entry.setPresence }}
-						/>
-					</box>
-				)}
-			</For>
+			{modules}
 		</scrollbox>
 	);
 }
@@ -92,9 +109,15 @@ function ModuleView(props: { placed: PlacedModule; context: PanelContext }) {
 	onCleanup(() => {
 		for (const cleanup of cleanups) cleanup();
 	});
+	const { pi, actions } = props.context;
 	return props.placed.module.render({
 		...props.context,
 		settings: props.placed.settings,
+		channel: channelFor(
+			props.placed.id.split(".")[0] ?? "",
+			() => pi.dialogs,
+			actions.answerDialog,
+		),
 		onCleanup: (cleanup) => cleanups.push(cleanup),
 	});
 }
@@ -108,6 +131,8 @@ function sizeStyle(slot: Slot, parentDirection: Direction) {
 	const flex =
 		slot.size === "rest"
 			? { flexShrink: 1, [length]: "100%" as const }
-			: { flexShrink: 0, [length]: slot.size };
+			: slot.size === "content"
+				? { flexShrink: 0 }
+				: { flexShrink: 0, [length]: slot.size };
 	return { ...flex, [min]: slot.minSize };
 }

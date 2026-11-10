@@ -6,6 +6,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { createStore, produce, reconcile } from "solid-js/store";
 import type { Backend, BackendHealth, BackendRecord } from "./backend.ts";
+import { type ChannelPayload, parseChannelRequest } from "./channel.ts";
 import type { ToastKind } from "./toast.tsx";
 
 export type PiMessage = Extract<
@@ -50,6 +51,12 @@ export type Dialog = {
 	| { readonly method: "confirm"; readonly message: string }
 	| { readonly method: "input"; readonly placeholder?: string }
 	| { readonly method: "editor"; readonly prefill?: string }
+	| {
+			readonly method: "channel";
+			readonly extension: string;
+			readonly channel: string;
+			readonly payload: ChannelPayload;
+	  }
 );
 
 export type DialogAnswer =
@@ -98,6 +105,7 @@ const ignoreDeadBackend = () => {};
 export function createPiState(
 	launch: (extraArgs: string[]) => Backend,
 	notify: (message: string, kind: ToastKind) => void,
+	channelTitles: ReadonlySet<string>,
 ) {
 	const [state, setState] = createStore<{
 		sessionFile: string | null;
@@ -138,6 +146,8 @@ export function createPiState(
 	const runningTools = new Set<string>();
 	// why: the protocol never says which tool call raised a dialog, so a dialog belongs to the tool calls running when it arrived and closes once all of them have ended; one raised with no tool running lasts until the run ends.
 	const dialogOwners = new Map<string, ReadonlySet<string>>();
+	// why: Pi answers a dialog with its default value once its timeout passes and never tells the client.
+	const dialogTimers = new Map<string, Timer>();
 
 	function clearRun() {
 		setState("streamingMessage", null);
@@ -147,8 +157,7 @@ export function createPiState(
 
 	function clearExtensionUi() {
 		runningTools.clear();
-		dialogOwners.clear();
-		setState("dialogs", []);
+		closeDialogs(() => true);
 		setState("statuses", reconcile({}));
 	}
 
@@ -156,7 +165,11 @@ export function createPiState(
 		const closing = state.dialogs.filter((dialog) => shouldClose(dialog.id));
 		if (closing.length === 0) return;
 		const ids = new Set(closing.map((dialog) => dialog.id));
-		for (const id of ids) dialogOwners.delete(id);
+		for (const id of ids) {
+			dialogOwners.delete(id);
+			clearTimeout(dialogTimers.get(id));
+			dialogTimers.delete(id);
+		}
 		setState("dialogs", (dialogs) =>
 			dialogs.filter((dialog) => !ids.has(dialog.id)),
 		);
@@ -337,37 +350,70 @@ export function createPiState(
 	) {
 		switch (record.method) {
 			case "select":
-				openDialog({
-					id: record.id,
-					method: "select",
-					title: record.title,
-					options: record.options,
-				});
+				openDialog(
+					{
+						id: record.id,
+						method: "select",
+						title: record.title,
+						options: record.options,
+					},
+					record.timeout,
+				);
 				break;
 			case "confirm":
-				openDialog({
-					id: record.id,
-					method: "confirm",
-					title: record.title,
-					message: record.message,
-				});
+				openDialog(
+					{
+						id: record.id,
+						method: "confirm",
+						title: record.title,
+						message: record.message,
+					},
+					record.timeout,
+				);
 				break;
 			case "input":
-				openDialog({
-					id: record.id,
-					method: "input",
-					title: record.title,
-					placeholder: record.placeholder,
-				});
+				openDialog(
+					{
+						id: record.id,
+						method: "input",
+						title: record.title,
+						placeholder: record.placeholder,
+					},
+					record.timeout,
+				);
 				break;
-			case "editor":
-				openDialog({
-					id: record.id,
-					method: "editor",
-					title: record.title,
-					prefill: record.prefill,
-				});
+			case "editor": {
+				const request = parseChannelRequest(
+					record.title,
+					record.prefill,
+					channelTitles,
+				);
+				if (request.kind === "invalid") {
+					backend.send({
+						type: "extension_ui_response",
+						id: record.id,
+						cancelled: true,
+					});
+				} else if (request.kind === "channel") {
+					const { extension, channel, payload } = request;
+					openDialog({
+						id: record.id,
+						method: "channel",
+						title: record.title,
+						extension,
+						channel,
+						payload,
+					});
+				} else {
+					openDialog({
+						id: record.id,
+						method: "editor",
+						title: record.title,
+						prefill: record.prefill,
+					});
+				}
 				break;
+			}
 			case "notify":
 				notify(record.message, record.notifyType ?? "info");
 				break;
@@ -390,9 +436,15 @@ export function createPiState(
 		}
 	}
 
-	function openDialog(dialog: Dialog) {
+	function openDialog(dialog: Dialog, timeout?: number) {
 		dialogOwners.set(dialog.id, new Set(runningTools));
 		setState("dialogs", state.dialogs.length, dialog);
+		if (!timeout) return;
+		const timer = setTimeout(
+			() => closeDialogs((id) => id === dialog.id),
+			timeout,
+		);
+		dialogTimers.set(dialog.id, timer);
 	}
 
 	function setEditorText(text: string) {
@@ -543,6 +595,7 @@ export function createPiState(
 		state: readonlyState,
 		actions,
 		dispose() {
+			closeDialogs(() => true);
 			detach();
 			backend.stop();
 		},

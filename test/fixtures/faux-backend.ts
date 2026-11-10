@@ -6,6 +6,7 @@ import {
 	fauxText,
 	fauxThinking,
 	fauxToolCall,
+	getCurrentTools,
 	type Message,
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -49,6 +50,13 @@ export default function (pi: ExtensionAPI) {
 			.replaceAll("{model}", modelId)
 			.replaceAll("{lastUser}", lastUser(context))
 			.replaceAll("{toolResult}", lastToolResult(context))
+			.replaceAll(
+				"{tools}",
+				getCurrentTools(context.messages)
+					.map((tool) => tool.name)
+					.sort()
+					.join(","),
+			)
 			.replaceAll(
 				"{messages}",
 				String(
@@ -134,6 +142,7 @@ type UiParams = {
 	text?: string;
 	key?: string;
 	ms?: number;
+	wait?: number;
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -163,6 +172,7 @@ function registerUiTool(pi: ExtensionAPI) {
 				text: { type: "string" },
 				key: { type: "string" },
 				ms: { type: "number" },
+				wait: { type: "number" },
 			},
 			required: ["method"],
 		},
@@ -197,6 +207,13 @@ function registerUiTool(pi: ExtensionAPI) {
 						sleep(params.ms ?? 100),
 					]);
 					return done("abandoned");
+				case "timeout": {
+					const value = await ui.select(title, params.options ?? [], {
+						timeout: params.ms,
+					});
+					await sleep(params.wait ?? 0);
+					return done(value ?? null);
+				}
 				case "later":
 					armed = { title, options: params.options ?? [] };
 					return done("armed");

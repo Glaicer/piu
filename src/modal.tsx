@@ -9,7 +9,7 @@ import {
 } from "./layout.tsx";
 import type { Module, PlacedModule } from "./module.ts";
 
-type Cells = Exclude<Size, "rest">;
+type Cells = Exclude<Size, "rest" | "content">;
 
 export type ModalRequest = {
 	slot: Slot;

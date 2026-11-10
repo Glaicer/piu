@@ -142,6 +142,30 @@ test("an editor dialog opens with its prefill, and Shift+Enter adds a line to wh
 	);
 });
 
+const unhandledChannelRequests: [string, string, string][] = [
+	["an Extension that is not enabled", "opentui:nobody/ask", '{"v":1}'],
+	[
+		"a channel its Extension does not declare",
+		"opentui:ask-user-question/other",
+		'{"v":1}',
+	],
+	["an unknown payload version", "opentui:ask-user-question/ask", '{"v":2}'],
+	["a payload that is not JSON", "opentui:ask-user-question/ask", "v1"],
+];
+
+for (const [what, title, prefill] of unhandledChannelRequests) {
+	test(`a reserved-title editor request for ${what} is cancelled without a Modal`, async () => {
+		await using piu = await raise({ method: "editor", title, prefill });
+
+		let modalShown = false;
+		await piu.waitForFrame((f) => {
+			modalShown ||= f.includes(title);
+			return agentPanel(f).includes(gotValue("null"));
+		});
+		expect(modalShown).toBe(false);
+	});
+}
+
 test("Esc on an input dialog gives the extension its cancelled value", async () => {
 	await using piu = await raise({ method: "input", title: "Enter a value" });
 	await piu.waitForFrame((f) => f.includes("Enter a value"));
@@ -250,6 +274,23 @@ test("a dialog still open when its tool call ends closes by itself, while the ru
 	await piu.waitForFrame(
 		(f) => !f.includes("Stale question") && inputArea(f).includes("Working"),
 	);
+});
+
+test("a dialog with a timeout closes once Pi has answered it, while its tool still runs", async () => {
+	await using piu = await raise({
+		method: "timeout",
+		title: "Quick question",
+		options: ["A", "B"],
+		ms: 200,
+		wait: 3000,
+	});
+	await piu.waitForFrame((f) => f.includes("Quick question"));
+
+	const frame = await piu.waitForFrame(
+		(f) => !f.includes("Quick question"),
+		1500,
+	);
+	expect(inputArea(frame)).toContain("Working");
 });
 
 test("a dialog raised outside any tool call outlives the tools and closes when the run ends", async () => {

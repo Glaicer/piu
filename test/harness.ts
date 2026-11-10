@@ -1,6 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	copyFileSync,
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { JsonObject } from "@earendil-works/pi-ai";
 import { testRender } from "@opentui/solid";
 import { createApp } from "../src/app.tsx";
@@ -63,6 +69,7 @@ export async function startPiu(options: {
 	persistSession?: boolean;
 	cwd?: string;
 	promptTemplates?: Record<string, string>;
+	installedPiExtensions?: string[];
 	dir?: string;
 	config?: unknown;
 	extensionsDir?: string;
@@ -81,6 +88,13 @@ export async function startPiu(options: {
 			compaction: { keepRecentTokens: 1 },
 		}),
 	);
+
+	if (options.installedPiExtensions) {
+		mkdirSync(join(dir, "agent", "extensions"), { recursive: true });
+		for (const path of options.installedPiExtensions) {
+			copyFileSync(path, join(dir, "agent", "extensions", basename(path)));
+		}
+	}
 
 	if (options.promptTemplates) {
 		mkdirSync(join(dir, "agent", "prompts"), { recursive: true });

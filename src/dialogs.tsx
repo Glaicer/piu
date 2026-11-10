@@ -5,6 +5,8 @@ import type { ModuleContext } from "./module.ts";
 import type { Dialog, DialogAnswer, PiActions, PiState } from "./pi-state.ts";
 import { Picker } from "./picker.tsx";
 
+type ModalDialog = Exclude<Dialog, { method: "channel" }>;
+
 const WIDTH = 60;
 const BORDER_ROWS = 2;
 const MAX_VISIBLE_OPTIONS = 12;
@@ -25,7 +27,7 @@ function lineCount(text: string) {
 
 function Body(props: {
 	context: ModuleContext;
-	dialog: Dialog;
+	dialog: ModalDialog;
 	answer(a: DialogAnswer): void;
 }) {
 	const { dialog, context, answer } = props;
@@ -91,7 +93,7 @@ function Body(props: {
 	);
 }
 
-function height(dialog: Dialog) {
+function height(dialog: ModalDialog) {
 	switch (dialog.method) {
 		case "select":
 			return (
@@ -107,7 +109,7 @@ function height(dialog: Dialog) {
 }
 
 function dialogModal(
-	dialog: Dialog,
+	dialog: ModalDialog,
 	actions: Pick<PiActions, "answerDialog">,
 ): ModalRequest {
 	const answer = (given: DialogAnswer) =>
@@ -132,7 +134,9 @@ export function bridgeDialogs(
 ) {
 	const open = new Map<string, () => void>();
 	createEffect(() => {
-		const dialogs = [...pi.state.dialogs];
+		const dialogs = pi.state.dialogs.filter(
+			(dialog): dialog is ModalDialog => dialog.method !== "channel",
+		);
 		untrack(() => {
 			for (const [id, close] of open) {
 				if (dialogs.some((dialog) => dialog.id === id)) continue;

@@ -189,6 +189,7 @@ function Prompt(props: { context: ModuleContext }) {
 					field = element;
 				}}
 				focused
+				height={2}
 				textColor={props.context.theme.text}
 				keyBindings={keyBindings}
 				onKeyDown={onKeyDown}

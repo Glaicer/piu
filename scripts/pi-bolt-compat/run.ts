@@ -1,4 +1,4 @@
-// Manual check for the two open risks in ADR-0001; not part of `pnpm check`.
+// Manual check for the Pi-Bolt risks in ADR-0001; not part of `pnpm check`.
 // Usage: bun scripts/pi-bolt-compat/run.ts
 // PIU_COMPAT_BACKEND=<binary>   test another binary (default: pi-bolt)
 // PIU_COMPAT_AGENT_DIR=<dir>    run with that Pi agent dir (default: the one Pi-Bolt picks, normally ~/.pi/agent)
@@ -6,6 +6,7 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { attachJsonlLineReader, serializeJsonLine } from "../../src/jsonl.ts";
+import { TOOLS_PREFIX } from "./faux-tools.ts";
 
 const backendName = process.env.PIU_COMPAT_BACKEND ?? "pi-bolt";
 const backend = Bun.which(backendName);
@@ -20,15 +21,16 @@ const CLOSE_TIMEOUT_MS = 10_000;
 const PROBE_MARKER = "PIU_PROBE_IMPLEMENTATION";
 const fauxPath = join(import.meta.dir, "faux-provider.ts");
 const probeToolPath = join(import.meta.dir, "probe-tool.ts");
+const fauxToolsPath = join(import.meta.dir, "faux-tools.ts");
+const askUserPath = join(
+	import.meta.dir,
+	"../../builtin/ask-user-question/pi-extension.ts",
+);
 
 type Run = Awaited<ReturnType<typeof runBackend>>;
 
-async function runBackend(withProbeTool: boolean) {
-	const extensionArgs = [
-		"-e",
-		fauxPath,
-		...(withProbeTool ? ["-e", probeToolPath] : []),
-	];
+async function runBackend(extensionPaths: string[]) {
+	const extensionArgs = extensionPaths.flatMap((path) => ["-e", path]);
 	const child = spawn(
 		backend as string,
 		[
@@ -56,6 +58,7 @@ async function runBackend(withProbeTool: boolean) {
 	const toolResults: string[] = [];
 	const toolStarts: string[] = [];
 	const dialogRequests: string[] = [];
+	const messages: string[] = [];
 	let stderr = "";
 	let promptError: string | undefined;
 	let agentEnded: () => void = () => {};
@@ -117,6 +120,9 @@ async function runBackend(withProbeTool: boolean) {
 					}),
 				);
 				break;
+			case "message_end":
+				messages.push(JSON.stringify(record.message));
+				break;
 			case "agent_end":
 				agentEnded();
 				break;
@@ -155,6 +161,7 @@ async function runBackend(withProbeTool: boolean) {
 		toolResults,
 		toolStarts,
 		dialogRequests,
+		messages,
 		stderrLines: stderr.split("\n").filter((l) => l.trim()),
 		promptError,
 		timedOut,
@@ -184,7 +191,7 @@ console.log(
 );
 
 console.log("\n[control] only the faux provider, no probe tool");
-const control = await runBackend(false);
+const control = await runBackend([fauxPath]);
 describeRun(control);
 const controlHasCompiledIn = control.dialogRequests.some((r) =>
 	r.startsWith("select"),
@@ -198,7 +205,7 @@ console.log(
 console.log(
 	"\n(a) tool precedence: the same, plus an -e probe Pi extension tool of that name",
 );
-const probed = await runBackend(true);
+const probed = await runBackend([fauxPath, probeToolPath]);
 describeRun(probed);
 const conflict = probed.stderrLines.find((l) => l.includes("conflicts with"));
 const reached = !probed.started
@@ -217,7 +224,48 @@ console.log("\n(b) compiled-in Pi extensions in --mode rpc (control run)");
 printLines("non-protocol stdout lines", control.nonProtocolStdout);
 printLines("stderr lines", control.stderrLines);
 
-console.log("\n(c) stdin close");
+function offeredTools(run: Run) {
+	const offer = run.messages
+		.map((message) => new RegExp(`${TOOLS_PREFIX}([^"]*)`).exec(message))
+		.find(Boolean);
+	return offer?.[1]?.split(",");
+}
+
+function describeOffer(run: Run) {
+	const tools = offeredTools(run);
+	if (!run.started) {
+		console.log("  the backend did not start");
+		printLines("stderr lines", run.stderrLines);
+	} else if (!tools) {
+		console.log("  the model never replied with its tool list");
+	} else {
+		console.log(`  offered: ${tools.join(", ")}`);
+	}
+	return tools ?? [];
+}
+
+console.log(
+	"\n(c) tool replacement: the faux model lists the tools it is offered",
+);
+console.log("  without our Pi extension:");
+const baselineTools = describeOffer(await runBackend([fauxToolsPath]));
+console.log("  with builtin/ask-user-question/pi-extension.ts:");
+const replacedTools = describeOffer(
+	await runBackend([fauxToolsPath, askUserPath]),
+);
+const hadCompiledIn = baselineTools.includes("ask_user_question");
+const replaced =
+	replacedTools.includes("ask_user") &&
+	!replacedTools.includes("ask_user_question");
+console.log(
+	!hadCompiledIn
+		? "  => NO ask_user_question without our Pi extension; the check proves nothing"
+		: replaced
+			? "  => PASS: ask_user is offered and the compiled-in ask_user_question is not"
+			: "  => FAIL: the model is not offered ask_user alone",
+);
+
+console.log("\n(d) stdin close");
 for (const [name, run] of [
 	["control", control],
 	["probed", probed],

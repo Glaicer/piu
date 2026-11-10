@@ -32,9 +32,14 @@ export const defaultConfig: Config = {
 						kind: "container",
 						id: "input-area",
 						direction: "column",
-						size: 8,
+						size: "content",
 						children: [
-							{ kind: "panel", id: "input", direction: "column", size: 5 },
+							{
+								kind: "panel",
+								id: "input",
+								direction: "column",
+								size: "content",
+							},
 							{ kind: "panel", id: "status", direction: "row", size: 3 },
 						],
 					},
@@ -51,7 +56,7 @@ export const defaultConfig: Config = {
 	},
 	placement: {
 		agent: ["chat.messages"],
-		input: ["input.prompt"],
+		input: ["ask-user-question.card", "input.prompt"],
 		status: ["model.current", "reasoning.level", "status.line"],
 		side: [],
 	},
@@ -145,12 +150,12 @@ function parseSlot(value: unknown, path: string, panelIds: Set<string>): Slot {
 }
 
 function parseSize(value: unknown, path: string): Size {
-	if (value === "rest") return value;
+	if (value === "rest" || value === "content") return value;
 	if (isCells(value)) return value;
 	if (isPercent(value)) return value;
 	throw fieldError(
 		path,
-		`expected a cell count, a percentage like "33%" or "rest", got ${JSON.stringify(value)}`,
+		`expected a cell count, a percentage like "33%", "rest" or "content", got ${JSON.stringify(value)}`,
 	);
 }
 
