@@ -18,6 +18,8 @@ export default {
 } satisfies Extension;
 ```
 
+An Extension can also export `commands: [{ name, description, run(context) }]`. They appear in the prompt's `/` autocomplete and run locally instead of going to the model, and they exist exactly when the Extension is enabled. A command name must be unique across Extensions, and it hides a Backend command of the same name.
+
 A Module is addressed as `<name>.<module id>`, here `greeter.hello` if the folder is `greeter`. Read colors from `context.theme`, Pi's live state from `context.pi`, and register timers or subscriptions with `context.onCleanup`.
 
 ## Enabling it

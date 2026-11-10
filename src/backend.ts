@@ -23,11 +23,15 @@ export type Backend = ReturnType<typeof startBackend>;
 
 const STDERR_TAIL_CHARS = 64 * 1024;
 
-export function startBackend(config: BackendConfig, userArgs: string[]) {
+export function startBackend(
+	config: BackendConfig,
+	userArgs: string[],
+	cwd?: string,
+) {
 	const child = spawn(
 		config.command,
 		[...config.args, "--mode", "rpc", ...userArgs],
-		{ stdio: ["pipe", "pipe", "pipe"] },
+		{ stdio: ["pipe", "pipe", "pipe"], cwd },
 	);
 	const listeners = new Set<(record: BackendRecord) => void>();
 	const healthListeners = new Set<(health: BackendHealth) => void>();

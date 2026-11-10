@@ -1,7 +1,7 @@
 import { type BoxRenderable, ScrollBoxRenderable } from "@opentui/core";
 import { createEffect, createSignal, For } from "solid-js";
 import { moduleModal } from "./modal.tsx";
-import type { ModuleContext } from "./module.ts";
+import type { CommandContext } from "./module.ts";
 import type { Theme } from "./theme.ts";
 
 export type PickerItem<T> = {
@@ -73,49 +73,56 @@ export function Picker<T>(props: {
 const MAX_VISIBLE_ROWS = 16;
 const BORDER_ROWS = 2;
 
-export function PickerButton<T>(props: {
-	context: ModuleContext;
+export type PickerOptions<T> = {
 	id: string;
-	label: string;
 	width: number;
 	items(): readonly PickerItem<T>[];
 	selected(): number;
 	onPick(value: T): void;
+};
+
+export function openPicker<T>(
+	{ actions, theme }: CommandContext,
+	picker: PickerOptions<T>,
+) {
+	const items = picker.items();
+	const close = actions.openModal(
+		moduleModal(
+			{
+				id: picker.id,
+				render: () => (
+					<Picker
+						theme={theme}
+						items={items}
+						selected={picker.selected()}
+						onPick={(value) => {
+							picker.onPick(value);
+							close();
+						}}
+					/>
+				),
+			},
+			{
+				width: picker.width,
+				height: Math.min(items.length, MAX_VISIBLE_ROWS) + BORDER_ROWS,
+			},
+		),
+	);
+}
+
+export function PickerButton<T>(props: {
+	context: CommandContext;
+	label: string;
+	picker: PickerOptions<T>;
 }) {
-	const { actions, theme } = props.context;
-	const open = () => {
-		const items = props.items();
-		const close = actions.openModal(
-			moduleModal(
-				{
-					id: props.id,
-					render: () => (
-						<Picker
-							theme={theme}
-							items={items}
-							selected={props.selected()}
-							onPick={(value) => {
-								props.onPick(value);
-								close();
-							}}
-						/>
-					),
-				},
-				{
-					width: props.width,
-					height: Math.min(items.length, MAX_VISIBLE_ROWS) + BORDER_ROWS,
-				},
-			),
-		);
-	};
 	return (
 		<box
 			onMouseDown={(event) => {
 				event.preventDefault();
-				open();
+				openPicker(props.context, props.picker);
 			}}
 		>
-			<text fg={theme.accent}>{` ${props.label} `}</text>
+			<text fg={props.context.theme.accent}>{` ${props.label} `}</text>
 		</box>
 	);
 }

@@ -12,7 +12,23 @@ export type UiActions = {
 	openModal(request: ModalRequest): () => void;
 };
 
+export type CommandContext = {
+	readonly pi: PiState;
+	readonly actions: PiActions & UiActions;
+	readonly theme: Theme;
+};
+
+export type Command = {
+	readonly name: string;
+	readonly description?: string;
+	run(context: CommandContext): void;
+};
+
+export type BoundCommand = Omit<Command, "run"> & { run(): void };
+
 export type ModuleContext = {
+	readonly cwd: string;
+	readonly commands: readonly BoundCommand[];
 	readonly pi: PiState;
 	readonly actions: PiActions & UiActions;
 	readonly theme: Theme;
@@ -28,7 +44,10 @@ export type Module = {
 	render(context: ModuleContext): JSX.Element;
 };
 
-export type Extension = { readonly modules: readonly Module[] };
+export type Extension = {
+	readonly modules: readonly Module[];
+	readonly commands?: readonly Command[];
+};
 
 export type PlacedModule = {
 	readonly id: string;

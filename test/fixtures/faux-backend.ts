@@ -77,6 +77,12 @@ export default function (pi: ExtensionAPI) {
 			},
 		});
 	}
+	for (const name of script.extensionCommands ?? []) {
+		pi.registerCommand(name, {
+			description: `Extension command ${name}`,
+			handler: async () => {},
+		});
+	}
 	if (script.crash) {
 		const { code, stderr } = script.crash;
 		pi.registerCommand("crash", {

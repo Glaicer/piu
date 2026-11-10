@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { type Config, fieldError } from "./config.ts";
-import type { Extension, Module, PlacedModule } from "./module.ts";
+import type { Command, Extension, Module, PlacedModule } from "./module.ts";
 import { StartupError } from "./startup-error.ts";
 
 export const builtinDir = join(import.meta.dir, "../builtin");
@@ -35,7 +35,7 @@ function extensionNames(root: string) {
 export async function resolvePlacement(
 	config: Pick<Config, "placement" | "modules">,
 	folders: ExtensionFolders,
-): Promise<Map<string, PlacedModule[]>> {
+): Promise<{ panels: Map<string, PlacedModule[]>; commands: Command[] }> {
 	const extensions = new Map<string, Extension>();
 	const placedIds = new Set<string>();
 	const panels = new Map<string, PlacedModule[]>();
@@ -90,7 +90,25 @@ export async function resolvePlacement(
 			);
 		}
 	}
-	return panels;
+	return { panels, commands: collectCommands(extensions) };
+}
+
+function collectCommands(extensions: ReadonlyMap<string, Extension>) {
+	const owners = new Map<string, string>();
+	const commands: Command[] = [];
+	for (const [name, extension] of extensions) {
+		for (const command of extension.commands ?? []) {
+			const owner = owners.get(command.name);
+			if (owner) {
+				throw new StartupError(
+					`Command "/${command.name}" is defined by both Extension "${owner}" and "${name}"`,
+				);
+			}
+			owners.set(command.name, name);
+			commands.push(command);
+		}
+	}
+	return commands;
 }
 
 async function loadExtension(name: string, dir: string): Promise<Extension> {

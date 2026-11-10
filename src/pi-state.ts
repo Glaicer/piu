@@ -29,7 +29,13 @@ export type ModelInfo = {
 	readonly name: string;
 };
 
+export type BackendCommand = {
+	readonly name: string;
+	readonly description?: string;
+};
+
 export type PiState = {
+	readonly commands: readonly BackendCommand[];
 	readonly model: ModelInfo | null;
 	readonly models: readonly ModelInfo[];
 	readonly thinkingLevel: ThinkingLevel;
@@ -55,6 +61,7 @@ const ignoreDeadBackend = () => {};
 
 export function createPiState(launch: (extraArgs: string[]) => Backend) {
 	const [state, setState] = createStore<{
+		commands: BackendCommand[];
 		model: ModelInfo | null;
 		models: ModelInfo[];
 		thinkingLevel: ThinkingLevel;
@@ -65,6 +72,7 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 		working: boolean;
 		backendHealth: BackendHealth;
 	}>({
+		commands: [],
 		model: null,
 		models: [],
 		thinkingLevel: "off",
@@ -108,6 +116,22 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 			.then((response) => {
 				if (response.command === "get_available_models" && response.success) {
 					setState("models", reconcile(response.data.models.map(toModelInfo)));
+				}
+			})
+			.catch(ignoreDeadBackend);
+		backend
+			.request({ type: "get_commands" })
+			.then((response) => {
+				if (response.command === "get_commands" && response.success) {
+					setState(
+						"commands",
+						reconcile(
+							response.data.commands.map(({ name, description }) => ({
+								name,
+								description,
+							})),
+						),
+					);
 				}
 			})
 			.catch(ignoreDeadBackend);

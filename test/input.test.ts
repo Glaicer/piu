@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { panelText, startPiu } from "./harness.ts";
+import { inputArea, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -42,12 +42,6 @@ test("Shift+Enter adds a line and Enter sends both lines as one prompt", async (
 	piu.mockInput.pressEnter();
 	await piu.waitForFrame((f) => f.includes('Model got "line one\\nline two"'));
 });
-
-// why: the chat repeats every prompt, so history is asserted on the input Panel alone, found as the Panel just above the 3-row status Panel at the bottom.
-function inputArea(frame: string) {
-	const lastRow = frame.trimEnd().split("\n").length - 1;
-	return panelText(frame, 10, lastRow - 4);
-}
 
 async function sendAndSettle(piu: Piu, text: string, reply: string) {
 	await send(piu, text);

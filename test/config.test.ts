@@ -6,6 +6,7 @@ import { loaded } from "./loaded.ts";
 
 const extensionsDir = join(import.meta.dir, "fixtures/extensions");
 const clashDir = join(import.meta.dir, "fixtures/extensions-clash");
+const dupCommandDir = join(import.meta.dir, "fixtures/extensions-dup-command");
 const wrapper = join(import.meta.dir, "fixtures/backend-wrapper.sh");
 const none = { replies: [] };
 
@@ -200,4 +201,19 @@ test("the same Extension name in builtin/ and extensions/ fails startup naming b
 
 	expect(error?.message).toContain(join(clashDir, "chat"));
 	expect(error?.message).toContain(join(import.meta.dir, "../builtin/chat"));
+});
+
+test("two enabled Extensions defining the same command name fail startup naming both", async () => {
+	const error = await startPiu({
+		script: none,
+		extensionsDir: dupCommandDir,
+		config: { placement: { side: ["first.tag", "second.tag"] } },
+	}).then(
+		() => undefined,
+		(e: Error) => e,
+	);
+
+	expect(error?.message).toContain("/twice");
+	expect(error?.message).toContain('"first"');
+	expect(error?.message).toContain('"second"');
 });

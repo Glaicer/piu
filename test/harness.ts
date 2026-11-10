@@ -19,6 +19,7 @@ export type FauxScript = {
 	replies: (string | FauxStep)[];
 	crash?: { code: number; stderr: string };
 	compactCommand?: boolean;
+	extensionCommands?: string[];
 	tokensPerSecond?: number;
 	tokenSize?: number;
 };
@@ -46,11 +47,19 @@ export function panelText(frame: string, column: number, row = 0) {
 		.join("\n");
 }
 
+// why: the chat repeats every prompt, so history is asserted on the input Panel alone, found as the Panel just above the 3-row status Panel at the bottom.
+export function inputArea(frame: string) {
+	const lastRow = frame.trimEnd().split("\n").length - 1;
+	return panelText(frame, 10, lastRow - 4);
+}
+
 export async function startPiu(options: {
 	script: FauxScript;
 	args?: string[];
 	extraBackendArgs?: string[];
 	persistSession?: boolean;
+	cwd?: string;
+	promptTemplates?: Record<string, string>;
 	dir?: string;
 	config?: unknown;
 	extensionsDir?: string;
@@ -70,6 +79,13 @@ export async function startPiu(options: {
 		}),
 	);
 
+	if (options.promptTemplates) {
+		mkdirSync(join(dir, "agent", "prompts"), { recursive: true });
+		for (const [name, body] of Object.entries(options.promptTemplates)) {
+			writeFileSync(join(dir, "agent", "prompts", `${name}.md`), body);
+		}
+	}
+
 	// why: Pi lists every model whose provider has credentials in the environment, so the developer's API keys would add real models to the picker.
 	const credentialVars = Object.keys(process.env).filter((name) =>
 		/API_KEY|_TOKEN|_SECRET/.test(name),
@@ -83,6 +99,7 @@ export async function startPiu(options: {
 			`PIU_FAUX_SCRIPT=${scriptPath}`,
 			piBin,
 			...(options.persistSession ? [] : ["--no-session"]),
+			"--no-skills",
 			"-e",
 			fauxBackend,
 			...(options.extraBackendArgs ?? []),
@@ -105,6 +122,7 @@ export async function startPiu(options: {
 		view = await createApp({
 			configPath,
 			extensionsDir: options.extensionsDir ?? join(dir, "extensions"),
+			cwd: options.cwd,
 			args: options.args ?? ["--model", "faux/faux-1"],
 		});
 	} catch (error) {
