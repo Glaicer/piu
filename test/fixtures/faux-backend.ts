@@ -77,6 +77,22 @@ export default function (pi: ExtensionAPI) {
 			},
 		});
 	}
+	if (script.branchBackCommand) {
+		// why: Pi's RPC has no way to branch inside one session; only an extension can navigate the tree back to the first reply, and sending the next prompt from the same handler keeps the test free of timing.
+		pi.registerCommand("branch-back", {
+			handler: async (args, ctx) => {
+				await ctx.waitForIdle();
+				const reply = ctx.sessionManager
+					.getEntries()
+					.find(
+						(entry) =>
+							entry.type === "message" && entry.message.role === "assistant",
+					);
+				if (reply) await ctx.navigateTree(reply.id);
+				pi.sendUserMessage(args);
+			},
+		});
+	}
 	for (const name of script.extensionCommands ?? []) {
 		pi.registerCommand(name, {
 			description: `Extension command ${name}`,

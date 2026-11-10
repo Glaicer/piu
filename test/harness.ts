@@ -19,6 +19,7 @@ export type FauxScript = {
 	replies: (string | FauxStep)[];
 	crash?: { code: number; stderr: string };
 	compactCommand?: boolean;
+	branchBackCommand?: boolean;
 	extensionCommands?: string[];
 	tokensPerSecond?: number;
 	tokenSize?: number;

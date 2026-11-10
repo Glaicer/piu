@@ -12,11 +12,13 @@ const promptTemplates = {
 test("/ lists the Backend's prompt templates and extension commands next to the app's own", async () => {
 	await using piu = await startPiu({ script, promptTemplates });
 
-	await piu.mockInput.typeText("/");
+	await piu.mockInput.typeText("/re");
 
 	const frame = await piu.waitForFrame(
 		(f) =>
-			f.includes("review-code") && f.includes("greet") && f.includes("/model"),
+			f.includes("review-code") &&
+			f.includes("greet") &&
+			f.includes("/reasoning"),
 	);
 	expect(frame).toContain("Review the code");
 });
@@ -97,7 +99,7 @@ test("Down moves the selection before Enter inserts", async () => {
 	await piu.waitForFrame((f) =>
 		inputArea(f)
 			.split("\n")
-			.some((line) => line.startsWith("/reasoning ")),
+			.some((line) => line.startsWith("/resume ")),
 	);
 });
 

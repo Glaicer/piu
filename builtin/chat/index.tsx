@@ -5,6 +5,8 @@ import type { PiMessage, ServiceRow } from "../../src/pi-state.ts";
 import type { Theme } from "../../src/theme.ts";
 import { BackendCard } from "./backend-card.tsx";
 import { createSyntaxStyle, Markdown } from "./markdown.tsx";
+import { sessionCommands } from "./session-commands.tsx";
+import { contentText } from "./sessions.ts";
 import { Thinking } from "./thinking.tsx";
 import {
 	type ToolCallBlock,
@@ -129,11 +131,7 @@ function AssistantBlock(props: {
 }
 
 function messageText(message: PiMessage): string {
-	if (!("content" in message)) return "";
-	if (typeof message.content === "string") return message.content;
-	return message.content
-		.map((block) => (block.type === "text" ? block.text : ""))
-		.join("");
+	return "content" in message ? contentText(message.content) : "";
 }
 
 export default {
@@ -144,4 +142,5 @@ export default {
 			render: (context) => <Messages context={context} />,
 		},
 	],
+	commands: sessionCommands,
 } satisfies Extension;

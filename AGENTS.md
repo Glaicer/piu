@@ -24,6 +24,8 @@ A terminal UI for the Pi coding agent, built on OpenTUI + Solid. Work is planned
 - **Pi lists a model for every provider with credentials in the environment**, so the author's `OPENROUTER_API_KEY` put hundreds of real models in the picker. `startPiu` blanks env vars matching `API_KEY|_TOKEN|_SECRET` for the Backend; keep any new test launcher doing the same.
 - **Config merge:** objects merge by key, while arrays and `layout` replace. A replaced `layout` drops the default Placement entries for Panels the new tree lacks, but a `placement` key you write for a missing Panel is a startup error.
 - **A duplicate tool name is a hard startup failure on Pi-Bolt** (ADR-0001). An Extension's Pi extension never reuses another tool's name. To replace a tool, register your own name and remove the old one with `pi.setActiveTools()`. Check with `bun scripts/pi-bolt-compat/run.ts`, a manual script that needs your real agent dir: an empty one has no compiled-in Pi extensions.
+- **An Extension's `commands` load only when one of its Modules is in the Placement.** `resolvePlacement` imports an Extension through its placed Modules, so a command-only Extension never reaches `/`. The session commands sit in `builtin/chat` for that reason.
+- **A new, resumed or forked Pi session re-runs the faux extension, so a test script's replies start again from the first.** Prove "fresh session" with `{messages}` or `{lastUser}`, not with reply order. Pi's RPC cannot branch inside one session, so `branchBackCommand` navigates the tree from a fixture command.
 - **The default Backend in `config.ts` stays `pi`.** Personal settings such as `pi-bolt` go in `config.json`, which is git-ignored, as is the `extensions/` folder except its README. Never commit either.
 
 ## Agent skills
