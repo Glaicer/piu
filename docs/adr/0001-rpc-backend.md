@@ -1,6 +1,6 @@
 # Pi runs as an RPC subprocess, not in-process through the SDK
 
-The interface drives Pi as a child process (`<backend> --mode rpc`, through the exported `RpcClient`) instead of embedding it with `createAgentSession()` in the same Bun process. The main reason is isolation: heavy Pi work, such as re-parsing a large tool call's arguments on every delta (about 30 s of CPU for a 200 KB `write` on stock Pi, measured in `pi -p` with no TUI), would otherwise block the event loop that draws animations and handles clicks. A second reason is that `pi` and `pi-bolt` speak the same protocol, so the backend is a config value (`pi` in the repo default, `pi-bolt` locally). Pi-Bolt cannot host the interface itself, because OpenTUI needs `bun:ffi`, which its default JIT-off build does not support.
+The interface drives Pi as a child process (`<backend> --mode rpc`, through the app's own thin Backend client) instead of embedding it with `createAgentSession()` in the same Bun process. The main reason is isolation: heavy Pi work, such as re-parsing a large tool call's arguments on every delta (about 30 s of CPU for a 200 KB `write` on stock Pi, measured in `pi -p` with no TUI), would otherwise block the event loop that draws animations and handles clicks. A second reason is that `pi` and `pi-bolt` speak the same protocol, so the backend is a config value (`pi` in the repo default, `pi-bolt` locally). Pi-Bolt cannot host the interface itself, because OpenTUI needs `bun:ffi`, which its default JIT-off build does not support.
 
 ## Considered Options
 
@@ -9,6 +9,7 @@ The interface drives Pi as a child process (`<backend> --mode rpc`, through the 
 
 ## Consequences
 
+- The app has its own Backend client instead of Pi's exported `RpcClient`. In 1.5.0 `RpcClient` always runs `node <cliPath>`, so it can't start a compiled `pi-bolt`. It also copies the child's stderr to the parent's stderr, which garbles a full-screen interface, and it can't send `extension_ui_response`. Our client spawns `backend.command` directly, frames stdout as LF-only JSONL (a copy of Pi's unexported `jsonl.ts`), correlates responses by id, sends any record, and keeps stderr in memory. It's typed only with Pi's exported protocol types, so `@earendil-works/pi-coding-agent` stays a dev dependency, used for those types and for the test Backend.
 - Only what the RPC protocol exposes is available. Pi's built-in TUI commands (`/model`, `/tree`, `/resume`, …) must be rebuilt as our own Modals, and extension UI calls that need a real terminal (`custom()`, `setFooter`, `setEditorComponent`, autocomplete providers) are no-ops.
 - An Extension's Pi extension is loaded into the backend with `-e <path>`. On stock Pi, CLI paths load first and the first registration of a tool name wins, so ours overrides an installed one with the same name. Pi-Bolt's order for compiled-in extensions is unverified.
 - Extensions talk between their Pi extension and their Modules through the `editor` dialog of the RPC extension-UI protocol, which works on both backends. The protocol does not tell the client when Pi drops a dialog on its own, so the interface must close pending dialogs itself.

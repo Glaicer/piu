@@ -147,11 +147,11 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 ### Runtime and Backend
 
 - Runtime is Bun (OpenTUI 0.8.x needs Bun ≥ 1.3.14 or Node ≥ 26.4; the target machine has Bun 1.4.4 and Node 24). UI framework is `@opentui/solid`. Package manager is pnpm. Resolve current stable versions from the registry when adding dependencies and pin them.
-- The Backend is a child process started as `<backend.command> <backend.args…> --mode rpc <Pi extension -e paths…> <user args…>`. The app talks to it through the `RpcClient` exported by `@earendil-works/pi-coding-agent` (ADR-0001). The SDK is not used in-process.
+- The Backend is a child process started as `<backend.command> <backend.args…> --mode rpc <Pi extension -e paths…> <user args…>`. The app talks to it through its own thin Backend client, not Pi's `RpcClient` (ADR-0001). The SDK is not used in-process.
 - The default config's Backend is `pi`. The personal config on the author's machine sets `pi-bolt`.
 - Pi-Bolt-only protocol features (`set_client_features`, `subagent_subscribe`) are optional. They are used only if the Backend accepts them. Nothing in this version depends on them.
 - Wire `message_update` records are delta-only. The app keeps a reconstructed in-progress message per stream and replaces it with the authoritative content from `text_end` / `thinking_end` / `toolcall_end` and `message_end`.
-- RPC framing is strict JSONL split on LF only (no generic line reader: `U+2028/2029` are valid inside JSON). This is handled by `RpcClient`, so don't re-implement it.
+- RPC framing is strict JSONL split on LF only (no generic line reader: `U+2028/2029` are valid inside JSON). The Backend client copies Pi's `jsonl.ts` reader for this, since it isn't exported, and keeps the Backend's stderr in memory without ever writing it to the terminal.
 - A **Pi state store** is the single place that turns RPC events and responses into reactive state: messages, streaming state, model, reasoning level, available models and levels, session stats (`get_session_stats`: tokens, cost, `contextUsage`), extension statuses, pending extension dialogs, Backend health. Modules read it only through the Module context. Session stats refresh after each `message_end` and after model or session changes.
 - Backend lifecycle: start, health (running, exited with code and stderr tail, not found), and restart with `-c` added so the same session continues.
 - Pi's built-in TUI commands don't exist over RPC. The app implements its own: model picker, reasoning level, new session, resume, tree/fork, compact. Pi's `/settings` is not reimplemented. Slash autocomplete merges the Backend's `get_commands` with the app's own commands.
