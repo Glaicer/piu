@@ -12,12 +12,12 @@ function Messages(props: { context: ModuleContext }) {
 	return (
 		<>
 			<For each={pi.messages}>
-				{(message, index) => {
+				{(message) => {
 					if (message.role === "assistant") {
 						return (
 							<Markdown
 								text={messageText(message)}
-								streaming={pi.streaming && index() === pi.messages.length - 1}
+								streaming={message === pi.streamingMessage}
 								syntaxStyle={syntaxStyle}
 								theme={theme}
 							/>
@@ -45,6 +45,10 @@ function messageText(message: PiMessage): string {
 
 export default {
 	modules: [
-		{ id: "messages", render: (context) => <Messages context={context} /> },
+		{
+			id: "messages",
+			followsOutput: true,
+			render: (context) => <Messages context={context} />,
+		},
 	],
 } satisfies Extension;

@@ -13,7 +13,7 @@ type AssistantUpdate = Extract<
 
 export type PiState = {
 	readonly messages: readonly PiMessage[];
-	readonly streaming: boolean;
+	readonly streamingMessage: PiMessage | null;
 	readonly backendHealth: BackendHealth;
 };
 
@@ -27,9 +27,13 @@ const ignoreDeadBackend = () => {};
 export function createPiState(launch: (extraArgs: string[]) => Backend) {
 	const [state, setState] = createStore<{
 		messages: PiMessage[];
-		streaming: boolean;
+		streamingMessage: PiMessage | null;
 		backendHealth: BackendHealth;
-	}>({ messages: [], streaming: false, backendHealth: { status: "running" } });
+	}>({
+		messages: [],
+		streamingMessage: null,
+		backendHealth: { status: "running" },
+	});
 
 	let backend: Backend;
 	let detach = () => {};
@@ -45,7 +49,7 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 			offRecords();
 			offHealth();
 		};
-		setState("streaming", false);
+		setState("streamingMessage", null);
 		setState("backendHealth", reconcile({ status: "running" }));
 		backend
 			.request({ type: "get_messages" })
@@ -61,7 +65,7 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 		switch (record.type) {
 			case "message_start":
 				setState("messages", state.messages.length, record.message);
-				setState("streaming", true);
+				setState("streamingMessage", record.message);
 				break;
 			case "message_update":
 				setState(
@@ -76,7 +80,7 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 					state.messages.length - 1,
 					reconcile(record.message),
 				);
-				setState("streaming", false);
+				setState("streamingMessage", null);
 				break;
 		}
 	}

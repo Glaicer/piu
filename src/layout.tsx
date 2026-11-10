@@ -13,7 +13,7 @@ type SlotBase = {
 };
 export type Slot =
 	| (SlotBase & { kind: "container"; children: readonly Slot[] })
-	| (SlotBase & { kind: "panel"; stickToBottom?: boolean });
+	| (SlotBase & { kind: "panel" });
 
 type PanelContext = Omit<ModuleContext, "onCleanup" | "settings">;
 type SharedContext = Omit<PanelContext, "reportPresence">;
@@ -61,13 +61,15 @@ export function SlotView(props: SlotProps) {
 		const owner = claimant();
 		return owner ? owner === entry : entry.presence() !== "hidden";
 	};
+	const followsOutput = () =>
+		entries.some((entry) => shown(entry) && entry.placed.module.followsOutput);
 	return (
 		<scrollbox
 			{...sizing}
 			visible={visible()}
 			border
 			borderColor={props.context.theme.border}
-			stickyScroll={slot.stickToBottom ?? false}
+			stickyScroll={followsOutput()}
 			stickyStart="bottom"
 			contentOptions={{ flexDirection: slot.direction }}
 		>

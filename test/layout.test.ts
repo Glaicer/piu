@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { startPiu } from "./harness.ts";
-import { setNote, setTakeover } from "./presence.ts";
+import { setFollower, setNote, setTakeover } from "./presence.ts";
 
 const extensionsDir = join(import.meta.dir, "fixtures/extensions");
 const none = { replies: [] };
@@ -214,4 +214,27 @@ test("the default input area has a row Panel for status Modules below the input"
 	);
 	expect(lineOf(frame, "Bye")).toBe(lineOf(frame, "Hello Ada"));
 	expect(lineOf(frame, "Bye")).toBeGreaterThan(lineOf(frame, "typed"));
+});
+
+test("a Panel follows output only when a Module that follows output is visible in it", async () => {
+	const start = (presence: "hidden" | "shown") => {
+		setFollower(presence);
+		return startPiu({
+			script: none,
+			extensionsDir,
+			config: {
+				layout: panel("stack", "rest"),
+				placement: { stack: ["scroll.alpha", "presence.follower"] },
+			},
+		});
+	};
+	{
+		await using hidden = await start("hidden");
+		const frame = await hidden.waitForFrame((f) => f.includes("alpha 01"));
+		expect(frame).not.toContain("alpha 40");
+	}
+	await using shown = await start("shown");
+	const frame = await shown.waitForFrame((f) => f.includes("Follower"));
+	expect(frame).toContain("alpha 40");
+	expect(frame).not.toContain("alpha 01");
 });

@@ -41,7 +41,7 @@ export function Markdown(props: {
 			streaming={props.streaming}
 			syntaxStyle={props.syntaxStyle}
 			fg={props.theme.text}
-			// why: "top-level" keeps each finished block as its own renderable, so a delta re-lexes and re-highlights only the trailing block; the default "coalesced" mode re-highlights every run of prose on each delta. OpenTUI marks this option experimental.
+			// why: "top-level" keeps finished blocks, so a delta re-highlights only the trailing one; OpenTUI marks it experimental.
 			internalBlockMode="top-level"
 			tableOptions={{ style: "grid", borderColor: props.theme.border }}
 		/>

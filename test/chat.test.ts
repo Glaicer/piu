@@ -1,6 +1,12 @@
 import { expect, spyOn, test } from "bun:test";
-import { getTreeSitterClient } from "@opentui/core";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { getTreeSitterClient, RGBA } from "@opentui/core";
+import { defaultTheme } from "../src/theme.ts";
 import { startPiu } from "./harness.ts";
+
+const FAUX_CHARS_PER_TOKEN = 4;
 
 const formatted = [
 	"# Release notes",
@@ -31,6 +37,13 @@ function isFormatted(frame: string) {
 	);
 }
 
+function numberedLines(prefix: string, count: number) {
+	return Array.from(
+		{ length: count },
+		(_, index) => `${prefix} ${String(index).padStart(3, "0")}`,
+	).join("\n\n");
+}
+
 function spyOnHighlights() {
 	const spy = spyOn(getTreeSitterClient(), "highlightOnce");
 	return {
@@ -38,6 +51,23 @@ function spyOnHighlights() {
 		[Symbol.dispose]: () => spy.mockRestore(),
 	};
 }
+
+function panelText(frame: string, column: number) {
+	const rows = frame.split("\n");
+	const top = rows[0] ?? "";
+	const left = top.lastIndexOf("┌", column);
+	const right = top.indexOf("┐", column);
+	const bottom = rows.findIndex(
+		(row, index) => index > 0 && [...row][left] === "└",
+	);
+	return rows
+		.slice(1, bottom)
+		.map((row) => [...row].slice(left + 1, right - 1).join(""))
+		.join("\n");
+}
+
+const agentPanel = (frame: string) => panelText(frame, 10);
+const sidePanel = (frame: string) => panelText(frame, 150);
 
 test("a reply with headings, lists, a table and code renders without raw Markdown markers", async () => {
 	await using piu = await startPiu({ script: { replies: [formatted] } });
@@ -53,36 +83,66 @@ test("a reply with headings, lists, a table and code renders without raw Markdow
 	expect(frame).toContain("const answer: number = 42;");
 });
 
-test("the final frame of a streamed reply equals the same reply delivered in one chunk", async () => {
-	let oneChunk: string;
-	{
-		await using piu = await startPiu({
-			script: { replies: [formatted], tokenSize: 100_000 },
-		});
-		await piu.mockInput.typeText("Notes");
-		piu.mockInput.pressEnter();
-		oneChunk = await piu.waitForFrame(isFormatted);
-	}
+test("a keyword in a code block is drawn in the keyword colour", async () => {
+	await using piu = await startPiu({ script: { replies: [formatted] } });
+	const keyword = RGBA.fromHex(defaultTheme.accent);
 
-	await using piu = await startPiu({
-		script: { replies: [formatted], tokenSize: 1 },
-	});
 	await piu.mockInput.typeText("Notes");
 	piu.mockInput.pressEnter();
-	await piu.waitForFrame((frame) => frame === oneChunk);
+
+	await piu.waitForFrame(() =>
+		piu
+			.captureSpans()
+			.lines.some((line) =>
+				line.spans.some(
+					(span) => span.text.trim() === "const" && span.fg.equals(keyword),
+				),
+			),
+	);
+});
+
+test("the final frame of a streamed reply equals the same reply loaded in one chunk from the session", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "piu-session-"));
+	try {
+		await using streamed = await startPiu({
+			dir,
+			persistSession: true,
+			script: { replies: [formatted], tokenSize: 1 },
+		});
+		await streamed.mockInput.typeText("Notes");
+		streamed.mockInput.pressEnter();
+		await streamed.waitForFrame(isFormatted);
+
+		await using loaded = await startPiu({
+			dir,
+			persistSession: true,
+			script: { replies: [] },
+			args: ["--model", "faux/faux-1", "-c"],
+		});
+		const oneChunk = await loaded.waitForFrame(isFormatted);
+
+		await streamed.waitForFrame((frame) => frame === oneChunk);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 });
 
 test("streaming a long reply highlights only the block that changed, never the whole reply", async () => {
+	const paragraphCount = 400;
+	const tokensPerDelta = 4;
+	const charsPerDelta = tokensPerDelta * FAUX_CHARS_PER_TOKEN;
+	const blockSeparator = "\n\n";
+	const passesAfterGrowth = 4;
 	const paragraphs = Array.from(
-		{ length: 400 },
+		{ length: paragraphCount },
 		(_, index) =>
 			`Paragraph ${String(index).padStart(3, "0")} talks about one small thing at a time.`,
 	);
-	const reply = paragraphs.join("\n\n");
+	const reply = paragraphs.join(blockSeparator);
 	expect(reply.length).toBeGreaterThan(20_000);
 	using highlights = spyOnHighlights();
 	await using piu = await startPiu({
-		script: { replies: [reply], tokenSize: 4 },
+		script: { replies: [reply], tokenSize: tokensPerDelta },
 	});
 
 	await piu.mockInput.typeText("Go on");
@@ -95,25 +155,26 @@ test("streaming a long reply highlights only the block that changed, never the w
 	const longestParagraph = Math.max(...paragraphs.map((p) => p.length));
 	const contents = highlights.contents();
 	expect(Math.max(...contents.map((c) => c.length))).toBeLessThanOrEqual(
-		longestParagraph + 2,
+		longestParagraph + blockSeparator.length,
 	);
 	const perParagraph = new Map<string, number>();
 	for (const content of contents) {
 		const id = /Paragraph (\d{3})/.exec(content)?.[1];
 		if (id) perParagraph.set(id, (perParagraph.get(id) ?? 0) + 1);
 	}
-	const deltasPerParagraph = Math.ceil(longestParagraph / 16) + 2;
+	const deltasWhileGrowing = Math.ceil(longestParagraph / charsPerDelta) + 1;
 	expect(Math.max(...perParagraph.values())).toBeLessThanOrEqual(
-		deltasPerParagraph + 2,
+		deltasWhileGrowing + passesAfterGrowth,
 	);
 }, 30_000);
 
+const code = "const cached: string = 'highlight me once';";
+const codeReply = `\`\`\`ts\n${code}\n\`\`\`\n\n${"More words after the code. ".repeat(20)}`;
+
 test("a finished code block is highlighted once while later text streams after it", async () => {
-	const code = "const cached: string = 'highlight me once';";
-	const reply = `\`\`\`ts\n${code}\n\`\`\`\n\n${"More words after the code. ".repeat(20)}`;
 	using highlights = spyOnHighlights();
 	await using piu = await startPiu({
-		script: { replies: [reply], tokenSize: 2 },
+		script: { replies: [codeReply], tokenSize: 2 },
 	});
 
 	await piu.mockInput.typeText("Code");
@@ -129,44 +190,63 @@ test("a finished code block is highlighted once while later text streams after i
 	expect(codeHighlights).toHaveLength(1);
 });
 
-function agentRows(frame: string) {
-	return frame
-		.split("\n")
-		.slice(0, 20)
-		.map((line) => line.slice(0, 80));
-}
-
 test("the agent Panel follows new output at the bottom and stays put when scrolled up", async () => {
-	const lines = Array.from(
-		{ length: 120 },
-		(_, index) => `Line ${String(index).padStart(3, "0")}`,
-	);
+	const wheelTicks = 5;
+	const maxWheelTicks = 300;
 	await using piu = await startPiu({
 		script: {
-			replies: [lines.join("\n\n")],
-			tokensPerSecond: 60,
-			tokenSize: 1,
+			replies: [numberedLines("Line", 120), "Fresh reply", "Third reply"],
 		},
+		config: { placement: { side: ["chat.messages"] } },
 	});
 
 	await piu.mockInput.typeText("Lines");
 	piu.mockInput.pressEnter();
+	await piu.waitForFrame((frame) => agentPanel(frame).includes("Line 119"));
 
-	await piu.waitForFrame((frame) => frame.includes("Line 020"), 10_000);
-	const following = await piu.waitForFrame(
-		(frame) => frame.includes("Line 030"),
-		10_000,
+	for (let tick = 0; tick < wheelTicks; tick++)
+		await piu.mockMouse.scroll(10, 5, "up");
+	const scrolledUp = agentPanel(
+		await piu.waitForFrame((frame) => !agentPanel(frame).includes("Line 119")),
 	);
-	expect(following).not.toContain("> Lines");
+	await piu.mockInput.typeText("More");
+	piu.mockInput.pressEnter();
+	const arrived = await piu.waitForFrame((frame) =>
+		sidePanel(frame).includes("Fresh reply"),
+	);
+	expect(agentPanel(arrived)).toEqual(scrolledUp);
 
-	for (let tick = 0; tick < 5; tick++) await piu.mockMouse.scroll(10, 5, "up");
-	await piu.renderOnce();
-	const scrolledUp = agentRows(piu.captureCharFrame());
-	await Bun.sleep(400);
-	await piu.renderOnce();
-	expect(agentRows(piu.captureCharFrame())).toEqual(scrolledUp);
-
-	for (let tick = 0; tick < 100; tick++)
+	const backAtBottom = async () => {
+		await piu.renderOnce();
+		return agentPanel(piu.captureCharFrame()).includes("Fresh reply");
+	};
+	for (let tick = 0; tick < maxWheelTicks && !(await backAtBottom()); tick++)
 		await piu.mockMouse.scroll(10, 5, "down");
-	await piu.waitForFrame((frame) => frame.includes("Line 119"), 20_000);
-}, 30_000);
+	expect(await backAtBottom()).toBe(true);
+	await piu.mockInput.typeText("Again");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((frame) => agentPanel(frame).includes("Third reply"));
+});
+
+test("a replaced layout keeps the chat following output in whichever Panel holds it", async () => {
+	await using piu = await startPiu({
+		script: { replies: [numberedLines("Row", 60)] },
+		config: {
+			layout: {
+				kind: "container",
+				id: "root",
+				direction: "column",
+				size: "rest",
+				children: [
+					{ kind: "panel", id: "talk", direction: "column", size: "rest" },
+					{ kind: "panel", id: "typing", direction: "column", size: 3 },
+				],
+			},
+			placement: { talk: ["chat.messages"], typing: ["input.prompt"] },
+		},
+	});
+
+	await piu.mockInput.typeText("Rows");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((frame) => frame.includes("Row 059"));
+});

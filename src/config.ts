@@ -27,13 +27,7 @@ export const defaultConfig: Config = {
 				direction: "column",
 				size: "rest",
 				children: [
-					{
-						kind: "panel",
-						id: "agent",
-						direction: "column",
-						size: "rest",
-						stickToBottom: true,
-					},
+					{ kind: "panel", id: "agent", direction: "column", size: "rest" },
 					{
 						kind: "container",
 						id: "input-area",
@@ -139,7 +133,7 @@ function parseSlot(value: unknown, path: string, panelIds: Set<string>): Slot {
 			throw fieldError(`${path}.id`, `Panel id "${base.id}" is already used`);
 		}
 		panelIds.add(base.id);
-		return { kind, ...base, ...optionalBoolean(fields, "stickToBottom", path) };
+		return { kind, ...base };
 	}
 	return {
 		kind,
@@ -171,16 +165,6 @@ function optionalCells(
 	throw fieldError(
 		`${path}.${key}`,
 		`expected a positive whole number of cells, got ${JSON.stringify(value)}`,
-	);
-}
-
-function optionalBoolean(fields: Fields, key: "stickToBottom", path: string) {
-	const value = fields[key];
-	if (value === undefined) return {};
-	if (typeof value === "boolean") return { [key]: value };
-	throw fieldError(
-		`${path}.${key}`,
-		`expected true or false, got ${JSON.stringify(value)}`,
 	);
 }
 

@@ -1,5 +1,5 @@
 import type { Extension } from "../../../../src/module.ts";
-import { note, takeover } from "../../../presence.ts";
+import { follower, note, takeover } from "../../../presence.ts";
 
 export default {
 	modules: [
@@ -15,6 +15,14 @@ export default {
 			render: (context) => {
 				context.reportPresence(takeover);
 				return <text>Takeover</text>;
+			},
+		},
+		{
+			id: "follower",
+			followsOutput: true,
+			render: (context) => {
+				context.reportPresence(follower);
+				return <text>Follower</text>;
 			},
 		},
 	],

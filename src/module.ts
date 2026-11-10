@@ -19,6 +19,7 @@ export type ModuleContext = {
 export type Module = {
 	readonly id: string;
 	readonly title?: string;
+	readonly followsOutput?: boolean;
 	render(context: ModuleContext): JSX.Element;
 };
 
