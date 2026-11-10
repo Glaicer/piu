@@ -192,7 +192,7 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 
 ### Rendering and animation
 
-- Chat Markdown rendering is incremental: completed blocks are kept and only the trailing block(s) of a streaming message are re-rendered. Code-block highlighting is cached by language and text. This avoids the per-delta full re-lex that makes stock Pi's own TUI expensive.
+- Chat Markdown rendering is incremental: completed blocks are kept and only the trailing block(s) of a streaming message are re-rendered. Finished blocks keep their renderables, so each is highlighted once while mounted; a remount (Restart, resume) highlights again. This avoids the per-delta full re-lex that makes stock Pi's own TUI expensive.
 - Animations in this version: working indicator, Modal and Toast enter and exit, tool-card and thinking expand and collapse, smooth Panel scrolling. All go through `animate`. With `animations: false` every animation jumps to its end state.
 
 ### Theme
