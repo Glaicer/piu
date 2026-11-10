@@ -13,6 +13,8 @@
 - [ ] Dismissing sends a declined result
 - [ ] Removing the Extension's Module from Placement stops passing its Pi extension to the Backend
 - [ ] A reserved-title `editor` request never shows the generic editor Modal
+- [ ] A Panel can size to its content: the input Panel grows to fit the question card while it's shown and returns to the input's height after, and a content-sized Panel whose Modules are all hidden takes no rows (spec story 21)
+- [ ] A dialog request with a `timeout` closes its Modal once the timeout passes, since Pi has already answered it with the default value
 
 ## Comments
 
@@ -20,3 +22,5 @@
 - Decision (after 02): own tool name `ask_user`, plus `pi.setActiveTools()` without `ask_user_question`. No `-ne`, no `pi-bolt remove`. Spec and ADR-0001 updated.
 - From 04 (sizes updated by 08): the default `input-area` Container is a fixed 8 rows (input Panel 5 + status Panel 3). A question card that claims the input Panel exclusively won't fit in 5 rows, so this ticket must resize it or add a content-fit size.
 - From 12: the dialog bridge is `bridgeDialogs` in `src/dialogs.tsx`, which opens a Modal for every entry of `pi.state.dialogs`. A reserved-title `editor` request has to be routed away there (and kept out of `dialogs`, or hidden in the bridge) before it reaches `dialogModal`. Auto-closing on tool end, run end and abort already applies to every entry in `dialogs`, so a channel request is covered once it is stored the same way.
+- From 12: story 21 is met for Modules but not for Panels: a Panel keeps its fixed rows when every Module in it is hidden. Sizes have no content-fit option yet, and this ticket needs one for the question card anyway (see From 04). Add it to the spec's common sizing.
+- From 12: a dialog with a `timeout` stays on screen after Pi auto-resolves it on its side (spec story 77). The request carries the timeout in milliseconds, so the bridge in `src/dialogs.tsx` can close the Modal itself.
