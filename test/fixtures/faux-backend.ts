@@ -21,9 +21,32 @@ export default function (pi: ExtensionAPI) {
 	});
 	faux.setResponses(
 		script.replies.map(
-			(reply) => (_context, _options, _state, model) =>
-				fauxAssistantMessage(fauxText(reply.replaceAll("{model}", model.id))),
+			(reply) => (context, _options, _state, model) =>
+				fauxAssistantMessage(
+					fauxText(
+						reply
+							.replaceAll("{model}", model.id)
+							.replaceAll(
+								"{messages}",
+								String(
+									context.messages.filter(
+										(message) =>
+											message.role === "user" || message.role === "assistant",
+									).length,
+								),
+							),
+					),
+				),
 		),
 	);
 	pi.registerProvider(faux.provider);
+	if (script.crash) {
+		const { code, stderr } = script.crash;
+		pi.registerCommand("crash", {
+			handler: async () => {
+				process.stderr.write(stderr);
+				process.exit(code);
+			},
+		});
+	}
 }

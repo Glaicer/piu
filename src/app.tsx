@@ -23,12 +23,10 @@ function App(props: {
 	args: string[];
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 }) {
-	const backend = startBackend(props.config.backend, props.args);
-	const pi = createPiState(backend);
-	onCleanup(() => {
-		pi.dispose();
-		backend.stop();
-	});
+	const pi = createPiState((extraArgs) =>
+		startBackend(props.config.backend, [...extraArgs, ...props.args]),
+	);
+	onCleanup(pi.dispose);
 	return (
 		<box width="100%" height="100%" backgroundColor={defaultTheme.surface}>
 			<SlotView

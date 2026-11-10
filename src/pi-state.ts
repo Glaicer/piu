@@ -1,6 +1,6 @@
 import type { JsonAgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { createStore, produce, reconcile } from "solid-js/store";
-import type { Backend } from "./backend.ts";
+import type { Backend, BackendHealth, BackendRecord } from "./backend.ts";
 
 export type PiMessage = Extract<
 	JsonAgentSessionEvent,
@@ -11,16 +11,50 @@ type AssistantUpdate = Extract<
 	{ type: "message_update" }
 >["assistantMessageEvent"];
 
-export type PiState = { readonly messages: readonly PiMessage[] };
+export type PiState = {
+	readonly messages: readonly PiMessage[];
+	readonly backendHealth: BackendHealth;
+};
 
-export type PiActions = { prompt(text: string): Promise<void> };
+export type PiActions = {
+	prompt(text: string): Promise<void>;
+	restartBackend(): void;
+};
 
-export function createPiState(backend: Backend) {
-	const [state, setState] = createStore<{ messages: PiMessage[] }>({
-		messages: [],
-	});
+const ignoreDeadBackend = () => {};
 
-	const unsubscribe = backend.onRecord((record) => {
+export function createPiState(launch: (extraArgs: string[]) => Backend) {
+	const [state, setState] = createStore<{
+		messages: PiMessage[];
+		backendHealth: BackendHealth;
+	}>({ messages: [], backendHealth: { status: "running" } });
+
+	let backend: Backend;
+	let detach = () => {};
+
+	function attach(extraArgs: string[]) {
+		detach();
+		backend = launch(extraArgs);
+		const offRecords = backend.onRecord(applyRecord);
+		const offHealth = backend.onHealth((health) =>
+			setState("backendHealth", reconcile(health)),
+		);
+		detach = () => {
+			offRecords();
+			offHealth();
+		};
+		setState("backendHealth", reconcile({ status: "running" }));
+		backend
+			.request({ type: "get_messages" })
+			.then((response) => {
+				if (response.command === "get_messages" && response.success) {
+					setState("messages", reconcile(response.data.messages));
+				}
+			})
+			.catch(ignoreDeadBackend);
+	}
+
+	function applyRecord(record: BackendRecord) {
 		switch (record.type) {
 			case "message_start":
 				setState("messages", state.messages.length, record.message);
@@ -40,16 +74,31 @@ export function createPiState(backend: Backend) {
 				);
 				break;
 		}
-	});
+	}
+
+	attach([]);
 
 	const actions: PiActions = {
 		async prompt(text) {
-			await backend.request({ type: "prompt", message: text });
+			await backend
+				.request({ type: "prompt", message: text })
+				.catch(ignoreDeadBackend);
+		},
+		restartBackend() {
+			if (state.backendHealth.status !== "exited") return;
+			attach(["-c"]);
 		},
 	};
 
 	const readonlyState: PiState = state;
-	return { state: readonlyState, actions, dispose: unsubscribe };
+	return {
+		state: readonlyState,
+		actions,
+		dispose() {
+			detach();
+			backend.stop();
+		},
+	};
 }
 
 function applyUpdate(message: PiMessage | undefined, update: AssistantUpdate) {

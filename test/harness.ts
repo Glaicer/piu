@@ -9,6 +9,7 @@ const fauxBackend = join(import.meta.dir, "fixtures/faux-backend.ts");
 
 export type FauxScript = {
 	replies: string[];
+	crash?: { code: number; stderr: string };
 	tokensPerSecond?: number;
 	tokenSize?: number;
 };
@@ -23,12 +24,15 @@ function withBackend(backend: object, config: unknown) {
 export async function startPiu(options: {
 	script: FauxScript;
 	args?: string[];
+	extraBackendArgs?: string[];
+	persistSession?: boolean;
+	dir?: string;
 	config?: unknown;
 	extensionsDir?: string;
 	width?: number;
 	height?: number;
 }) {
-	const dir = mkdtempSync(join(tmpdir(), "piu-test-"));
+	const dir = options.dir ?? mkdtempSync(join(tmpdir(), "piu-test-"));
 	const scriptPath = join(dir, "script.json");
 	writeFileSync(scriptPath, JSON.stringify(options.script));
 
@@ -39,9 +43,10 @@ export async function startPiu(options: {
 			"PI_OFFLINE=1",
 			`PIU_FAUX_SCRIPT=${scriptPath}`,
 			piBin,
-			"--no-session",
+			...(options.persistSession ? [] : ["--no-session"]),
 			"-e",
 			fauxBackend,
+			...(options.extraBackendArgs ?? []),
 		],
 	};
 	const configPath = join(dir, "config.json");
@@ -52,6 +57,10 @@ export async function startPiu(options: {
 			: JSON.stringify(withBackend(backend, options.config)),
 	);
 
+	const removeDir = () => {
+		if (!options.dir) rmSync(dir, { recursive: true, force: true });
+	};
+
 	let view: Awaited<ReturnType<typeof createApp>>;
 	try {
 		view = await createApp({
@@ -60,7 +69,7 @@ export async function startPiu(options: {
 			args: options.args ?? ["--model", "faux/faux-1"],
 		});
 	} catch (error) {
-		rmSync(dir, { recursive: true, force: true });
+		removeDir();
 		throw error;
 	}
 	const setup = await testRender(view, {
@@ -90,7 +99,7 @@ export async function startPiu(options: {
 		waitForFrame,
 		async [Symbol.asyncDispose]() {
 			await setup.dispose();
-			rmSync(dir, { recursive: true, force: true });
+			removeDir();
 		},
 	};
 }
