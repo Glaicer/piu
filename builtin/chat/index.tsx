@@ -1,29 +1,31 @@
 import { For } from "solid-js";
 import type { Extension, ModuleContext } from "../../src/module.ts";
 import type { PiMessage } from "../../src/pi-state.ts";
-import type { ThemeToken } from "../../src/theme.ts";
 import { BackendCard } from "./backend-card.tsx";
-
-const chatRoles: Record<
-	"user" | "assistant",
-	{ prefix: string; color: ThemeToken }
-> = {
-	user: { prefix: "> ", color: "accent" },
-	assistant: { prefix: "", color: "text" },
-};
+import { createSyntaxStyle, Markdown } from "./markdown.tsx";
 
 function Messages(props: { context: ModuleContext }) {
 	const theme = props.context.theme;
+	const pi = props.context.pi;
+	const syntaxStyle = createSyntaxStyle(theme);
+	props.context.onCleanup(() => syntaxStyle.destroy());
 	return (
 		<>
-			<For each={props.context.pi.messages}>
-				{(message) => {
-					const role = chatRole(message);
+			<For each={pi.messages}>
+				{(message, index) => {
+					if (message.role === "assistant") {
+						return (
+							<Markdown
+								text={messageText(message)}
+								streaming={pi.streaming && index() === pi.messages.length - 1}
+								syntaxStyle={syntaxStyle}
+								theme={theme}
+							/>
+						);
+					}
 					return (
-						role && (
-							<text fg={theme[role.color]}>
-								{role.prefix + messageText(message)}
-							</text>
+						message.role === "user" && (
+							<text fg={theme.accent}>{`> ${messageText(message)}`}</text>
 						)
 					);
 				}}
@@ -31,12 +33,6 @@ function Messages(props: { context: ModuleContext }) {
 			<BackendCard context={props.context} />
 		</>
 	);
-}
-
-function chatRole(message: PiMessage) {
-	return message.role === "user" || message.role === "assistant"
-		? chatRoles[message.role]
-		: undefined;
 }
 
 function messageText(message: PiMessage): string {

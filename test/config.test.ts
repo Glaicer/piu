@@ -97,6 +97,19 @@ test.each([
 		"layout.hideBelow",
 	],
 	[
+		"a stickToBottom that is not true or false",
+		{
+			layout: {
+				kind: "panel",
+				id: "p",
+				direction: "column",
+				size: "rest",
+				stickToBottom: "yes",
+			},
+		},
+		"layout.stickToBottom",
+	],
+	[
 		"a Panel id used twice",
 		{
 			layout: {

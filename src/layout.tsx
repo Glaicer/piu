@@ -13,7 +13,7 @@ type SlotBase = {
 };
 export type Slot =
 	| (SlotBase & { kind: "container"; children: readonly Slot[] })
-	| (SlotBase & { kind: "panel" });
+	| (SlotBase & { kind: "panel"; stickToBottom?: boolean });
 
 type PanelContext = Omit<ModuleContext, "onCleanup" | "settings">;
 type SharedContext = Omit<PanelContext, "reportPresence">;
@@ -67,6 +67,8 @@ export function SlotView(props: SlotProps) {
 			visible={visible()}
 			border
 			borderColor={props.context.theme.border}
+			stickyScroll={slot.stickToBottom ?? false}
+			stickyStart="bottom"
 			contentOptions={{ flexDirection: slot.direction }}
 		>
 			<For each={entries}>

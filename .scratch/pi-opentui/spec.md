@@ -160,7 +160,7 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 
 - A Slot is a tagged union, so illegal states can't be represented:
   - Container: `id`, `direction` (row | column), `children` (Slots), common sizing.
-  - Panel: `id`, `direction` (row | column), common sizing. It owns an independent scroll area.
+  - Panel: `id`, `direction` (row | column), common sizing, optional `stickToBottom` (follow new output while scrolled to the bottom; on for the agent Panel by default). It owns an independent scroll area.
   - Common sizing: `size` = fixed cells | percentage | rest, optional `minSize`, optional `hideBelow` (terminal columns).
 - A Panel's contents come from **Placement**, a map from Panel id to an ordered list of Module ids (`<extension>.<module>`). Placement is kept separate from the Layout tree on purpose: the personal config replaces the Layout tree wholesale, and a separate Placement lets a user reorder one Panel without copying the tree.
 - Layout is computed by OpenTUI's flex layout (Yoga). Modals use absolute positioning above the Layout.
