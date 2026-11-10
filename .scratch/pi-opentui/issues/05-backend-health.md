@@ -8,6 +8,7 @@
 
 - [ ] With `backend.command` set to a missing program, the frame shows the not-found message mentioning `backend.command`, and the app doesn't exit
 - [ ] When the faux test Pi extension exits the Backend on cue, the frame shows the error card with its stderr tail
+- [ ] When the Backend dies at startup before answering any command (e.g. a test Pi extension that throws on load), the frame shows the error card with its stderr, not a hang
 - [ ] Clicking Restart (mock mouse) brings the Backend back with `-c`, and the earlier messages of that session reappear
 - [ ] Prompting after restart works
 
