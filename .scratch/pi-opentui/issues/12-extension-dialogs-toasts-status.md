@@ -27,4 +27,4 @@
 - From 11 done: `fork` puts the forked prompt in the input; `/resume` without sessions and a refused `new_session`/`switch_session`/`fork` (`success: false`, untested: nothing here makes Pi refuse) show a Toast; New session, Resume and Fork clear pending dialogs and statuses _before_ the request, so statuses and dialogs the new session raises while starting survive.
 - Not done: a dialog with a `timeout` stays on screen after Pi auto-resolves it on its side (the docs say clients need not track timeouts, but nothing closes the Modal). A cancelled `new_session` (an extension veto) has already cleared the statuses until the extensions set them again.
 - Story 21 for Panels (From 04) is still unmet: the status Panel keeps its 3 rows when `status.line` is hidden. It needs a content-fit size.
-- `GLOSSARY.md` lists "Dialog" under `_Avoid_` for Modal, while the code uses `Dialog` for Pi's `select`/`confirm`/`input`/`editor` requests (Pi's own word). Decide whether the glossary should name Pi's request.
+- `GLOSSARY.md` now defines **Dialog** as Pi's request and Modal as the Slot that shows it.

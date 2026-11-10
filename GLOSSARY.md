@@ -22,7 +22,7 @@ _Avoid_: Template, scheme
 
 **Modal**:
 A Slot drawn above the Layout at a chosen position and size (centered by default) that takes focus until closed.
-_Avoid_: Dialog, popup, window
+_Avoid_: Popup, window
 
 **Config**:
 The user's file that overrides the default Layout, Module placement and Module settings.
@@ -49,6 +49,10 @@ _Avoid_: Backend extension, server part
 **Backend**:
 The Pi agent process this interface drives (`pi` or `pi-bolt`).
 _Avoid_: Server, engine
+
+**Dialog**:
+A Pi extension's `select`, `confirm`, `input` or `editor` request, which stays pending until answered or closed; the app shows each as a Modal.
+_Avoid_: Using it as a synonym for Modal
 
 **Toast**:
 A short notice that appears over the Layout and disappears on its own.
