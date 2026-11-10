@@ -11,3 +11,7 @@
 - [ ] `notify` shows a Toast that is gone after its timeout
 - [ ] `setStatus` text appears under the input and disappears when cleared
 - [ ] A dialog raised by a tool that is then aborted disappears from the frame
+
+## Comments
+
+- From 04: the default `status` row Panel exists with an empty Placement, so it shows as an empty 3-row bordered box under the input. Sizes have no content-fit option, so story 21 ("Panels shrink when a Module has nothing to show") is only met for Modules, not Panels.

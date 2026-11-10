@@ -28,15 +28,31 @@ export const defaultConfig: Config = {
 				size: "rest",
 				children: [
 					{ kind: "panel", id: "agent", direction: "column", size: "rest" },
-					{ kind: "panel", id: "input", direction: "column", size: 3 },
+					{
+						kind: "container",
+						id: "input-area",
+						direction: "column",
+						size: 6,
+						children: [
+							{ kind: "panel", id: "input", direction: "column", size: 3 },
+							{ kind: "panel", id: "status", direction: "row", size: 3 },
+						],
+					},
 				],
 			},
-			{ kind: "panel", id: "side", direction: "column", size: "33%" },
+			{
+				kind: "panel",
+				id: "side",
+				direction: "column",
+				size: "33%",
+				hideBelow: 120,
+			},
 		],
 	},
 	placement: {
 		agent: ["chat.messages"],
 		input: ["input.prompt"],
+		status: [],
 		side: [],
 	},
 	modules: {},
@@ -46,11 +62,12 @@ type Fields = Record<string, unknown>;
 
 export function loadConfig(path: string): Config {
 	const user = readUserConfig(path);
+	const panelIds = new Set<string>();
 	const layout = parseSlot(
 		"layout" in user ? user.layout : defaultConfig.layout,
 		"layout",
+		panelIds,
 	);
-	const panelIds = new Set(collectPanelIds(layout));
 	const defaultPlacement = Object.fromEntries(
 		Object.entries(defaultConfig.placement).filter(([id]) => panelIds.has(id)),
 	);
@@ -95,7 +112,7 @@ function parseBackend(value: unknown): BackendConfig {
 	};
 }
 
-function parseSlot(value: unknown, path: string): Slot {
+function parseSlot(value: unknown, path: string, panelIds: Set<string>): Slot {
 	const fields = object(value, path);
 	const kind = fields.kind;
 	if (kind !== "container" && kind !== "panel") {
@@ -108,22 +125,28 @@ function parseSlot(value: unknown, path: string): Slot {
 		id: string(fields.id, `${path}.id`),
 		direction: direction(fields.direction, `${path}.direction`),
 		size: parseSize(fields.size, `${path}.size`),
+		...optionalCells(fields, "minSize", path),
+		...optionalCells(fields, "hideBelow", path),
 	};
-	if (kind === "panel") return { kind, ...base };
+	if (kind === "panel") {
+		if (panelIds.has(base.id)) {
+			throw fieldError(`${path}.id`, `Panel id "${base.id}" is already used`);
+		}
+		panelIds.add(base.id);
+		return { kind, ...base };
+	}
 	return {
 		kind,
 		...base,
 		children: array(fields.children, `${path}.children`).map((child, index) =>
-			parseSlot(child, `${path}.children[${index}]`),
+			parseSlot(child, `${path}.children[${index}]`, panelIds),
 		),
 	};
 }
 
 function parseSize(value: unknown, path: string): Size {
 	if (value === "rest") return value;
-	if (typeof value === "number" && Number.isInteger(value) && value > 0) {
-		return value;
-	}
+	if (isCells(value)) return value;
 	if (isPercent(value)) return value;
 	throw fieldError(
 		path,
@@ -131,8 +154,30 @@ function parseSize(value: unknown, path: string): Size {
 	);
 }
 
+function optionalCells(
+	fields: Fields,
+	key: "minSize" | "hideBelow",
+	path: string,
+) {
+	const value = fields[key];
+	if (value === undefined) return {};
+	if (isCells(value)) return { [key]: value };
+	throw fieldError(
+		`${path}.${key}`,
+		`expected a positive whole number of cells, got ${JSON.stringify(value)}`,
+	);
+}
+
+function isCells(value: unknown): value is number {
+	return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
 function isPercent(value: unknown): value is `${number}%` {
-	return typeof value === "string" && /^\d+(\.\d+)?%$/.test(value);
+	if (typeof value !== "string" || !/^\d+(\.\d+)?%$/.test(value)) {
+		return false;
+	}
+	const percent = Number.parseFloat(value);
+	return percent > 0 && percent <= 100;
 }
 
 function direction(value: unknown, path: string): "row" | "column" {
@@ -141,12 +186,6 @@ function direction(value: unknown, path: string): "row" | "column" {
 		path,
 		`expected "row" or "column", got ${JSON.stringify(value)}`,
 	);
-}
-
-function collectPanelIds(slot: Slot): string[] {
-	return slot.kind === "panel"
-		? [slot.id]
-		: slot.children.flatMap(collectPanelIds);
 }
 
 function parsePlacement(value: unknown, panelIds: ReadonlySet<string>) {

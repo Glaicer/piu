@@ -26,6 +26,7 @@ export async function startPiu(options: {
 	config?: unknown;
 	extensionsDir?: string;
 	width?: number;
+	height?: number;
 }) {
 	const dir = mkdtempSync(join(tmpdir(), "piu-test-"));
 	const scriptPath = join(dir, "script.json");
@@ -64,7 +65,7 @@ export async function startPiu(options: {
 	}
 	const setup = await testRender(view, {
 		width: options.width ?? 160,
-		height: 30,
+		height: options.height ?? 30,
 	});
 
 	async function waitForFrame(

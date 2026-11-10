@@ -61,6 +61,63 @@ test.each([
 		"layout.size",
 	],
 	[
+		"a zero percentage",
+		{ layout: { kind: "panel", id: "p", direction: "column", size: "0%" } },
+		"layout.size",
+	],
+	[
+		"a percentage over 100",
+		{ layout: { kind: "panel", id: "p", direction: "column", size: "101%" } },
+		"layout.size",
+	],
+	[
+		"a minSize that is not a positive cell count",
+		{
+			layout: {
+				kind: "panel",
+				id: "p",
+				direction: "column",
+				size: "rest",
+				minSize: "10%",
+			},
+		},
+		"layout.minSize",
+	],
+	[
+		"a hideBelow that is not a positive column count",
+		{
+			layout: {
+				kind: "panel",
+				id: "p",
+				direction: "column",
+				size: "rest",
+				hideBelow: 0,
+			},
+		},
+		"layout.hideBelow",
+	],
+	[
+		"a Panel id used twice",
+		{
+			layout: {
+				kind: "container",
+				id: "root",
+				direction: "row",
+				size: "rest",
+				children: [
+					{ kind: "panel", id: "twin", direction: "column", size: "rest" },
+					{ kind: "panel", id: "twin", direction: "column", size: "rest" },
+				],
+			},
+		},
+		"layout.children[1].id",
+	],
+	[
+		"Modules placed on a Container",
+		{ placement: { main: ["chat.messages"] } },
+		"placement.main",
+	],
+	[
 		"a layout kind that does not exist",
 		{ layout: { kind: "grid", id: "p" } },
 		"layout.kind",

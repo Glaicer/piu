@@ -18,3 +18,4 @@
 
 - From 02: on Pi-Bolt 1.1.6 an `-e` tool with the same name as a package's `ask_user_question` does not win. Pi-Bolt fails to start (exit 1, conflict message on stderr). The "call reaches ours" criterion holds only on stock Pi, or on Pi-Bolt once the user removes the package or adds `-ne` to `backend.args`. Decide before building: ship the workaround in the README, or give our tool another name. See ADR-0001.
 - Decision (after 02): own tool name `ask_user`, plus `pi.setActiveTools()` without `ask_user_question`. No `-ne`, no `pi-bolt remove`. Spec and ADR-0001 updated.
+- From 04: the default `input-area` Container is a fixed 6 rows (input Panel 3 + status Panel 3). A question card that claims the input Panel exclusively won't fit in 3 rows, so this ticket must resize it or add a content-fit size.
