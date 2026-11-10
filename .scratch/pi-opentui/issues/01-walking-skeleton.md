@@ -6,11 +6,11 @@
 
 **Status:** ready-for-agent
 
-- [ ] `pnpm` install, `tsc`, Biome check and `bun test` all pass from a clean checkout
-- [ ] A test boots the app in the test renderer against the real pinned `pi --mode rpc` (isolated via `PI_CODING_AGENT_DIR`, `PI_OFFLINE=1`, `--no-session`) with a scripted faux reply, types a prompt, presses Enter, and the frame shows the prompt and the full scripted reply
-- [ ] A test shows the reply growing across frames while it streams (several faux chunks)
-- [ ] A test confirms user arguments after `piu` reach the Backend (e.g. `--model` picks the faux model shown in state)
-- [ ] The first column takes about 66% and the second about 33% of a wide terminal in the frame
-- [ ] Chat and input are discovered as built-in Extensions and placed through the default config's Placement, not hard-wired
-- [ ] Modules use theme tokens only, with no literal colors in Module code
-- [ ] `piu` is runnable as a command (package bin), and the local machine has a link to it
+- [x] `pnpm` install, `tsc`, Biome check and `bun test` all pass from a clean checkout
+- [x] A test boots the app in the test renderer against the real pinned `pi --mode rpc` (isolated via `PI_CODING_AGENT_DIR`, `PI_OFFLINE=1`, `--no-session`) with a scripted faux reply, types a prompt, presses Enter, and the frame shows the prompt and the full scripted reply
+- [x] A test shows the reply growing across frames while it streams (several faux chunks)
+- [x] A test confirms user arguments after `piu` reach the Backend (e.g. `--model` picks the faux model shown in state)
+- [x] The first column takes about 66% and the second about 33% of a wide terminal in the frame
+- [x] Chat and input are discovered as built-in Extensions and placed through the default config's Placement, not hard-wired
+- [x] Modules use theme tokens only, with no literal colors in Module code
+- [x] `piu` is runnable as a command (package bin), and the local machine has a link to it

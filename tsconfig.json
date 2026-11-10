@@ -1,0 +1,18 @@
+{
+	"compilerOptions": {
+		"target": "esnext",
+		"module": "preserve",
+		"moduleResolution": "bundler",
+		"lib": ["esnext"],
+		"types": ["bun"],
+		"jsx": "preserve",
+		"jsxImportSource": "@opentui/solid",
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"verbatimModuleSyntax": true,
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"skipLibCheck": true
+	},
+	"include": ["bin", "src", "builtin", "test"]
+}
