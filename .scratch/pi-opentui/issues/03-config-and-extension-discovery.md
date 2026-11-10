@@ -4,15 +4,15 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A fixture `config.json` that reorders one Panel's Modules changes the order in the frame without copying the layout
-- [ ] A fixture that replaces `layout` replaces the whole tree, and one that sets `backend.command` changes the Backend started
-- [ ] Invalid configs (wrong type, unknown Module id, unknown Panel id in Placement) each produce a startup error containing the field path
-- [ ] An Extension in `extensions/` is discovered and its Module rendered when placed, and is not loaded when not placed
-- [ ] Same Extension name in `builtin/` and `extensions/` fails startup with both paths in the message
-- [ ] A Module setting from config is visible in that Module's output
-- [ ] `config.json` and `extensions/*` (except the README) are git-ignored
+- [x] A fixture `config.json` that reorders one Panel's Modules changes the order in the frame without copying the layout
+- [x] A fixture that replaces `layout` replaces the whole tree, and one that sets `backend.command` changes the Backend started
+- [x] Invalid configs (wrong type, unknown Module id, unknown Panel id in Placement) each produce a startup error containing the field path
+- [x] An Extension in `extensions/` is discovered and its Module rendered when placed, and is not loaded when not placed
+- [x] Same Extension name in `builtin/` and `extensions/` fails startup with both paths in the message
+- [x] A Module setting from config is visible in that Module's output
+- [x] `config.json` and `extensions/*` (except the README) are git-ignored
 
 ## Comments
 

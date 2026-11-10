@@ -1,24 +1,27 @@
 import { onCleanup } from "solid-js";
 import { startBackend } from "./backend.ts";
-import type { Config } from "./config.ts";
-import { builtinDir, discoverModules, resolvePlacement } from "./extensions.ts";
+import { type Config, loadConfig } from "./config.ts";
+import { builtinDir, findExtensions, resolvePlacement } from "./extensions.ts";
 import { SlotView } from "./layout.tsx";
-import type { Module } from "./module.ts";
+import type { PlacedModule } from "./module.ts";
 import { createPiState } from "./pi-state.ts";
 import { defaultTheme } from "./theme.ts";
 
-export async function createApp(options: { config: Config; args: string[] }) {
-	const modules = await discoverModules(builtinDir);
-	const panels = resolvePlacement(options.config.placement, modules);
-	return () => (
-		<App config={options.config} args={options.args} panels={panels} />
-	);
+export async function createApp(options: {
+	configPath: string;
+	extensionsDir: string;
+	args: string[];
+}) {
+	const config = loadConfig(options.configPath);
+	const folders = findExtensions([builtinDir, options.extensionsDir]);
+	const panels = await resolvePlacement(config, folders);
+	return () => <App config={config} args={options.args} panels={panels} />;
 }
 
 function App(props: {
 	config: Config;
 	args: string[];
-	panels: ReadonlyMap<string, readonly Module[]>;
+	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 }) {
 	const backend = startBackend(props.config.backend, props.args);
 	const pi = createPiState(backend);

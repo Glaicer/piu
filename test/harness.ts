@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { testRender } from "@opentui/solid";
 import { createApp } from "../src/app.tsx";
-import { defaultConfig, type Placement } from "../src/config.ts";
 
 const piBin = join(import.meta.dir, "../node_modules/.bin/pi");
 const fauxBackend = join(import.meta.dir, "fixtures/faux-backend.ts");
@@ -14,35 +13,55 @@ export type FauxScript = {
 	tokenSize?: number;
 };
 
+function withBackend(backend: object, config: unknown) {
+	const { backend: override, ...rest } = (config ?? {}) as {
+		backend?: object;
+	};
+	return { ...rest, backend: { ...backend, ...override } };
+}
+
 export async function startPiu(options: {
 	script: FauxScript;
 	args?: string[];
-	placement?: Placement;
+	config?: unknown;
+	extensionsDir?: string;
 	width?: number;
 }) {
 	const dir = mkdtempSync(join(tmpdir(), "piu-test-"));
 	const scriptPath = join(dir, "script.json");
 	writeFileSync(scriptPath, JSON.stringify(options.script));
 
-	const view = await createApp({
-		config: {
-			...defaultConfig,
-			placement: options.placement ?? defaultConfig.placement,
-			backend: {
-				command: "env",
-				args: [
-					`PI_CODING_AGENT_DIR=${join(dir, "agent")}`,
-					"PI_OFFLINE=1",
-					`PIU_FAUX_SCRIPT=${scriptPath}`,
-					piBin,
-					"--no-session",
-					"-e",
-					fauxBackend,
-				],
-			},
-		},
-		args: options.args ?? ["--model", "faux/faux-1"],
-	});
+	const backend = {
+		command: "env",
+		args: [
+			`PI_CODING_AGENT_DIR=${join(dir, "agent")}`,
+			"PI_OFFLINE=1",
+			`PIU_FAUX_SCRIPT=${scriptPath}`,
+			piBin,
+			"--no-session",
+			"-e",
+			fauxBackend,
+		],
+	};
+	const configPath = join(dir, "config.json");
+	writeFileSync(
+		configPath,
+		typeof options.config === "string"
+			? options.config
+			: JSON.stringify(withBackend(backend, options.config)),
+	);
+
+	let view: Awaited<ReturnType<typeof createApp>>;
+	try {
+		view = await createApp({
+			configPath,
+			extensionsDir: options.extensionsDir ?? join(dir, "extensions"),
+			args: options.args ?? ["--model", "faux/faux-1"],
+		});
+	} catch (error) {
+		rmSync(dir, { recursive: true, force: true });
+		throw error;
+	}
 	const setup = await testRender(view, {
 		width: options.width ?? 160,
 		height: 30,
@@ -66,6 +85,7 @@ export async function startPiu(options: {
 
 	return {
 		...setup,
+		dir,
 		waitForFrame,
 		async [Symbol.asyncDispose]() {
 			await setup.dispose();

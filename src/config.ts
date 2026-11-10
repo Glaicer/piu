@@ -1,5 +1,8 @@
+import { existsSync, readFileSync } from "node:fs";
 import type { BackendConfig } from "./backend.ts";
-import type { Slot } from "./layout.tsx";
+import type { Size, Slot } from "./layout.tsx";
+import type { ModuleSettings } from "./module.ts";
+import { StartupError } from "./startup-error.ts";
 
 export type Placement = Readonly<Record<string, readonly string[]>>;
 
@@ -7,6 +10,7 @@ export type Config = {
 	backend: BackendConfig;
 	layout: Slot;
 	placement: Placement;
+	modules: Readonly<Record<string, ModuleSettings>>;
 };
 
 export const defaultConfig: Config = {
@@ -35,4 +39,168 @@ export const defaultConfig: Config = {
 		input: ["input.prompt"],
 		side: [],
 	},
+	modules: {},
 };
+
+type Fields = Record<string, unknown>;
+
+export function loadConfig(path: string): Config {
+	const user = readUserConfig(path);
+	const layout = parseSlot(
+		"layout" in user ? user.layout : defaultConfig.layout,
+		"layout",
+	);
+	const panelIds = new Set(collectPanelIds(layout));
+	const defaultPlacement = Object.fromEntries(
+		Object.entries(defaultConfig.placement).filter(([id]) => panelIds.has(id)),
+	);
+	return {
+		backend: parseBackend(mergeObjects(defaultConfig.backend, user.backend)),
+		layout,
+		placement: parsePlacement(
+			mergeObjects(defaultPlacement, user.placement),
+			panelIds,
+		),
+		modules: parseModules(mergeObjects(defaultConfig.modules, user.modules)),
+	};
+}
+
+function readUserConfig(path: string): Fields {
+	if (!existsSync(path)) return {};
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(readFileSync(path, "utf8"));
+	} catch (error) {
+		throw new StartupError(`${path}: ${(error as Error).message}`);
+	}
+	return object(parsed, "config");
+}
+
+function mergeObjects(base: Fields, over: unknown): unknown {
+	if (over === undefined) return base;
+	if (!isObject(over)) return over;
+	const merged: Fields = { ...base };
+	for (const [key, value] of Object.entries(over)) {
+		const current = base[key];
+		merged[key] = isObject(current) ? mergeObjects(current, value) : value;
+	}
+	return merged;
+}
+
+function parseBackend(value: unknown): BackendConfig {
+	const fields = object(value, "backend");
+	return {
+		command: string(fields.command, "backend.command"),
+		args: stringArray(fields.args, "backend.args"),
+	};
+}
+
+function parseSlot(value: unknown, path: string): Slot {
+	const fields = object(value, path);
+	const kind = fields.kind;
+	if (kind !== "container" && kind !== "panel") {
+		throw fieldError(
+			`${path}.kind`,
+			`expected "container" or "panel", got ${JSON.stringify(kind)}`,
+		);
+	}
+	const base = {
+		id: string(fields.id, `${path}.id`),
+		direction: direction(fields.direction, `${path}.direction`),
+		size: parseSize(fields.size, `${path}.size`),
+	};
+	if (kind === "panel") return { kind, ...base };
+	return {
+		kind,
+		...base,
+		children: array(fields.children, `${path}.children`).map((child, index) =>
+			parseSlot(child, `${path}.children[${index}]`),
+		),
+	};
+}
+
+function parseSize(value: unknown, path: string): Size {
+	if (value === "rest") return value;
+	if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+		return value;
+	}
+	if (isPercent(value)) return value;
+	throw fieldError(
+		path,
+		`expected a cell count, a percentage like "33%" or "rest", got ${JSON.stringify(value)}`,
+	);
+}
+
+function isPercent(value: unknown): value is `${number}%` {
+	return typeof value === "string" && /^\d+(\.\d+)?%$/.test(value);
+}
+
+function direction(value: unknown, path: string): "row" | "column" {
+	if (value === "row" || value === "column") return value;
+	throw fieldError(
+		path,
+		`expected "row" or "column", got ${JSON.stringify(value)}`,
+	);
+}
+
+function collectPanelIds(slot: Slot): string[] {
+	return slot.kind === "panel"
+		? [slot.id]
+		: slot.children.flatMap(collectPanelIds);
+}
+
+function parsePlacement(value: unknown, panelIds: ReadonlySet<string>) {
+	const fields = object(value, "placement");
+	return Object.fromEntries(
+		Object.entries(fields).map(([panelId, moduleIds]) => {
+			const path = `placement.${panelId}`;
+			if (!panelIds.has(panelId)) {
+				throw fieldError(path, "no Panel with this id in the Layout");
+			}
+			return [panelId, stringArray(moduleIds, path)];
+		}),
+	);
+}
+
+function parseModules(value: unknown) {
+	return Object.fromEntries(
+		Object.entries(object(value, "modules")).map(([id, settings]) => [
+			id,
+			object(settings, `modules[${JSON.stringify(id)}]`),
+		]),
+	);
+}
+
+function isObject(value: unknown): value is Fields {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function describe(value: unknown) {
+	if (value === null) return "null";
+	return Array.isArray(value) ? "array" : typeof value;
+}
+
+export function fieldError(path: string, message: string) {
+	return new StartupError(`Invalid config: ${path}: ${message}`);
+}
+
+function object(value: unknown, path: string): Fields {
+	if (isObject(value)) return value;
+	throw fieldError(path, `expected an object, got ${describe(value)}`);
+}
+
+function array(value: unknown, path: string): unknown[] {
+	if (Array.isArray(value)) return value;
+	throw fieldError(path, `expected an array, got ${describe(value)}`);
+}
+
+function string(value: unknown, path: string): string {
+	if (typeof value === "string") return value;
+	throw fieldError(path, `expected a string, got ${describe(value)}`);
+}
+
+function stringArray(value: unknown, path: string): string[] {
+	return array(value, path).map((item, index) =>
+		string(item, `${path}[${index}]`),
+	);
+}

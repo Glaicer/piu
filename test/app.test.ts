@@ -60,7 +60,9 @@ test("a wide terminal splits into a 66% first column and a 33% second column", a
 test("Placement in the config decides which Panel shows the chat", async () => {
 	await using piu = await startPiu({
 		script: { replies: ["Placed reply"] },
-		placement: { agent: [], input: ["input.prompt"], side: ["chat.messages"] },
+		config: {
+			placement: { agent: [], side: ["chat.messages"] },
+		},
 		width: 150,
 	});
 
