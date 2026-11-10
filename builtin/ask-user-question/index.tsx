@@ -1,68 +1,41 @@
-import { useRenderer } from "@opentui/solid";
-import { createEffect, createMemo, onCleanup } from "solid-js";
+import { createEffect, createMemo } from "solid-js";
 import type { ChannelPayload } from "../../src/channel.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
-import { Picker } from "../../src/picker.tsx";
-import { CHANNEL, type Question, type Reply } from "./protocol.ts";
+import { Card } from "./card.tsx";
+import { CHANNEL, type Question } from "./protocol.ts";
 
-type Pending = { readonly id: string; readonly question: Question | undefined };
+type Pending = {
+	readonly id: string;
+	readonly questions: readonly Question[] | undefined;
+};
 
-function firstQuestion(payload: ChannelPayload): Question | undefined {
-	const [question] = Array.isArray(payload.questions) ? payload.questions : [];
-	if (
-		typeof question?.question === "string" &&
-		typeof question.header === "string" &&
-		Array.isArray(question.options) &&
-		question.options.every(
-			(option: unknown) =>
-				typeof option === "object" &&
-				option !== null &&
-				"label" in option &&
-				typeof option.label === "string",
-		)
-	) {
-		return question;
-	}
-}
+const isOption = (option: unknown) =>
+	typeof option === "object" &&
+	option !== null &&
+	"label" in option &&
+	typeof option.label === "string";
 
-function Card(props: {
-	context: ModuleContext;
-	id: string;
-	question: Question;
-}) {
-	const { context, id, question } = props;
-	const renderer = useRenderer();
-	const previous = renderer.currentFocusedRenderable;
-	onCleanup(() => {
-		if (previous && !previous.isDestroyed) previous.focus();
-	});
-	const reply = (label: string): Reply => ({ answers: [[label]] });
-	const dismiss = () => context.channel.cancel(id);
+const isQuestion = (value: unknown): value is Question => {
+	if (typeof value !== "object" || value === null) return false;
+	const { question, header, options, multiSelect } = value as Partial<Question>;
 	return (
-		<box flexDirection="column">
-			<text fg={context.theme.accent}>{` ${question.header}`}</text>
-			<text fg={context.theme.text}>{` ${question.question}`}</text>
-			<Picker
-				theme={context.theme}
-				items={question.options.map((option) => ({
-					label: option.label,
-					detail: option.description,
-					value: option.label,
-				}))}
-				selected={0}
-				onPick={(label) => context.channel.answer(id, reply(label))}
-				onCancel={dismiss}
-			/>
-			<box
-				onMouseDown={(event) => {
-					event.preventDefault();
-					dismiss();
-				}}
-			>
-				<text fg={context.theme.muted}>{" Dismiss (Esc)"}</text>
-			</box>
-		</box>
+		typeof question === "string" &&
+		typeof header === "string" &&
+		Array.isArray(options) &&
+		options.every(isOption) &&
+		(multiSelect === undefined || typeof multiSelect === "boolean")
 	);
+};
+
+function parseQuestions(payload: ChannelPayload) {
+	const { questions } = payload;
+	if (
+		Array.isArray(questions) &&
+		questions.length > 0 &&
+		questions.every(isQuestion)
+	) {
+		return questions;
+	}
 }
 
 function QuestionSlot(props: { context: ModuleContext }) {
@@ -73,7 +46,10 @@ function QuestionSlot(props: { context: ModuleContext }) {
 				(r) => r.channel === CHANNEL,
 			);
 			return (
-				request && { id: request.id, question: firstQuestion(request.payload) }
+				request && {
+					id: request.id,
+					questions: parseQuestions(request.payload),
+				}
 			);
 		},
 		undefined,
@@ -81,17 +57,17 @@ function QuestionSlot(props: { context: ModuleContext }) {
 	);
 	createEffect(() => {
 		const current = pending();
-		if (current && !current.question) context.channel.cancel(current.id);
+		if (current && !current.questions) context.channel.cancel(current.id);
 	});
-	context.reportPresence(() => (pending()?.question ? "exclusive" : "hidden"));
+	context.reportPresence(() => (pending()?.questions ? "exclusive" : "hidden"));
 	return (
 		<box>
 			{(() => {
 				const current = pending();
-				const question = current?.question;
+				const questions = current?.questions;
 				return (
-					question && (
-						<Card context={context} id={current.id} question={question} />
+					questions && (
+						<Card context={context} id={current.id} questions={questions} />
 					)
 				);
 			})()}
