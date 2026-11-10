@@ -22,11 +22,15 @@ export type PiState = {
 	readonly messages: readonly PiMessage[];
 	readonly serviceRows: readonly ServiceRow[];
 	readonly streamingMessage: PiMessage | null;
+	readonly working: boolean;
 	readonly backendHealth: BackendHealth;
 };
 
 export type PiActions = {
 	prompt(text: string): Promise<void>;
+	steer(text: string): Promise<void>;
+	followUp(text: string): Promise<void>;
+	abort(): Promise<void>;
 	restartBackend(): void;
 };
 
@@ -37,11 +41,13 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 		messages: PiMessage[];
 		serviceRows: ServiceRow[];
 		streamingMessage: PiMessage | null;
+		working: boolean;
 		backendHealth: BackendHealth;
 	}>({
 		messages: [],
 		serviceRows: [],
 		streamingMessage: null,
+		working: false,
 		backendHealth: { status: "running" },
 	});
 
@@ -52,14 +58,16 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 		detach();
 		backend = launch(extraArgs);
 		const offRecords = backend.onRecord(applyRecord);
-		const offHealth = backend.onHealth((health) =>
-			setState("backendHealth", reconcile(health)),
-		);
+		const offHealth = backend.onHealth((health) => {
+			setState("backendHealth", reconcile(health));
+			setState("working", false);
+		});
 		detach = () => {
 			offRecords();
 			offHealth();
 		};
 		setState("streamingMessage", null);
+		setState("working", false);
 		setState("serviceRows", []);
 		setState("backendHealth", reconcile({ status: "running" }));
 		backend
@@ -74,6 +82,12 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 
 	function applyRecord(record: BackendRecord) {
 		switch (record.type) {
+			case "agent_start":
+				setState("working", true);
+				break;
+			case "agent_settled":
+				setState("working", false);
+				break;
 			case "message_start":
 				setState("messages", state.messages.length, record.message);
 				setState("streamingMessage", record.message);
@@ -150,11 +164,22 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 
 	attach([]);
 
+	// why: `prompt` with streamingBehavior starts a run when Pi is idle and queues otherwise, so a message sent in the gap before `agent_start` arrives is not lost; the `steer` and `follow_up` commands would be refused there.
+	const send = (
+		text: string,
+		streamingBehavior?: "steer" | "followUp",
+	): Promise<void> =>
+		backend
+			.request({ type: "prompt", message: text, streamingBehavior })
+			.then(() => {})
+			.catch(ignoreDeadBackend);
+
 	const actions: PiActions = {
-		async prompt(text) {
-			await backend
-				.request({ type: "prompt", message: text })
-				.catch(ignoreDeadBackend);
+		prompt: (text) => send(text),
+		steer: (text) => send(text, "steer"),
+		followUp: (text) => send(text, "followUp"),
+		async abort() {
+			await backend.request({ type: "abort" }).catch(ignoreDeadBackend);
 		},
 		restartBackend() {
 			if (state.backendHealth.status !== "exited") return;

@@ -123,7 +123,7 @@ test("the wheel scrolls the Panel under the pointer, not the focused one", async
 						size: "rest",
 						children: [panel("left", "50%"), panel("right", "rest")],
 					},
-					panel("input", 3),
+					panel("input", 4),
 				],
 			},
 			placement: {

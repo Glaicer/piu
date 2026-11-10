@@ -6,6 +6,7 @@ import {
 	fauxText,
 	fauxThinking,
 	fauxToolCall,
+	type Message,
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { FauxScript, FauxStep } from "../harness.ts";
@@ -22,13 +23,25 @@ export default function (pi: ExtensionAPI) {
 			? { min: script.tokenSize, max: script.tokenSize }
 			: undefined,
 	});
+	const lastUser = (context: { messages: Message[] }) => {
+		const message = context.messages.findLast((m) => m.role === "user");
+		const content = message?.content ?? "";
+		return JSON.stringify(
+			typeof content === "string"
+				? content
+				: content
+						.map((block) => (block.type === "text" ? block.text : ""))
+						.join(""),
+		);
+	};
 	const substitute = (
 		text: string,
-		context: { messages: { role: string }[] },
+		context: { messages: Message[] },
 		modelId: string,
 	) =>
 		text
 			.replaceAll("{model}", modelId)
+			.replaceAll("{lastUser}", lastUser(context))
 			.replaceAll(
 				"{messages}",
 				String(

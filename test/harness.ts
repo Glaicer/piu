@@ -93,6 +93,8 @@ export async function startPiu(options: {
 	const setup = await testRender(view, {
 		width: options.width ?? 160,
 		height: options.height ?? 30,
+		// why: without the kitty protocol a terminal sends Shift+Enter as a plain Enter; the real renderer enables it by default.
+		kittyKeyboard: true,
 	});
 
 	async function waitForFrame(

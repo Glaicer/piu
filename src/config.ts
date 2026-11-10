@@ -32,9 +32,9 @@ export const defaultConfig: Config = {
 						kind: "container",
 						id: "input-area",
 						direction: "column",
-						size: 6,
+						size: 8,
 						children: [
-							{ kind: "panel", id: "input", direction: "column", size: 3 },
+							{ kind: "panel", id: "input", direction: "column", size: 5 },
 							{ kind: "panel", id: "status", direction: "row", size: 3 },
 						],
 					},
