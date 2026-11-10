@@ -12,6 +12,7 @@ A terminal UI for the Pi coding agent, built on OpenTUI + Solid. Work is planned
 - **Pi is a subprocess over RPC, never in-process.** Don't call `createAgentSession` from the app (ADR-0001). Talk to it through the app's own Backend client, not Pi's `RpcClient`, which can only run `node <cli.js>` and copies the child's stderr to our terminal. Frame stdout as LF-only JSONL, never with `readline`, which splits on `U+2028/2029` inside JSON. Never write the Backend's stderr to the terminal. `@earendil-works/pi-coding-agent` is a dev dependency: import only its protocol types, plus the test binary.
 - **Tests never touch the developer's Pi.** In the author's shell, `pi` is a function that runs Pi-Bolt under a sandbox. Tests run the pinned dev-dependency `pi` binary directly, with `PI_CODING_AGENT_DIR` set to a temp dir, `PI_OFFLINE=1` and `--no-session`, and the faux model from `@earendil-works/pi-ai`. A test that needs a saved session (Restart, `-c`) sets `persistSession` instead of `--no-session`; the temp agent dir still keeps it away from the real one.
 - **Tests go through `startPiu`** (`test/harness.ts`), the seam spec.md already agreed, so use it without confirming a seam. A test that passes on its first run isn't done until you break the code under test on purpose and watch it go red; the Restart test once passed on stale state alone.
+- **Native frame stats can't see re-highlighting.** `getNativeStats().frameWork` misses JS and worker work. To bound streaming render cost, spy on `getTreeSitterClient().highlightOnce` (the singleton `CodeRenderable` uses by default) and bound what each call highlights. This is the agreed seam for render-cost tests.
 - **Fixture Extensions live under `test/fixtures/`, inside the repo.** A temp dir cannot resolve `solid-js`, `@opentui/solid` or the `tsconfig` JSX settings, so a `.tsx` fixture written there fails to import.
 - **Bun's module cache is shared by every test in a file.** To assert that an Extension was or was not loaded, use a fixture that no other test places, or the result depends on test order.
 - **Config merge:** objects merge by key, while arrays and `layout` replace. A replaced `layout` drops the default Placement entries for Panels the new tree lacks, but a `placement` key you write for a missing Panel is a startup error.
@@ -22,7 +23,7 @@ A terminal UI for the Pi coding agent, built on OpenTUI + Solid. Work is planned
 
 ### Issue tracker
 
-Issues and specs live as local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+Issues and specs live as local markdown files under `.scratch/<feature>/`. Before committing a finished ticket, close it: tick its checkboxes, set `Status: done`, and record every deviation from the ticket under `## Comments`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
