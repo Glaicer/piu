@@ -70,10 +70,15 @@ export async function startPiu(options: {
 		}),
 	);
 
+	// why: Pi lists every model whose provider has credentials in the environment, so the developer's API keys would add real models to the picker.
+	const credentialVars = Object.keys(process.env).filter((name) =>
+		/API_KEY|_TOKEN|_SECRET/.test(name),
+	);
 	const backend = {
 		command: "env",
 		args: [
 			`PI_CODING_AGENT_DIR=${join(dir, "agent")}`,
+			...credentialVars.map((name) => `${name}=`),
 			"PI_OFFLINE=1",
 			`PIU_FAUX_SCRIPT=${scriptPath}`,
 			piBin,

@@ -52,7 +52,7 @@ export const defaultConfig: Config = {
 	placement: {
 		agent: ["chat.messages"],
 		input: ["input.prompt"],
-		status: [],
+		status: ["model.current", "reasoning.level"],
 		side: [],
 	},
 	modules: {},

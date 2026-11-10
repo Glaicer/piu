@@ -3,6 +3,7 @@ import { startBackend } from "./backend.ts";
 import { type Config, loadConfig } from "./config.ts";
 import { builtinDir, findExtensions, resolvePlacement } from "./extensions.ts";
 import { SlotView } from "./layout.tsx";
+import { createModals, ModalLayer } from "./modal.tsx";
 import type { PlacedModule } from "./module.ts";
 import { createPiState } from "./pi-state.ts";
 import { defaultTheme } from "./theme.ts";
@@ -27,14 +28,21 @@ function App(props: {
 		startBackend(props.config.backend, [...extraArgs, ...props.args]),
 	);
 	onCleanup(pi.dispose);
+	const modals = createModals();
+	const context = {
+		pi: pi.state,
+		actions: { ...pi.actions, openModal: modals.open },
+		theme: defaultTheme,
+	};
 	return (
 		<box width="100%" height="100%" backgroundColor={defaultTheme.surface}>
 			<SlotView
 				slot={props.config.layout}
 				parentDirection="column"
 				panels={props.panels}
-				context={{ pi: pi.state, actions: pi.actions, theme: defaultTheme }}
+				context={context}
 			/>
+			<ModalLayer modals={modals} context={context} />
 		</box>
 	);
 }

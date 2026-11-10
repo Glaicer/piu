@@ -1,4 +1,7 @@
-import type { JsonAgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type {
+	JsonAgentSessionEvent,
+	RpcSessionState,
+} from "@earendil-works/pi-coding-agent";
 import { createStore, produce, reconcile } from "solid-js/store";
 import type { Backend, BackendHealth, BackendRecord } from "./backend.ts";
 
@@ -18,7 +21,19 @@ export type ServiceRow = {
 	readonly text: string;
 };
 
+export type ThinkingLevel = RpcSessionState["thinkingLevel"];
+
+export type ModelInfo = {
+	readonly provider: string;
+	readonly id: string;
+	readonly name: string;
+};
+
 export type PiState = {
+	readonly model: ModelInfo | null;
+	readonly models: readonly ModelInfo[];
+	readonly thinkingLevel: ThinkingLevel;
+	readonly thinkingLevels: readonly ThinkingLevel[];
 	readonly messages: readonly PiMessage[];
 	readonly serviceRows: readonly ServiceRow[];
 	readonly streamingMessage: PiMessage | null;
@@ -31,6 +46,8 @@ export type PiActions = {
 	steer(text: string): Promise<void>;
 	followUp(text: string): Promise<void>;
 	abort(): Promise<void>;
+	setModel(model: ModelInfo): Promise<void>;
+	setThinkingLevel(level: ThinkingLevel): Promise<void>;
 	restartBackend(): void;
 };
 
@@ -38,12 +55,20 @@ const ignoreDeadBackend = () => {};
 
 export function createPiState(launch: (extraArgs: string[]) => Backend) {
 	const [state, setState] = createStore<{
+		model: ModelInfo | null;
+		models: ModelInfo[];
+		thinkingLevel: ThinkingLevel;
+		thinkingLevels: ThinkingLevel[];
 		messages: PiMessage[];
 		serviceRows: ServiceRow[];
 		streamingMessage: PiMessage | null;
 		working: boolean;
 		backendHealth: BackendHealth;
 	}>({
+		model: null,
+		models: [],
+		thinkingLevel: "off",
+		thinkingLevels: ["off"],
 		messages: [],
 		serviceRows: [],
 		streamingMessage: null,
@@ -78,6 +103,39 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 				}
 			})
 			.catch(ignoreDeadBackend);
+		backend
+			.request({ type: "get_available_models" })
+			.then((response) => {
+				if (response.command === "get_available_models" && response.success) {
+					setState("models", reconcile(response.data.models.map(toModelInfo)));
+				}
+			})
+			.catch(ignoreDeadBackend);
+		void refreshSession();
+	}
+
+	async function refreshSession() {
+		const session = backend;
+		try {
+			const [stateResponse, levelsResponse] = await Promise.all([
+				session.request({ type: "get_state" }),
+				session.request({ type: "get_available_thinking_levels" }),
+			]);
+			if (session !== backend) return;
+			if (stateResponse.command === "get_state" && stateResponse.success) {
+				const { model, thinkingLevel } = stateResponse.data;
+				setState("model", reconcile(model ? toModelInfo(model) : null));
+				setState("thinkingLevel", thinkingLevel);
+			}
+			if (
+				levelsResponse.command === "get_available_thinking_levels" &&
+				levelsResponse.success
+			) {
+				setState("thinkingLevels", reconcile(levelsResponse.data.levels));
+			}
+		} catch {
+			ignoreDeadBackend();
+		}
 	}
 
 	function applyRecord(record: BackendRecord) {
@@ -181,6 +239,18 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 		async abort() {
 			await backend.request({ type: "abort" }).catch(ignoreDeadBackend);
 		},
+		async setModel({ provider, id }) {
+			await backend
+				.request({ type: "set_model", provider, modelId: id })
+				.catch(ignoreDeadBackend);
+			await refreshSession();
+		},
+		async setThinkingLevel(level) {
+			await backend
+				.request({ type: "set_thinking_level", level })
+				.catch(ignoreDeadBackend);
+			await refreshSession();
+		},
 		restartBackend() {
 			if (state.backendHealth.status !== "exited") return;
 			attach(["-c"]);
@@ -196,6 +266,14 @@ export function createPiState(launch: (extraArgs: string[]) => Backend) {
 			backend.stop();
 		},
 	};
+}
+
+function toModelInfo(model: {
+	provider: string;
+	id: string;
+	name: string;
+}): ModelInfo {
+	return { provider: model.provider, id: model.id, name: model.name };
 }
 
 function compactionOutcome(

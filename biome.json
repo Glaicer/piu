@@ -17,7 +17,8 @@
 		"rules": {
 			"preset": "recommended",
 			"a11y": {
-				"noStaticElementInteractions": "off"
+				"noStaticElementInteractions": "off",
+				"useKeyWithMouseEvents": "off"
 			}
 		}
 	},

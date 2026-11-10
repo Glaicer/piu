@@ -16,7 +16,7 @@ export type Slot =
 	| (SlotBase & { kind: "panel" });
 
 type PanelContext = Omit<ModuleContext, "onCleanup" | "settings">;
-type SharedContext = Omit<PanelContext, "reportPresence">;
+export type SharedContext = Omit<PanelContext, "reportPresence">;
 
 type SlotProps = {
 	slot: Slot;

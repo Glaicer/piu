@@ -17,7 +17,7 @@ export default function (pi: ExtensionAPI) {
 	const script: FauxScript = JSON.parse(readFileSync(scriptPath, "utf8"));
 	const faux = fauxProvider({
 		provider: "faux",
-		models: [{ id: "faux-1" }, { id: "faux-2" }],
+		models: [{ id: "faux-1" }, { id: "faux-2", reasoning: true }],
 		tokensPerSecond: script.tokensPerSecond,
 		tokenSize: script.tokenSize
 			? { min: script.tokenSize, max: script.tokenSize }

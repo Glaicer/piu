@@ -20,3 +20,4 @@
 - From 05: the Backend error card's Restart button has no keyboard path.
 - From 08: Shift+Enter inserts a newline only with the kitty keyboard protocol; elsewhere it arrives as Enter and sends, and Alt+Enter is follow-up, so such terminals have no newline key. Check what those terminals actually send for Ctrl+J before relying on it.
 - From 08: Esc only aborts. Pi's own TUI sends `clear_queue` first and puts the queued text back into the editor, so a queued steer or follow-up does not run after Esc. Pi's docs say queued messages survive an abort.
+- From 09: clicking inside any Panel moves focus to that Panel's scrollbox and away from the prompt textarea, because OpenTUI focuses the clicked focusable on mouse-down unless the handler calls `event.preventDefault()`. Modal-opening handlers do; the rest of the app does not, so after clicking the chat, typing no longer reaches the input. This ticket owns where focus goes.

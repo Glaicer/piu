@@ -16,3 +16,4 @@
 
 - From 04: the default `status` row Panel exists with an empty Placement, so it shows as an empty 3-row bordered box under the input. Sizes have no content-fit option, so story 21 ("Panels shrink when a Module has nothing to show") is only met for Modules, not Panels.
 - From 08: when Pi rejects a prompt (`success: false`), the input is already cleared and nothing tells the user. Show the error as a Toast and keep the text.
+- From 09: `select`, `confirm`, `input` and `editor` can use `moduleModal` (`src/modal.tsx`). `Picker` covers `select`. A Modal with no focusable element still traps keys, so a dialog must focus its own input or button.
