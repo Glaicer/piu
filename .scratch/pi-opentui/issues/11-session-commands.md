@@ -10,3 +10,7 @@
 - [ ] With two sessions in the isolated Pi dir (sessions enabled for this test), Resume lists both and switching shows the other's messages
 - [ ] Tree shows the entries of a branched session, and forking from an earlier entry shows the conversation up to that entry
 - [ ] Compact triggers compaction and shows its service row
+
+## Comments
+
+- From 01: the spec wants one Backend per test file, reset between tests with `new_session`. Until now every test boots its own app and Backend (about 0.4 s each). Once New session exists, the harness can share one app per file and reset through it.

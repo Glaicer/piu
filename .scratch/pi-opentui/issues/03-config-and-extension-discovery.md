@@ -13,3 +13,8 @@
 - [ ] Same Extension name in `builtin/` and `extensions/` fails startup with both paths in the message
 - [ ] A Module setting from config is visible in that Module's output
 - [ ] `config.json` and `extensions/*` (except the README) are git-ignored
+
+## Comments
+
+- From 01: `test/harness.ts` passes a `Config` object straight to `createApp`, because `config.json` loading did not exist yet. Move the harness onto a fixture `config.json` here, as the spec's Testing Decisions require ("No other injection point is introduced"). Its `placement` override goes the same way.
+- From 01: `resolvePlacement` already rejects an unknown Module id, but a Placement key that names no Panel is silently ignored.

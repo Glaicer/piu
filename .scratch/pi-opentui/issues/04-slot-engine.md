@@ -12,3 +12,8 @@
 - [ ] A row Panel shows two fixture Modules side by side
 - [ ] A Module reporting invisible takes no rows. A Module claiming exclusivity hides its siblings, and they return when it stops
 - [ ] The Slot type makes "a Panel with children" or "a Container with Modules" impossible to express
+
+## Comments
+
+- From 01: the default Layout's first column is `size: "rest"`, not `"66%"`, on purpose. With 66% and 33% a one-percent strip stays empty, and once column 2 hides below 120 columns a fixed 66% would leave a third of the screen blank. A frame test allows ±2 columns around 99/50 at width 150.
+- From 01: sticky scrolling was left out of Panels; it belongs to 06.

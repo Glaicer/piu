@@ -10,3 +10,9 @@
 - [ ] When the faux test Pi extension exits the Backend on cue, the frame shows the error card with its stderr tail
 - [ ] Clicking Restart (mock mouse) brings the Backend back with `-c`, and the earlier messages of that session reappear
 - [ ] Prompting after restart works
+
+## Comments
+
+- From 01: `Backend.stop()` in `src/backend.ts` only ends the child's stdin (Pi's documented orderly shutdown) and never kills it. Confirm `pi-bolt` exits on stdin EOF (see 02), and decide whether a kill fallback is needed.
+- From 01: the input Module calls `void actions.prompt(...)`, so a prompt sent to a dead Backend is an unhandled rejection. Backend health should own that failure.
+- From 01: the Backend client already keeps a 64 KB stderr tail (`stderrTail()`) for the error card.

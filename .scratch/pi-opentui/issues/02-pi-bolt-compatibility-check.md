@@ -10,3 +10,7 @@
 - [ ] The script reports any non-protocol output on stdout and any startup errors from compiled-in Pi extensions
 - [ ] ADR-0001's Consequences say what was verified, and the workaround if precedence fails (e.g. how to exclude the compiled-in one for `piu`)
 - [ ] The script skips with a clear message when `pi-bolt` is not installed
+
+## Comments
+
+- From 01: also check that `pi-bolt --mode rpc` exits when its stdin closes. `Backend.stop()` relies on that and sends no signal.
