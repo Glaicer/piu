@@ -125,6 +125,7 @@ export type PiActions = {
 };
 
 const ignoreDeadBackend = () => {};
+const SESSION_FILE_TIMEOUT_MS = 2000;
 
 export function createPiState(
 	launch: (extraArgs: string[]) => Backend,
@@ -737,16 +738,31 @@ export function createPiState(
 		},
 	};
 
+	// why: Pi has no event for a session change an extension makes on its own, so the session a restart continues is asked from the live Backend; a dead or silent one leaves the last file the app saw.
+	async function currentSessionFile() {
+		if (state.backendHealth.status !== "running") return state.sessionFile;
+		let timer: Timer | undefined;
+		const silent = new Promise<undefined>((resolve) => {
+			timer = setTimeout(resolve, SESSION_FILE_TIMEOUT_MS);
+		});
+		const response = await Promise.race([
+			backend.request({ type: "get_state" }).catch(ignoreDeadBackend),
+			silent,
+		]);
+		clearTimeout(timer);
+		return response?.command === "get_state" && response.success
+			? (response.data.sessionFile ?? null)
+			: state.sessionFile;
+	}
+
+	function dispose() {
+		closeDialogs(() => true);
+		detach();
+		return backend.stop();
+	}
+
 	const readonlyState: PiState = state;
-	return {
-		state: readonlyState,
-		actions,
-		dispose() {
-			closeDialogs(() => true);
-			detach();
-			backend.stop();
-		},
-	};
+	return { state: readonlyState, actions, currentSessionFile, dispose };
 }
 
 function userText(content: Extract<PiMessage, { role: "user" }>["content"]) {

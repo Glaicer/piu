@@ -11,11 +11,16 @@ import { createPanelFocus } from "./focus.ts";
 import { piuHome } from "./home.ts";
 import { commandAction, matches } from "./keybindings.ts";
 import { SlotView } from "./layout.tsx";
+import { lifecycleCommands } from "./lifecycle-commands.ts";
 import { createModals, ModalLayer } from "./modal.tsx";
 import type { Command, CommandContext, PlacedModule } from "./module.ts";
 import { createPiState } from "./pi-state.ts";
+import { restartArgs } from "./restart.ts";
+import { StartupError } from "./startup-error.ts";
 import { createTheme } from "./theme.ts";
 import { createToasts, ToastLayer } from "./toast.tsx";
+
+export type ExitRequest = { readonly restartArgs?: readonly string[] };
 
 // why: OpenTUI focuses the nearest focusable ancestor of a clicked element, which would take the keyboard away from the input; only a click on a text field may move the focus.
 function keepFocus(event: MouseEvent) {
@@ -26,17 +31,30 @@ function keepFocus(event: MouseEvent) {
 	}
 }
 
-export async function createApp(options: { args: string[]; cwd?: string }) {
+export async function createApp(options: {
+	args: string[];
+	cwd?: string;
+	exit: (request: ExitRequest) => void;
+}) {
 	const cwd = options.cwd ?? process.cwd();
 	const home = piuHome();
 	const config = loadConfig(join(home, "config.json"));
 	const folders = findExtensions([builtinDir, join(home, "extensions")]);
 	const { panels, commands, channelTitles, piExtensions } =
 		await resolvePlacement(config, folders);
+	for (const { name } of lifecycleCommands) {
+		if (commands.some((command) => command.name === name)) {
+			throw new StartupError(
+				`Command "/${name}" is built into piu and cannot be defined by an Extension`,
+			);
+		}
+	}
 	return () => (
 		<App
 			config={config}
+			cliArgs={options.args}
 			args={[...piExtensions.flatMap((path) => ["-e", path]), ...options.args]}
+			exit={options.exit}
 			channelTitles={channelTitles}
 			cwd={cwd}
 			panels={panels}
@@ -47,7 +65,9 @@ export async function createApp(options: { args: string[]; cwd?: string }) {
 
 function App(props: {
 	config: Config;
+	cliArgs: string[];
 	args: string[];
+	exit: (request: ExitRequest) => void;
 	channelTitles: readonly string[];
 	cwd: string;
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
@@ -74,13 +94,32 @@ function App(props: {
 	createEffect(() => {
 		if (pi.state.title !== null) renderer.setTerminalTitle(pi.state.title);
 	});
+	// why: a second command while the first is shutting down would start a second piu or Backend; the Backend and the terminal are released before the process ends, so the next piu never shares either.
+	let leaving = false;
+	async function leave(restart: boolean) {
+		if (leaving) return;
+		leaving = true;
+		const sessionFile = restart ? await pi.currentSessionFile() : null;
+		await pi.dispose();
+		renderer.destroy();
+		await renderer.closed;
+		props.exit(
+			restart ? { restartArgs: restartArgs(props.cliArgs, sessionFile) } : {},
+		);
+	}
 	const commandContext: CommandContext = {
 		pi: pi.state,
-		actions: { ...pi.actions, openModal: modals.open, showToast: toasts.show },
+		actions: {
+			...pi.actions,
+			openModal: modals.open,
+			showToast: toasts.show,
+			quit: () => void leave(false),
+			restart: () => void leave(true),
+		},
 		theme,
 	};
 	const focus = createPanelFocus();
-	const commands = props.commands.map((command) => ({
+	const commands = [...props.commands, ...lifecycleCommands].map((command) => ({
 		...command,
 		run: (args = "") => command.run(commandContext, args),
 	}));

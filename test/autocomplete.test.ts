@@ -80,8 +80,9 @@ test("an app command hides a Backend command of the same name", async () => {
 		script: { replies: [], extensionCommands: ["model", "other"] },
 	});
 
-	await piu.mockInput.typeText("/");
+	await piu.mockInput.typeText("/o");
 	await piu.waitForFrame((f) => f.includes("Extension command other"));
+	piu.mockInput.pressBackspace();
 	await piu.mockInput.typeText("model");
 
 	const frame = await piu.waitForFrame((f) => f.includes("Switch the model"));

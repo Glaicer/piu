@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import {
 	type FauxContentBlock,
 	fauxAssistantMessage,
@@ -88,6 +88,17 @@ export default function (pi: ExtensionAPI) {
 		}),
 	);
 	pi.registerProvider(faux.provider);
+	const pidLog = process.env.PIU_PID_LOG;
+	if (pidLog) {
+		const note = (event: string) =>
+			appendFileSync(
+				pidLog,
+				`${JSON.stringify({ event, pid: process.pid, ppid: process.ppid })}\n`,
+			);
+		note("start");
+		pi.on("session_shutdown", () => note("shutdown"));
+		pi.on("session_start", (event) => note(`session_start:${event.reason}`));
+	}
 	if (script.uiTool) registerUiTool(pi);
 	if (script.statusOnStart) {
 		const text = script.statusOnStart;

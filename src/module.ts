@@ -16,6 +16,8 @@ export type ModuleSettings = Readonly<Record<string, unknown>>;
 export type UiActions = {
 	openModal(request: ModalRequest): () => void;
 	showToast(message: string, kind?: ToastKind): void;
+	quit(): void;
+	restart(): void;
 };
 
 export type CommandContext = {

@@ -31,6 +31,7 @@ export type BackendHealth =
 export type Backend = ReturnType<typeof startBackend>;
 
 const STDERR_TAIL_CHARS = 64 * 1024;
+const STOP_GRACE_MS = 5000;
 
 export function startBackend(
 	config: BackendConfig,
@@ -52,6 +53,7 @@ export function startBackend(
 	let stderr = "";
 	let failure: Error | undefined;
 	let health: BackendHealth = { status: "running" };
+	let stopping: Promise<void> | undefined;
 
 	const settle = (next: BackendHealth) => {
 		if (health.status !== "running") return;
@@ -126,8 +128,21 @@ export function startBackend(
 			healthListeners.add(listener);
 			return () => healthListeners.delete(listener);
 		},
-		stop() {
-			child.stdin.end();
+		// why: Pi shuts down and runs its extensions' cleanup when its stdin ends; SIGTERM and SIGKILL go to this one child only, after a grace period, so a Backend that hangs cannot keep piu open.
+		stop(): Promise<void> {
+			stopping ??= new Promise<void>((resolve) => {
+				if (health.status !== "running") return resolve();
+				const timers = [
+					setTimeout(() => child.kill("SIGTERM"), STOP_GRACE_MS),
+					setTimeout(() => child.kill("SIGKILL"), STOP_GRACE_MS * 2),
+				];
+				healthListeners.add(() => {
+					for (const timer of timers) clearTimeout(timer);
+					resolve();
+				});
+				child.stdin.end();
+			});
+			return stopping;
 		},
 	};
 }

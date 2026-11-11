@@ -12,7 +12,7 @@ import type { JsonObject } from "@earendil-works/pi-ai";
 import type { ThemeMode } from "@opentui/core";
 import type { ManualClock } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
-import { createApp } from "../src/app.tsx";
+import { createApp, type ExitRequest } from "../src/app.tsx";
 import "./hooks.ts";
 
 const piBin = join(import.meta.dir, "../node_modules/.bin/pi");
@@ -90,12 +90,10 @@ export function restoreEnv(saved: Record<string, string | undefined>) {
 	}
 }
 
-export async function startPiu(options: {
+export type FixtureOptions = {
 	script: FauxScript;
-	args?: string[];
 	extraBackendArgs?: string[];
 	persistSession?: boolean;
-	cwd?: string;
 	promptTemplates?: Record<string, string>;
 	installedPiExtensions?: string[];
 	backendEnv?: Record<string, string>;
@@ -103,12 +101,10 @@ export async function startPiu(options: {
 	config?: unknown;
 	extensions?: string;
 	homeFromHomeDir?: boolean;
-	width?: number;
-	height?: number;
-	kittyKeyboard?: boolean;
-	clock?: ManualClock;
-	terminalBackground?: ThemeMode;
-}) {
+};
+
+// why: the Backend, its agent dir and the personal Config live in a temp dir, so nothing a test starts, in this process or in a spawned `piu`, touches the developer's Pi.
+export function prepareFixture(options: FixtureOptions) {
 	const dir = options.dir ?? mkdtempSync(join(tmpdir(), "piu-test-"));
 	const scriptPath = join(dir, "script.json");
 	writeFileSync(scriptPath, JSON.stringify(options.script));
@@ -147,6 +143,7 @@ export async function startPiu(options: {
 			...credentialVars.map((name) => `${name}=`),
 			"PI_OFFLINE=1",
 			`PIU_FAUX_SCRIPT=${scriptPath}`,
+			`PIU_PID_LOG=${join(dir, "pids.jsonl")}`,
 			...Object.entries(options.backendEnv ?? {}).map(
 				([name, value]) => `${name}=${value}`,
 			),
@@ -174,7 +171,27 @@ export async function startPiu(options: {
 	const removeDir = () => {
 		if (!options.dir) rmSync(dir, { recursive: true, force: true });
 	};
+	return {
+		dir,
+		home,
+		removeDir,
+		setScript: (script: FauxScript) =>
+			writeFileSync(scriptPath, JSON.stringify(script)),
+	};
+}
 
+export async function startPiu(
+	options: FixtureOptions & {
+		args?: string[];
+		cwd?: string;
+		width?: number;
+		height?: number;
+		kittyKeyboard?: boolean;
+		clock?: ManualClock;
+		terminalBackground?: ThemeMode;
+	},
+) {
+	const { dir, home, removeDir } = prepareFixture(options);
 	const savedEnv = { HOME: process.env.HOME, PIU_HOME: process.env.PIU_HOME };
 	if (options.homeFromHomeDir) {
 		process.env.HOME = dir;
@@ -182,11 +199,13 @@ export async function startPiu(options: {
 	} else {
 		process.env.PIU_HOME = home;
 	}
+	const exits: ExitRequest[] = [];
 	let view: Awaited<ReturnType<typeof createApp>>;
 	try {
 		view = await createApp({
 			cwd: options.cwd ?? dir,
 			args: options.args ?? ["--model", "faux/faux-1"],
+			exit: (request) => exits.push(request),
 		});
 	} catch (error) {
 		removeDir();
@@ -225,6 +244,7 @@ export async function startPiu(options: {
 	return {
 		...setup,
 		dir,
+		exits,
 		waitForFrame,
 		reportTerminalBackground: (mode: ThemeMode) =>
 			reportTerminalBackground(setup.renderer, mode),
