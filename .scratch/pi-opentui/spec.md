@@ -167,6 +167,7 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 - Default Layout: a root row Container with column 1 (66%) and column 2 (33%, `hideBelow: 120`, empty Placement in this version). Column 1 is a column Container holding the agent Panel (rest) and the input-area Container: a Panel for the input (exclusive-capable, holding the question Module and the input Module) above a row Panel holding model, reasoning and status Modules.
 - A Modal is a Slot plus position (default centered) and size. It traps focus, closes on Esc or an outside click, and can stack.
 - Mouse-wheel events go to the Panel under the pointer. Keyboard focus moves between Panels with Tab/Shift+Tab. Inside the focused Panel, arrows, Enter and Esc are routed to its Modules.
+- A mouse click never moves keyboard focus, so the input keeps it: clicking the chat, a card or a status Module acts on it and focus stays where it was. Only clicking a text field focuses that field. A printable key typed while focus is on a Panel without a text field moves focus to the input and lands there. Esc aborts a running agent wherever focus is, unless an open Modal, autocomplete list or question card takes it first.
 
 ### Config
 
