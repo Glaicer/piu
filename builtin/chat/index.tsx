@@ -1,7 +1,9 @@
 import type { SyntaxStyle } from "@opentui/core";
+import { useRenderer } from "@opentui/solid";
 import { createMemo, For, Index, onCleanup } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
 import type { BackgroundJob } from "../../src/background.ts";
+import { moduleModal } from "../../src/modal.tsx";
 import type { Extension, ModuleContext } from "../../src/module.ts";
 import type {
 	PendingMessage,
@@ -14,6 +16,8 @@ import { createSyntaxStyle, Markdown } from "./markdown.tsx";
 import { createSelection, type Selection } from "./selection.ts";
 import { sessionCommands } from "./session-commands.tsx";
 import { contentText } from "./sessions.ts";
+import { SubagentCard } from "./subagent-card.tsx";
+import { subagentModule } from "./subagent-view.tsx";
 import { Thinking } from "./thinking.tsx";
 import {
 	type ToolCallBlock,
@@ -33,6 +37,14 @@ function Messages(props: { context: ModuleContext }) {
 		pi.messages.find(
 			(message): message is ToolResultMessage =>
 				message.role === "toolResult" && message.toolCallId === id,
+		);
+	const renderer = useRenderer();
+	const openSubagent = (id: string) =>
+		props.context.actions.openModal(
+			moduleModal(subagentModule(id), {
+				width: Math.min(100, renderer.width - 4),
+				height: renderer.height - 4,
+			}),
 		);
 	const selection = createSelection();
 	props.context.onKey((event) => {
@@ -84,6 +96,16 @@ function Messages(props: { context: ModuleContext }) {
 					<text
 						fg={theme.muted}
 					>{`> ${entry.text}  ${pendingLabel(entry)}`}</text>
+				)}
+			</For>
+			<For each={pi.subagents}>
+				{(agent) => (
+					<SubagentCard
+						agent={() => agent}
+						selection={selection}
+						theme={theme}
+						onOpen={() => openSubagent(agent.id)}
+					/>
 				)}
 			</For>
 			<BackendCard context={props.context} selection={selection} />

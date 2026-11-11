@@ -13,6 +13,14 @@ import {
 	parseJobs,
 } from "./background.ts";
 import { type ChannelPayload, parseChannelRequest } from "./channel.ts";
+import {
+	parseLog,
+	parseRoster,
+	SUBAGENTS_STATUS_KEY,
+	type Subagent,
+	type SubagentEntry,
+	subagentIdOfLogKey,
+} from "./subagents.ts";
 import type { ToastKind } from "./toast.tsx";
 
 export type PiMessage = Extract<
@@ -94,6 +102,8 @@ export type PiState = {
 	readonly dialogs: readonly Dialog[];
 	readonly statuses: Readonly<Record<string, string>>;
 	readonly backgroundJobs: readonly BackgroundJob[];
+	readonly subagents: readonly Subagent[];
+	readonly subagentLogs: Readonly<Record<string, readonly SubagentEntry[]>>;
 	readonly title: string | null;
 	readonly editorText: EditorText;
 };
@@ -137,6 +147,8 @@ export function createPiState(
 		dialogs: Dialog[];
 		statuses: Record<string, string>;
 		backgroundJobs: BackgroundJob[];
+		subagents: Subagent[];
+		subagentLogs: Record<string, SubagentEntry[]>;
 		title: string | null;
 		editorText: EditorText;
 	}>({
@@ -155,6 +167,8 @@ export function createPiState(
 		dialogs: [],
 		statuses: {},
 		backgroundJobs: [],
+		subagents: [],
+		subagentLogs: {},
 		title: null,
 		editorText: { seq: 0, text: "" },
 	});
@@ -197,11 +211,17 @@ export function createPiState(
 		if (started) clearPending(({ id }) => id === started.id);
 	}
 
+	function clearSubagents() {
+		setState("subagents", []);
+		setState("subagentLogs", reconcile({}));
+	}
+
 	function clearExtensionUi() {
 		runningTools.clear();
 		closeDialogs(() => true);
 		setState("statuses", reconcile({}));
 		setState("backgroundJobs", []);
+		clearSubagents();
 	}
 
 	function closeDialogs(shouldClose: (id: string) => boolean) {
@@ -232,6 +252,7 @@ export function createPiState(
 			setState("backendHealth", reconcile(health));
 			setState("working", false);
 			setState("backgroundJobs", []);
+			clearSubagents();
 			clearPending(() => true);
 		});
 		detach = () => {
@@ -492,9 +513,22 @@ export function createPiState(
 			case "notify":
 				notify(record.message, record.notifyType ?? "info");
 				break;
-			case "setStatus":
+			case "setStatus": {
 				if (record.statusKey === BACKGROUND_STATUS_KEY) {
 					setState("backgroundJobs", reconcile(parseJobs(record.statusText)));
+					break;
+				}
+				if (record.statusKey === SUBAGENTS_STATUS_KEY) {
+					setState("subagents", reconcile(parseRoster(record.statusText)));
+					break;
+				}
+				const logOf = subagentIdOfLogKey(record.statusKey);
+				if (logOf !== undefined) {
+					setState(
+						"subagentLogs",
+						logOf,
+						reconcile(parseLog(record.statusText), { key: "n" }),
+					);
 					break;
 				}
 				setState(
@@ -506,6 +540,7 @@ export function createPiState(
 					}),
 				);
 				break;
+			}
 			case "setTitle":
 				setState("title", record.title);
 				break;

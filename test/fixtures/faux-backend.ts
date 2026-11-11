@@ -111,6 +111,13 @@ export default function (pi: ExtensionAPI) {
 			},
 		});
 	}
+	if (script.freshSessionCommand) {
+		pi.registerCommand("fresh", {
+			handler: async (_args, ctx) => {
+				await ctx.newSession();
+			},
+		});
+	}
 	if (script.echoCompactInstructions) {
 		pi.on("session_before_compact", (event, ctx) => {
 			ctx.ui.notify(`instructions: ${event.customInstructions}`, "info");

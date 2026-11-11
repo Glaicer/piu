@@ -34,6 +34,7 @@ export type FauxScript = {
 	contextWindow?: number;
 	failingHook?: boolean;
 	switchCommands?: boolean;
+	freshSessionCommand?: boolean;
 	echoCompactInstructions?: boolean;
 	uiTool?: boolean;
 	statusOnStart?: string;
