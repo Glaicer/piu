@@ -1,13 +1,6 @@
 import type { BoxRenderable } from "@opentui/core";
 import { useKeyboard, usePaste, useRenderer } from "@opentui/solid";
-import {
-	type Accessor,
-	createEffect,
-	createSignal,
-	For,
-	onCleanup,
-} from "solid-js";
-import type { Animate } from "./animate.ts";
+import { createSignal, For, onCleanup } from "solid-js";
 import { contains } from "./focus.ts";
 import {
 	type SharedContext,
@@ -41,59 +34,28 @@ export function moduleModal(
 	};
 }
 
-const SLIDE_ROWS = 4;
-const SLIDE_MS = 150;
-
 type Entry = {
 	request: ModalRequest;
 	element?: BoxRenderable;
-	closing: Accessor<boolean>;
-	offset: Accessor<number>;
 	close(): void;
 };
 
-export function createModals(animate: Animate) {
+export function createModals() {
 	const [stack, setStack] = createSignal<readonly Entry[]>([]);
-	const active = () => stack().filter((entry) => !entry.closing());
-	const slide = (
-		from: number,
-		to: number,
-		onUpdate: (offset: number) => void,
-		onComplete?: () => void,
-	) =>
-		animate({
-			from,
-			to,
-			duration: SLIDE_MS,
-			ease: "outQuad",
-			onUpdate: (offset) => onUpdate(Math.round(offset)),
-			onComplete,
-		});
 	return {
 		stack,
-		active,
 		open(request: ModalRequest) {
-			const [closing, setClosing] = createSignal(false);
-			const [offset, setOffset] = createSignal(-SLIDE_ROWS);
-			let stop = slide(-SLIDE_ROWS, 0, setOffset);
 			const entry: Entry = {
 				request,
-				closing,
-				offset,
 				close() {
-					if (closing()) return;
-					setClosing(true);
-					stop();
-					stop = slide(offset(), -SLIDE_ROWS, setOffset, () =>
-						setStack((entries) => entries.filter((e) => e !== entry)),
-					);
+					setStack((entries) => entries.filter((e) => e !== entry));
 				},
 			};
 			setStack((entries) => [...entries, entry]);
 			return entry.close;
 		},
 		dismiss(entry: Entry) {
-			if (entry.closing()) return;
+			if (!stack().includes(entry)) return;
 			entry.request.onDismiss?.();
 			entry.close();
 		},
@@ -105,14 +67,14 @@ export type Modals = ReturnType<typeof createModals>;
 export function ModalLayer(props: { modals: Modals; context: SharedContext }) {
 	const renderer = useRenderer();
 	const trap = (event: { preventDefault(): void }) => {
-		const top = props.modals.active().at(-1);
+		const top = props.modals.stack().at(-1);
 		if (!top?.element) return;
 		if (!contains(top.element, renderer.currentFocusedRenderable)) {
 			event.preventDefault();
 		}
 	};
 	useKeyboard((event) => {
-		const top = props.modals.active().at(-1);
+		const top = props.modals.stack().at(-1);
 		if (top && event.name === "escape") {
 			event.preventDefault();
 			props.modals.dismiss(top);
@@ -150,9 +112,6 @@ function ModalView(props: {
 		restored = true;
 		if (previous && !previous.isDestroyed) previous.focus();
 	};
-	createEffect(() => {
-		if (props.entry.closing()) restoreFocus();
-	});
 	onCleanup(restoreFocus);
 	const placed =
 		request.left === undefined && request.top === undefined
@@ -176,9 +135,6 @@ function ModalView(props: {
 			<box
 				ref={(element: BoxRenderable) => {
 					props.entry.element = element;
-					createEffect(() => {
-						element.translateY = props.entry.offset();
-					});
 				}}
 				{...placed}
 				backgroundColor={props.context.theme.surface}

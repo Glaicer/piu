@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
+import { join } from "node:path";
 import { ManualClock } from "@opentui/core/testing";
 import { type FauxScript, startPiu } from "./harness.ts";
+import { hooks } from "./hooks.ts";
 
 const none: FauxScript = { replies: [] };
 
@@ -12,11 +14,13 @@ async function start(options: {
 	animations: boolean;
 	script?: FauxScript;
 	config?: object;
+	extensions?: string;
 }) {
 	const clock = new ManualClock();
 	const piu = await startPiu({
 		script: options.script ?? none,
 		clock,
+		extensions: options.extensions,
 		config: {
 			animations: options.animations,
 			placement: { status: ["model.current", "reasoning.level"] },
@@ -41,21 +45,14 @@ async function clickText(
 	await piu.mockMouse.click((rows[y] ?? "").indexOf(text) + 1, y);
 }
 
-test("an opening Modal slides through intermediate rows before it settles", async () => {
+test("an opening Modal is in its final place on the first frame with animations on", async () => {
 	await using app = await start({ animations: true });
 	await clickText(app.piu, "faux-1");
 
-	const rows: number[] = [rowOf(await app.frame(), "faux-2")];
-	for (let step = 0; step < 15; step++) {
-		rows.push(rowOf(await app.frame(20), "faux-2"));
-	}
-
-	const final = rows.at(-1) ?? -1;
-	const first = rows[0] ?? -1;
+	const first = rowOf(await app.frame(), "faux-2");
+	const final = rowOf(await app.frame(1000), "faux-2");
 	expect(first).toBeGreaterThanOrEqual(0);
-	expect(first).not.toBe(final);
-	expect(rows.some((row) => row !== first && row !== final)).toBe(true);
-	expect(rows).toEqual([...rows].sort((a, b) => a - b));
+	expect(first).toBe(final);
 });
 
 test("with animations off an opening Modal is in its final place on the first frame", async () => {
@@ -69,22 +66,12 @@ test("with animations off an opening Modal is in its final place on the first fr
 	expect(rowOf(await app.frame(), "faux-2")).toBe(settled);
 });
 
-test("a dismissed Modal slides out and is gone once it has finished", async () => {
+test("a dismissed Modal is gone on the first frame with animations on", async () => {
 	await using app = await start({ animations: true });
 	await clickText(app.piu, "faux-1");
-	await app.frame(1000);
+	await app.frame();
 	await app.piu.mockMouse.click(1, 1);
-
-	const rows: number[] = [];
-	for (let step = 0; step < 15; step++) {
-		rows.push(rowOf(await app.frame(step === 0 ? 0 : 20), "faux-2"));
-	}
-
-	expect(rows[0]).toBeGreaterThanOrEqual(0);
-	expect(rows.at(-1)).toBe(-1);
-	const visible = rows.filter((row) => row >= 0);
-	expect(visible.length).toBeGreaterThan(1);
-	expect(new Set(visible).size).toBeGreaterThan(1);
+	expect(rowOf(await app.frame(), "faux-2")).toBe(-1);
 });
 
 test("with animations off a dismissed Modal is gone on the first frame", async () => {
@@ -95,15 +82,93 @@ test("with animations off a dismissed Modal is gone on the first frame", async (
 	expect(rowOf(await app.frame(), "faux-2")).toBe(-1);
 });
 
-test("Esc dismisses a Modal while animations are on", async () => {
-	await using app = await start({ animations: true });
-	await clickText(app.piu, "faux-1");
-	await app.frame(1000);
-	app.piu.mockInput.pressEscape();
-	await app.frame(20);
-	await app.frame(1000);
-	expect(rowOf(await app.frame(), "faux-2")).toBe(-1);
-});
+for (const animations of [true, false]) {
+	test(`Esc immediately closes a Modal and restores prompt input (animations ${animations})`, async () => {
+		await using app = await start({ animations });
+		await clickText(app.piu, "faux-1");
+		await app.frame();
+		app.piu.mockInput.pressEscape();
+		const closed = await app.frame();
+		expect([...closed.matchAll(/┌─ ([\w-]+) /g)].map((m) => m[1])).toEqual([
+			"input",
+		]);
+		await app.piu.mockInput.typeText("draft");
+		const frame = await app.frame();
+		expect(rowOf(frame, "faux-2")).toBe(-1);
+		expect(frame).toContain("draft");
+	});
+
+	test(`selecting a model immediately closes its Modal (animations ${animations})`, async () => {
+		await using app = await start({ animations });
+		await clickText(app.piu, "faux-1");
+		await app.frame();
+		await clickText(app.piu, "faux-2");
+		const closed = await app.frame();
+		expect([...closed.matchAll(/┌─ ([\w-]+) /g)].map((m) => m[1])).toEqual([
+			"input",
+		]);
+		expect(closed).not.toContain("faux-1");
+		await app.piu.mockInput.typeText("draft");
+		const frame = await app.frame();
+		expect(frame).toContain("draft");
+	});
+
+	test(`programmatically closing a Modal removes it on the first frame (animations ${animations})`, async () => {
+		await using app = await start({
+			animations,
+			extensions: join(import.meta.dir, "fixtures/extensions"),
+			config: { placement: { status: ["model.current", "probe.capture"] } },
+		});
+		const close = hooks.probe.actions?.openModal({
+			slot: {
+				kind: "panel",
+				id: "programmatic",
+				direction: "column",
+				size: "rest",
+			},
+			panels: new Map([["programmatic", []]]),
+			width: 20,
+			height: 3,
+			left: 4,
+			top: 2,
+		});
+		expect(close).toBeFunction();
+		const border = `┌${"─".repeat(18)}┐`;
+		expect((await app.frame()).split("\n")[2]?.slice(4, 24)).toBe(border);
+		close?.();
+		const closed = await app.frame();
+		expect(closed.split("\n")[2]?.slice(4, 24)).not.toBe(border);
+		expect([...closed.matchAll(/┌─ ([\w-]+) /g)].map((m) => m[1])).toEqual([
+			"input",
+		]);
+	});
+
+	test(`Esc immediately closes only the top Modal (animations ${animations})`, async () => {
+		await using app = await start({
+			animations,
+			extensions: join(import.meta.dir, "fixtures/extensions"),
+			config: { placement: { status: ["model.current", "stacker.opener"] } },
+		});
+		await clickText(app.piu, "open outer");
+		await app.frame();
+		await clickText(app.piu, "open inner");
+		const stacked = await app.frame();
+		expect(stacked).toContain("INNER");
+		expect(rowOf(stacked, "INNER")).toBe(3);
+		expect(columnOf(stacked, "INNER")).toBe(5);
+		expect(stacked.split("\n")[2]?.slice(4, 24)).toBe(`┌${"─".repeat(18)}┐`);
+		app.piu.mockInput.pressEscape();
+		const frame = await app.frame();
+		expect(frame).not.toContain("INNER");
+		expect(frame).toContain("OUTER");
+		await app.piu.mockInput.typeText("blocked");
+		app.piu.mockInput.pressEscape();
+		await app.piu.mockInput.typeText("draft");
+		const closed = await app.frame();
+		expect(closed).toContain("draft");
+		expect(closed).not.toContain("blocked");
+	});
+}
 
 function columnOf(frame: string, text: string) {
 	const line = frame.split("\n").find((row) => row.includes(text)) ?? "";
@@ -133,36 +198,21 @@ async function raiseToast(animations: boolean) {
 	return app;
 }
 
-test("a Toast slides in from the right edge and out again after its timeout", async () => {
+test("a Toast is fully visible immediately and disappears at its timeout with animations on", async () => {
 	await using app = await raiseToast(true);
 	await app.piu.waitForFrame((f) => columnOf(f, "Build") >= 0);
-
-	const entering: number[] = [columnOf(app.piu.captureCharFrame(), "Build")];
-	for (let step = 0; step < 15; step++) {
-		entering.push(columnOf(await app.frame(20), "Build"));
-	}
-	const settled = entering.at(-1) ?? -1;
-	expect(entering[0]).toBeGreaterThan(settled);
-	expect(
-		entering.some((col) => col > settled && col < (entering[0] ?? 0)),
-	).toBe(true);
-
-	await app.frame(2600);
-	const leaving: number[] = [];
-	for (let step = 0; step < 20; step++) {
-		leaving.push(columnOf(await app.frame(20), "Build"));
-	}
-	const shown = leaving.filter((col) => col >= 0);
-	expect(shown.some((col) => col > settled)).toBe(true);
-	expect(leaving.at(-1)).toBe(-1);
+	const first = columnOf(await app.frame(), "Build finished");
+	expect(first).toBe(143);
+	expect(columnOf(await app.frame(2999), "Build finished")).toBe(first);
+	expect(columnOf(await app.frame(1), "Build finished")).toBe(-1);
 });
 
 test("with animations off a Toast is in place at once and gone when its timeout passes", async () => {
 	await using app = await raiseToast(false);
 	await app.piu.waitForFrame((f) => columnOf(f, "Build finished") >= 0);
-	expect(columnOf(await app.frame(), "Build finished")).toBeGreaterThan(0);
-
-	expect(columnOf(await app.frame(3000), "Build finished")).toBe(-1);
+	expect(columnOf(await app.frame(), "Build finished")).toBe(143);
+	expect(columnOf(await app.frame(2999), "Build finished")).toBeGreaterThan(0);
+	expect(columnOf(await app.frame(1), "Build finished")).toBe(-1);
 });
 
 const slowTool = {

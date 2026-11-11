@@ -89,7 +89,7 @@ function App(props: {
 	const renderer = useRenderer();
 	const theme = createTheme(renderer, props.config.theme);
 	const animate = createAnimate(renderer, props.config.animations);
-	const toasts = createToasts(animate, renderer.clock);
+	const toasts = createToasts(renderer.clock);
 	onCleanup(toasts.dispose);
 	const pi = createPiState(
 		(extraArgs) =>
@@ -102,7 +102,7 @@ function App(props: {
 		new Set(props.channelTitles),
 	);
 	onCleanup(pi.dispose);
-	const modals = createModals(animate);
+	const modals = createModals();
 	if (props.updateCheck) {
 		onCleanup(
 			startUpdateCheck(
@@ -163,7 +163,7 @@ function App(props: {
 		focus,
 	};
 	useKeyboard((event) => {
-		if (modals.active().length > 0) return;
+		if (modals.stack().length > 0) return;
 		const action = Object.entries(props.config.keybindings).find(([, chord]) =>
 			matches(chord, event),
 		)?.[0];
