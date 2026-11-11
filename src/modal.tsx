@@ -1,6 +1,7 @@
-import type { BoxRenderable, Renderable } from "@opentui/core";
+import type { BoxRenderable } from "@opentui/core";
 import { useKeyboard, usePaste, useRenderer } from "@opentui/solid";
 import { createSignal, For, onCleanup, onMount } from "solid-js";
+import { contains } from "./focus.ts";
 import {
 	type SharedContext,
 	type Size,
@@ -54,13 +55,6 @@ export function createModals() {
 }
 
 export type Modals = ReturnType<typeof createModals>;
-
-function contains(ancestor: Renderable, node: Renderable | null) {
-	for (let next = node; next; next = next.parent) {
-		if (next === ancestor) return true;
-	}
-	return false;
-}
 
 export function ModalLayer(props: { modals: Modals; context: SharedContext }) {
 	const renderer = useRenderer();
@@ -144,7 +138,7 @@ function ModalView(props: {
 					slot={request.slot}
 					parentDirection="column"
 					panels={request.panels}
-					context={props.context}
+					context={{ ...props.context, focus: undefined }}
 				/>
 			</box>
 		</box>

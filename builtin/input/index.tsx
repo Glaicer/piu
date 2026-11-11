@@ -8,6 +8,7 @@ import {
 	on,
 	Show,
 } from "solid-js";
+import { matches } from "../../src/keybindings.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
 import { type Entry, findTrigger, narrow } from "./autocomplete.ts";
 import { listFiles } from "./files.ts";
@@ -60,6 +61,7 @@ function Prompt(props: { context: ModuleContext }) {
 		);
 	});
 	const open = () => !dismissed() && entries().length > 0;
+	props.context.holdFocusKeys(open);
 	createEffect(
 		on(
 			() => trigger()?.query,
@@ -123,6 +125,11 @@ function Prompt(props: { context: ModuleContext }) {
 		),
 	);
 
+	function restore(queued: readonly string[]) {
+		if (!field || queued.length === 0) return;
+		show([...queued, field.plainText].filter(Boolean).join("\n\n"));
+	}
+
 	function take() {
 		const value = field?.plainText ?? "";
 		if (!value.trim()) return;
@@ -146,13 +153,21 @@ function Prompt(props: { context: ModuleContext }) {
 	}
 
 	function onKeyDown(event: KeyEvent) {
+		const newline = props.context.keybindings["input.newline"];
+		const bound = newline !== undefined && matches(newline, event);
+		// why: the textarea itself turns a bare line feed (Ctrl+J without the kitty protocol) into a newline, so a remapped key has to swallow it.
+		if (bound || event.name === "linefeed") {
+			event.preventDefault();
+			if (bound) field?.newLine();
+			return;
+		}
 		if (open()) {
 			routeList(event);
 			if (event.defaultPrevented) return;
 		}
 		if (event.name === "escape" && props.context.pi.working) {
 			event.preventDefault();
-			void props.context.actions.abort();
+			void props.context.actions.abort().then(restore);
 		}
 		if (event.name === "up") walkHistory(event, -1);
 		if (event.name === "down") walkHistory(event, 1);

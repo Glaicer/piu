@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { BackendConfig } from "./backend.ts";
+import { type Keybindings, parseChord } from "./keybindings.ts";
 import type { Size, Slot } from "./layout.tsx";
 import type { ModuleSettings } from "./module.ts";
 import { StartupError } from "./startup-error.ts";
@@ -11,9 +12,12 @@ export type Config = {
 	layout: Slot;
 	placement: Placement;
 	modules: Readonly<Record<string, ModuleSettings>>;
+	keybindings: Keybindings;
 };
 
-export const defaultConfig: Config = {
+export const defaultConfig: Omit<Config, "keybindings"> & {
+	keybindings: Readonly<Record<string, string>>;
+} = {
 	backend: { command: "pi", args: [] },
 	layout: {
 		kind: "container",
@@ -61,6 +65,13 @@ export const defaultConfig: Config = {
 		side: [],
 	},
 	modules: {},
+	keybindings: {
+		"focus.next": "tab",
+		"focus.previous": "shift+tab",
+		"input.newline": "ctrl+j",
+		"command.model": "ctrl+l",
+		"command.reasoning": "alt+t",
+	},
 };
 
 type Fields = Record<string, unknown>;
@@ -84,6 +95,9 @@ export function loadConfig(path: string): Config {
 			panelIds,
 		),
 		modules: parseModules(mergeObjects(defaultConfig.modules, user.modules)),
+		keybindings: parseKeybindings(
+			mergeObjects(defaultConfig.keybindings, user.keybindings),
+		),
 	};
 }
 
@@ -212,6 +226,22 @@ function parseModules(value: unknown) {
 			id,
 			object(settings, `modules[${JSON.stringify(id)}]`),
 		]),
+	);
+}
+
+function parseKeybindings(value: unknown): Keybindings {
+	return Object.fromEntries(
+		Object.entries(object(value, "keybindings")).map(([action, spec]) => {
+			const path = `keybindings.${action}`;
+			const chord = parseChord(string(spec, path));
+			if (!chord) {
+				throw fieldError(
+					path,
+					`expected a key like "ctrl+j" or "shift+tab", got ${JSON.stringify(spec)}`,
+				);
+			}
+			return [action, chord];
+		}),
 	);
 }
 

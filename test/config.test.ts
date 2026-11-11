@@ -144,6 +144,21 @@ test.each([
 		'modules["greeter.hello"]',
 	],
 	[
+		"a keybinding for an action nothing defines",
+		{ keybindings: { "focus.sideways": "ctrl+x" } },
+		"keybindings.focus.sideways",
+	],
+	[
+		"a key that cannot be parsed",
+		{ keybindings: { "focus.next": "hyper+tab" } },
+		"keybindings.focus.next",
+	],
+	[
+		"a modifier that only exists on Object.prototype",
+		{ keybindings: { "focus.next": "constructor+tab" } },
+		"keybindings.focus.next",
+	],
+	[
 		"a settings entry that is not an object",
 		{ modules: { "chat.messages": 3 } },
 		'modules["chat.messages"]',

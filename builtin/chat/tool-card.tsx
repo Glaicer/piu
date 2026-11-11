@@ -1,6 +1,7 @@
 import { createMemo, createSignal } from "solid-js";
 import type { PiMessage } from "../../src/pi-state.ts";
 import type { Theme } from "../../src/theme.ts";
+import { type Selection, selectable } from "./selection.ts";
 
 export type ToolCallBlock = Extract<
 	Extract<PiMessage, { role: "assistant" }>["content"][number],
@@ -48,9 +49,11 @@ export function ToolCard(props: {
 	call: () => ToolCallBlock | undefined;
 	result: () => ToolResultMessage | undefined;
 	abandoned: boolean;
+	selection: Selection;
 	theme: Theme;
 }) {
 	const [open, setOpen] = createSignal(false);
+	const row = selectable(props.selection, () => setOpen(!open()));
 	const status = createMemo(() => {
 		const result = props.result();
 		if (!result) return props.abandoned ? "error" : "running";
@@ -68,7 +71,7 @@ export function ToolCard(props: {
 	const header = () => {
 		const call = props.call();
 		const argument = call ? keyArgument(call.arguments) : "";
-		return `${open() ? "▾" : "▸"} ${call?.name ?? ""} ${argument}`.trimEnd();
+		return `${row.selected() ? "› " : ""}${open() ? "▾" : "▸"} ${call?.name ?? ""} ${argument}`.trimEnd();
 	};
 	const body = () => {
 		const call = props.call();
@@ -78,7 +81,7 @@ export function ToolCard(props: {
 	};
 	return (
 		<box flexDirection="column" border borderColor={color()}>
-			<box flexDirection="row" onMouseDown={() => setOpen(!open())}>
+			<box ref={row.ref} flexDirection="row" onMouseDown={row.activate}>
 				<text fg={props.theme.text}>{header()}</text>
 				<text fg={color()}>{`  ${status()}${duration()}`}</text>
 			</box>

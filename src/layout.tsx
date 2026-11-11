@@ -1,6 +1,8 @@
+import type { KeyEvent, Renderable } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/solid";
 import { type Accessor, createSignal, For, onCleanup } from "solid-js";
 import { channelFor } from "./channel.ts";
+import type { PanelFocus } from "./focus.ts";
 import type { ModuleContext, PlacedModule, Presence } from "./module.ts";
 
 export type Size = number | `${number}%` | "rest" | "content";
@@ -16,8 +18,13 @@ export type Slot =
 	| (SlotBase & { kind: "container"; children: readonly Slot[] })
 	| (SlotBase & { kind: "panel" });
 
-type PanelContext = Omit<ModuleContext, "onCleanup" | "settings" | "channel">;
-export type SharedContext = Omit<PanelContext, "reportPresence">;
+type PanelContext = Omit<
+	ModuleContext,
+	"onCleanup" | "settings" | "channel" | "holdFocusKeys"
+>;
+export type SharedContext = Omit<PanelContext, "reportPresence" | "onKey"> & {
+	focus?: PanelFocus;
+};
 
 type SlotProps = {
 	slot: Slot;
@@ -28,6 +35,7 @@ type SlotProps = {
 
 export function SlotView(props: SlotProps) {
 	const slot = props.slot;
+	const { focus, ...shared } = props.context;
 	const sizing = sizeStyle(slot, props.parentDirection);
 	const terminal = useTerminalDimensions();
 	const visible = () => terminal().width >= (slot.hideBelow ?? 0);
@@ -51,10 +59,12 @@ export function SlotView(props: SlotProps) {
 		const [presence, setPresence] = createSignal<Accessor<Presence>>(
 			() => "shown",
 		);
+		const keyHandlers: ((event: KeyEvent) => void)[] = [];
 		return {
 			placed,
 			presence: () => presence()(),
 			setPresence: (next: Accessor<Presence>) => setPresence(() => next),
+			keyHandlers,
 		};
 	});
 	const claimant = () => entries.find((e) => e.presence() === "exclusive");
@@ -64,13 +74,36 @@ export function SlotView(props: SlotProps) {
 	};
 	const followsOutput = () =>
 		entries.some((entry) => shown(entry) && entry.placed.module.followsOutput);
+	let element: Renderable | undefined;
+	focus?.register({
+		id: slot.id,
+		element: () => element,
+		shown: () => entries.some(shown),
+	});
+	const focused = () => focus?.isFocused(slot.id) ?? false;
+	const frame = () => ({
+		borderColor: focused() ? shared.theme.accent : shared.theme.border,
+		title: focused() ? ` ${slot.id} ` : undefined,
+	});
+	const routeKey = (event: KeyEvent) => {
+		for (const entry of entries) {
+			if (!shown(entry)) continue;
+			for (const handler of entry.keyHandlers) handler(event);
+			if (event.defaultPrevented) return;
+		}
+	};
 	const modules = (
 		<For each={entries}>
 			{(entry) => (
 				<box visible={shown(entry)}>
 					<ModuleView
 						placed={entry.placed}
-						context={{ ...props.context, reportPresence: entry.setPresence }}
+						context={{
+							...shared,
+							reportPresence: entry.setPresence,
+							onKey: (handler) => entry.keyHandlers.push(handler),
+							holdFocusKeys: (active) => focus?.hold(active),
+						}}
 					/>
 				</box>
 			)}
@@ -79,10 +112,13 @@ export function SlotView(props: SlotProps) {
 	if (slot.size === "content") {
 		return (
 			<box
+				ref={(node: Renderable) => {
+					element = node;
+				}}
 				{...sizing}
 				visible={visible() && entries.some(shown)}
 				border
-				borderColor={props.context.theme.border}
+				{...frame()}
 				flexDirection={slot.direction}
 			>
 				{modules}
@@ -91,10 +127,14 @@ export function SlotView(props: SlotProps) {
 	}
 	return (
 		<scrollbox
+			ref={(node: Renderable) => {
+				element = node;
+			}}
 			{...sizing}
 			visible={visible()}
 			border
-			borderColor={props.context.theme.border}
+			{...frame()}
+			onKeyDown={routeKey}
 			stickyScroll={followsOutput()}
 			stickyStart="bottom"
 			contentOptions={{ flexDirection: slot.direction }}
@@ -104,7 +144,12 @@ export function SlotView(props: SlotProps) {
 	);
 }
 
-function ModuleView(props: { placed: PlacedModule; context: PanelContext }) {
+type ModuleViewContext = PanelContext & Pick<ModuleContext, "holdFocusKeys">;
+
+function ModuleView(props: {
+	placed: PlacedModule;
+	context: ModuleViewContext;
+}) {
 	const cleanups: (() => void)[] = [];
 	onCleanup(() => {
 		for (const cleanup of cleanups) cleanup();

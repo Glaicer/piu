@@ -118,6 +118,27 @@ test("picking an option with the arrow keys and Enter sends it to the model", as
 	await expectInputBack(piu);
 });
 
+test("Tab takes the focus away from the question card and a full cycle brings the card its keys back", async () => {
+	await using piu = await startPiu({
+		script: asking("Model got {toolResult}"),
+	});
+	await send(piu, "go");
+	await piu.waitForFrame(showsCard);
+
+	piu.mockInput.pressTab();
+	await piu.waitForFrame((f) => /┌─ status /.test(f));
+	piu.mockInput.pressArrow("down");
+	piu.mockInput.pressTab();
+	piu.mockInput.pressTab();
+	await piu.waitForFrame((f) => /┌─ input /.test(f));
+	piu.mockInput.pressArrow("down");
+	piu.mockInput.pressEnter();
+
+	await piu.waitForFrame((f) =>
+		agentPanel(f).includes('Model got "Which fruit do you want?" = "Banana"'),
+	);
+});
+
 const colorQuestion = {
 	question: "Which colors do you like?",
 	header: "Colors",

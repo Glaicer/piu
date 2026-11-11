@@ -89,7 +89,7 @@ export type PiActions = {
 	steer(text: string): Promise<boolean>;
 	followUp(text: string): Promise<boolean>;
 	answerDialog(id: string, answer: DialogAnswer): void;
-	abort(): Promise<void>;
+	abort(): Promise<readonly string[]>;
 	setModel(model: ModelInfo): Promise<void>;
 	setThinkingLevel(level: ThinkingLevel): Promise<void>;
 	newSession(): Promise<void>;
@@ -541,7 +541,14 @@ export function createPiState(
 		answerDialog,
 		async abort() {
 			for (const { id } of state.dialogs) answerDialog(id, { cancelled: true });
+			// why: Pi continues queued messages after an abort, so the queue is emptied first and its text goes back to the caller.
+			const cleared = await backend
+				.request({ type: "clear_queue" })
+				.catch(ignoreDeadBackend);
 			await backend.request({ type: "abort" }).catch(ignoreDeadBackend);
+			return cleared?.success && cleared.command === "clear_queue"
+				? [...cleared.data.steering, ...cleared.data.followUp]
+				: [];
 		},
 		async setModel({ provider, id }) {
 			await backend

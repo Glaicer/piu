@@ -1,9 +1,11 @@
-import { useRenderer } from "@opentui/solid";
+import { useKeyboard, useRenderer } from "@opentui/solid";
 import { createEffect, onCleanup } from "solid-js";
 import { startBackend } from "./backend.ts";
 import { type Config, loadConfig } from "./config.ts";
 import { bridgeDialogs } from "./dialogs.tsx";
 import { builtinDir, findExtensions, resolvePlacement } from "./extensions.ts";
+import { createPanelFocus } from "./focus.ts";
+import { commandAction, matches } from "./keybindings.ts";
 import { SlotView } from "./layout.tsx";
 import { createModals, ModalLayer } from "./modal.tsx";
 import type { Command, CommandContext, PlacedModule } from "./module.ts";
@@ -66,14 +68,35 @@ function App(props: {
 		actions: { ...pi.actions, openModal: modals.open, showToast: toasts.show },
 		theme: defaultTheme,
 	};
+	const focus = createPanelFocus();
+	const commands = props.commands.map((command) => ({
+		...command,
+		run: () => command.run(commandContext),
+	}));
 	const context = {
 		cwd: props.cwd,
 		...commandContext,
-		commands: props.commands.map((command) => ({
-			...command,
-			run: () => command.run(commandContext),
-		})),
+		commands,
+		keybindings: props.config.keybindings,
+		focus,
 	};
+	useKeyboard((event) => {
+		if (modals.stack().length > 0) return;
+		const action = Object.entries(props.config.keybindings).find(([, chord]) =>
+			matches(chord, event),
+		)?.[0];
+		if (action === "focus.next" || action === "focus.previous") {
+			if (focus.held()) return;
+			event.preventDefault();
+			focus.move(action === "focus.next" ? 1 : -1);
+			return;
+		}
+		const command = commands.find((c) => commandAction(c.name) === action);
+		if (command) {
+			event.preventDefault();
+			command.run();
+		}
+	});
 	return (
 		<box width="100%" height="100%" backgroundColor={defaultTheme.surface}>
 			<SlotView

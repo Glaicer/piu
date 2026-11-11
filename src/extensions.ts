@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { channelTitle } from "./channel.ts";
-import { type Config, fieldError } from "./config.ts";
+import { type Config, defaultConfig, fieldError } from "./config.ts";
+import { commandAction } from "./keybindings.ts";
 import type { Command, Extension, Module, PlacedModule } from "./module.ts";
 import { StartupError } from "./startup-error.ts";
 
@@ -34,7 +35,7 @@ function extensionNames(root: string) {
 }
 
 export async function resolvePlacement(
-	config: Pick<Config, "placement" | "modules">,
+	config: Pick<Config, "placement" | "modules" | "keybindings">,
 	folders: ExtensionFolders,
 ): Promise<{
 	panels: Map<string, PlacedModule[]>;
@@ -96,9 +97,23 @@ export async function resolvePlacement(
 			);
 		}
 	}
+	const commands = collectCommands(extensions);
+	// why: a replaced Layout can leave a default key bound to a command whose Extension is no longer placed; that is not an error, so the default names stay known.
+	const actions = new Set([
+		...Object.keys(defaultConfig.keybindings),
+		...commands.map((command) => commandAction(command.name)),
+	]);
+	for (const action of Object.keys(config.keybindings)) {
+		if (!actions.has(action)) {
+			throw fieldError(
+				`keybindings.${action}`,
+				`unknown action, expected one of: ${[...actions].join(", ")}`,
+			);
+		}
+	}
 	return {
 		panels,
-		commands: collectCommands(extensions),
+		commands,
 		channelTitles: [...extensions].flatMap(([name, extension]) =>
 			(extension.channels ?? []).map((channel) => channelTitle(name, channel)),
 		),

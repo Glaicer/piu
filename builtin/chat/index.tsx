@@ -5,6 +5,7 @@ import type { PiMessage, ServiceRow } from "../../src/pi-state.ts";
 import type { Theme } from "../../src/theme.ts";
 import { BackendCard } from "./backend-card.tsx";
 import { createSyntaxStyle, Markdown } from "./markdown.tsx";
+import { createSelection, type Selection } from "./selection.ts";
 import { sessionCommands } from "./session-commands.tsx";
 import { contentText } from "./sessions.ts";
 import { Thinking } from "./thinking.tsx";
@@ -24,6 +25,14 @@ function Messages(props: { context: ModuleContext }) {
 				message.role === "toolResult" && message.toolCallId === id,
 		);
 	props.context.onCleanup(() => syntaxStyle.destroy());
+	const selection = createSelection();
+	props.context.onKey((event) => {
+		if (event.name === "return") {
+			if (selection.activate()) event.preventDefault();
+		} else if (event.name === "up" || event.name === "down") {
+			if (selection.move(event.name === "up" ? -1 : 1)) event.preventDefault();
+		}
+	});
 	return (
 		<>
 			<For each={pi.messages}>
@@ -44,6 +53,7 @@ function Messages(props: { context: ModuleContext }) {
 											message === pi.streamingMessage &&
 											blockIndex === message.content.length - 1
 										}
+										selection={selection}
 										syntaxStyle={syntaxStyle}
 										theme={theme}
 									/>
@@ -58,7 +68,7 @@ function Messages(props: { context: ModuleContext }) {
 				)}
 			</For>
 			<ServiceRows context={props.context} position={pi.messages.length} />
-			<BackendCard context={props.context} />
+			<BackendCard context={props.context} selection={selection} />
 		</>
 	);
 }
@@ -90,6 +100,7 @@ function AssistantBlock(props: {
 	resultFor: (toolCallId: string) => ToolResultMessage | undefined;
 	abandoned: boolean;
 	streaming: boolean;
+	selection: Selection;
 	syntaxStyle: SyntaxStyle;
 	theme: Theme;
 }) {
@@ -107,7 +118,11 @@ function AssistantBlock(props: {
 	return (
 		<>
 			{type() === "thinking" ? (
-				<Thinking text={text()} theme={props.theme} />
+				<Thinking
+					text={text()}
+					selection={props.selection}
+					theme={props.theme}
+				/>
 			) : type() === "text" ? (
 				<Markdown
 					text={text()}
@@ -123,6 +138,7 @@ function AssistantBlock(props: {
 						return id === undefined ? undefined : props.resultFor(id);
 					}}
 					abandoned={props.abandoned}
+					selection={props.selection}
 					theme={props.theme}
 				/>
 			) : null}

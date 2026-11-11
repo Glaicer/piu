@@ -75,6 +75,7 @@ export async function startPiu(options: {
 	extensionsDir?: string;
 	width?: number;
 	height?: number;
+	kittyKeyboard?: boolean;
 }) {
 	const dir = options.dir ?? mkdtempSync(join(tmpdir(), "piu-test-"));
 	const scriptPath = join(dir, "script.json");
@@ -150,7 +151,7 @@ export async function startPiu(options: {
 		width: options.width ?? 160,
 		height: options.height ?? 30,
 		// why: without the kitty protocol a terminal sends Shift+Enter as a plain Enter; the real renderer enables it by default.
-		kittyKeyboard: true,
+		kittyKeyboard: options.kittyKeyboard ?? true,
 	});
 
 	async function waitForFrame(

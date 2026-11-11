@@ -16,3 +16,4 @@
 
 - From 03: unknown keys are ignored today, and replacing `layout` without `placement` gives a blank frame with no warning.
 - Known sections are those listed in the spec (`backend`, `layout`, `placement`, `modules`, `keybindings`, `theme`, `animations`). Sections whose schema doesn't exist yet only need their top-level key accepted here; tickets 15, 16 and 17 make their own contents strict. Touches `src/config.ts` like 04, so do them one after the other.
+- From 15: two `keybindings` actions bound to the same key are not rejected (the first in table order wins), and a `command.<name>` key for a command whose Extension is not placed is silently accepted when `<name>` is a default action.
