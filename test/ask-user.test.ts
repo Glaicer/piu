@@ -126,9 +126,8 @@ test("Tab takes the focus away from the question card and a full cycle brings th
 	await piu.waitForFrame(showsCard);
 
 	piu.mockInput.pressTab();
-	await piu.waitForFrame((f) => /┌─ status /.test(f));
+	await piu.waitForFrame((f) => /┌─ agent /.test(f));
 	piu.mockInput.pressArrow("down");
-	piu.mockInput.pressTab();
 	piu.mockInput.pressTab();
 	await piu.waitForFrame((f) => /┌─ input /.test(f));
 	piu.mockInput.pressArrow("down");
@@ -644,4 +643,62 @@ test("Enter on an empty custom answer field sends nothing", async () => {
 	piu.mockInput.pressEscape();
 
 	await piu.waitForFrame((f) => agentPanel(f).includes(declined));
+});
+
+const manyOptions = {
+	question: "Which letter do you want?",
+	header: "Letter",
+	options: Array.from({ length: 4 }, (_, i) => ({
+		label: `Letter ${String.fromCharCode(65 + i)}`,
+	})),
+};
+
+test("in a terminal shorter than the card, the card scrolls to the selected row and keeps Dismiss in view", async () => {
+	await using piu = await startPiu({
+		script: {
+			replies: [
+				{
+					toolCalls: [{ name: "ask_user", args: { questions: [manyOptions] } }],
+				},
+				"Model got {toolResult}",
+			],
+		},
+		height: 10,
+	});
+	await send(piu, "go");
+	const first = await piu.waitForFrame((f) =>
+		inputArea(f).includes("Letter A"),
+	);
+	expect(inputArea(first)).not.toContain("Type your own answer");
+	expect(inputArea(first)).toContain("Dismiss (Esc)");
+
+	for (let i = 0; i < 4; i++) piu.mockInput.pressArrow("down");
+
+	const last = await piu.waitForFrame((f) =>
+		inputArea(f).includes("Type your own answer"),
+	);
+	expect(inputArea(last)).not.toContain("Letter A");
+	expect(inputArea(last)).toContain("Dismiss (Esc)");
+});
+
+test("in a short terminal Review's Submit can be reached and pressed", async () => {
+	await using piu = await startPiu({
+		script: askingThree("Model got {toolResult}"),
+		height: 10,
+	});
+	await send(piu, "go");
+	await piu.waitForFrame(onQuestion("Which fruit do you want?"));
+	piu.mockInput.pressArrow("right");
+	await piu.waitForFrame(onQuestion("Which colors do you like?"));
+	piu.mockInput.pressArrow("right");
+	await piu.waitForFrame(onQuestion("How big should it be?"));
+	piu.mockInput.pressArrow("right");
+	await piu.waitForFrame(onQuestion("Review your answers"));
+
+	for (let i = 0; i < 3; i++) piu.mockInput.pressArrow("down");
+
+	await piu.waitForFrame((f) => inputArea(f).includes("Submit"));
+	piu.mockInput.pressEnter();
+	piu.resize(160, 30);
+	await piu.waitForFrame((f) => agentPanel(f).includes("Model got"));
 });

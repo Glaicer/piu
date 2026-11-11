@@ -1,11 +1,13 @@
 import type { Command, CommandContext } from "../../src/module.ts";
 import { openPicker } from "../../src/picker.tsx";
-import { promptRows, type TreeRow } from "./session-tree.ts";
+import { currentPromptId, promptRows, type TreeRow } from "./session-tree.ts";
 import { listSessions, type SessionSummary } from "./sessions.ts";
 
 async function tree(context: CommandContext) {
-	const rows = promptRows((await context.actions.sessionTree()).tree);
+	const { tree: nodes, leafId } = await context.actions.sessionTree();
+	const rows = promptRows(nodes);
 	if (rows.length === 0) return;
+	const current = currentPromptId(nodes, leafId);
 	openPicker<TreeRow>(context, {
 		id: "tree-picker",
 		width: 70,
@@ -14,7 +16,7 @@ async function tree(context: CommandContext) {
 				label: `${"  ".repeat(row.depth)}${row.text}`.slice(0, 60),
 				value: row,
 			})),
-		selected: () => 0,
+		selected: () => rows.findIndex((row) => row.entryId === current),
 		onPick: (row) => void context.actions.fork(row.entryId),
 	});
 }
@@ -59,6 +61,6 @@ export const sessionCommands: readonly Command[] = [
 	{
 		name: "compact",
 		description: "Compact the context",
-		run: ({ actions }) => void actions.compact(),
+		run: ({ actions }, args) => void actions.compact(args.trim() || undefined),
 	},
 ];

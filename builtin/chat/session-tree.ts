@@ -39,3 +39,25 @@ function flatten(siblings: readonly Prompt[], depth: number): TreeRow[] {
 export function promptRows(tree: readonly SessionTreeNode[]): TreeRow[] {
 	return flatten(prompts(tree), 0);
 }
+
+function pathTo(
+	nodes: readonly SessionTreeNode[],
+	leafId: string,
+): SessionTreeNode[] | undefined {
+	for (const node of nodes) {
+		if (node.entry.id === leafId) return [node];
+		const below = pathTo(node.children, leafId);
+		if (below) return [node, ...below];
+	}
+}
+
+// why: the leaf is usually an assistant reply, which the list leaves out, so the current position is the last prompt on the way down to it.
+export function currentPromptId(
+	tree: readonly SessionTreeNode[],
+	leafId: string | null,
+): string | undefined {
+	const path = leafId === null ? undefined : pathTo(tree, leafId);
+	return path?.findLast(
+		({ entry }) => entry.type === "message" && entry.message.role === "user",
+	)?.entry.id;
+}

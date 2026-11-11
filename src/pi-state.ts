@@ -95,7 +95,7 @@ export type PiActions = {
 	newSession(): Promise<void>;
 	switchSession(sessionFile: string): Promise<void>;
 	fork(entryId: string): Promise<void>;
-	compact(): Promise<void>;
+	compact(instructions?: string): Promise<void>;
 	sessionTree(): Promise<SessionTree>;
 	restartBackend(): void;
 };
@@ -209,16 +209,29 @@ export function createPiState(
 		void refreshSession();
 	}
 
-	async function loadMessages() {
+	async function loadMessages(options?: { unlessStreaming?: boolean }) {
 		const session = backend;
 		try {
 			const response = await session.request({ type: "get_messages" });
-			if (session !== backend) return;
+			if (session !== backend) return false;
+			if (options?.unlessStreaming && state.streamingMessage) return false;
 			if (response.command === "get_messages" && response.success) {
 				setState("messages", reconcile(response.data.messages));
+				return true;
 			}
 		} catch {
 			ignoreDeadBackend();
+		}
+		return false;
+	}
+
+	// why: a reply to get_messages cannot say whether a stream began before it was made, and replacing messages mid-stream would make message_end overwrite the wrong entry, so a reload that meets a stream waits for the run to settle.
+	let compactionStale = false;
+	async function syncAfterCompaction() {
+		compactionStale = true;
+		if (await loadMessages({ unlessStreaming: true })) {
+			compactionStale = false;
+			reanchorRows();
 		}
 	}
 
@@ -275,6 +288,16 @@ export function createPiState(
 				break;
 			case "agent_settled":
 				setState("working", false);
+				if (compactionStale) void syncAfterCompaction();
+				break;
+			case "thinking_level_changed":
+				setState("thinkingLevel", record.level);
+				break;
+			case "extension_error":
+				notify(
+					`${extensionName(record.extensionPath)}: ${record.error}`,
+					"error",
+				);
 				break;
 			case "message_start":
 				setState("messages", state.messages.length, record.message);
@@ -321,6 +344,7 @@ export function createPiState(
 				break;
 			case "compaction_end":
 				finishRow("compaction", compactionOutcome(record));
+				if (record.result) void syncAfterCompaction();
 				break;
 			case "auto_retry_start":
 				startRow(
@@ -527,12 +551,26 @@ export function createPiState(
 		backend
 			.request({ type: "prompt", message: text, streamingBehavior })
 			.then((response) => {
-				if (response.success) return true;
-				notify(response.error, "error");
-				return false;
+				if (!response.success) {
+					notify(response.error, "error");
+					return false;
+				}
+				// why: Pi has no model-change event, and a Pi extension command that switches the model has finished by the time its prompt is answered "handled".
+				if (
+					response.command === "prompt" &&
+					response.data?.disposition === "handled"
+				) {
+					void refreshSession();
+				}
+				return true;
 			})
 			// why: a dead Backend is already shown by the error card, so only Pi's own refusal hands the text back to the input.
 			.catch(() => true);
+
+	async function refuseToToast(command: RpcCommand) {
+		const response = await backend.request(command).catch(ignoreDeadBackend);
+		if (response && !response.success) notify(response.error, "error");
+	}
 
 	const actions: PiActions = {
 		prompt: (text) => send(text),
@@ -551,15 +589,11 @@ export function createPiState(
 				: [];
 		},
 		async setModel({ provider, id }) {
-			await backend
-				.request({ type: "set_model", provider, modelId: id })
-				.catch(ignoreDeadBackend);
+			await refuseToToast({ type: "set_model", provider, modelId: id });
 			await refreshSession();
 		},
 		async setThinkingLevel(level) {
-			await backend
-				.request({ type: "set_thinking_level", level })
-				.catch(ignoreDeadBackend);
+			await refuseToToast({ type: "set_thinking_level", level });
 			await refreshSession();
 		},
 		async newSession() {
@@ -575,12 +609,10 @@ export function createPiState(
 			const response = await replaceSession({ type: "fork", entryId });
 			if (response?.command === "fork") setEditorText(response.data.text);
 		},
-		async compact() {
-			const session = backend;
-			await session.request({ type: "compact" }).catch(ignoreDeadBackend);
-			if (session !== backend) return;
-			await loadMessages();
-			reanchorRows();
+		async compact(instructions) {
+			await backend
+				.request({ type: "compact", customInstructions: instructions })
+				.catch(ignoreDeadBackend);
 		},
 		async sessionTree() {
 			const response = await backend
@@ -607,6 +639,12 @@ export function createPiState(
 			backend.stop();
 		},
 	};
+}
+
+function extensionName(path: string) {
+	const parts = path.split("/").filter(Boolean);
+	const file = (parts.pop() ?? path).replace(/\.[cm]?[jt]sx?$/, "");
+	return file === "index" ? (parts.pop() ?? file) : file;
 }
 
 function toModelInfo(model: {

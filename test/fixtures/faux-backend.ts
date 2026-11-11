@@ -18,7 +18,10 @@ export default function (pi: ExtensionAPI) {
 	const script: FauxScript = JSON.parse(readFileSync(scriptPath, "utf8"));
 	const faux = fauxProvider({
 		provider: "faux",
-		models: [{ id: "faux-1" }, { id: "faux-2", reasoning: true }],
+		models: [
+			{ id: "faux-1", contextWindow: script.contextWindow },
+			{ id: "faux-2", reasoning: true, contextWindow: script.contextWindow },
+		],
 		tokensPerSecond: script.tokensPerSecond,
 		tokenSize: script.tokenSize
 			? { min: script.tokenSize, max: script.tokenSize }
@@ -91,6 +94,27 @@ export default function (pi: ExtensionAPI) {
 		pi.on("session_start", async (_event, ctx) =>
 			ctx.ui.setStatus("boot", text),
 		);
+	}
+	if (script.failingHook) {
+		pi.on("turn_start", () => {
+			throw new Error("hook exploded");
+		});
+	}
+	if (script.switchCommands) {
+		pi.registerCommand("level-high", {
+			handler: async () => pi.setThinkingLevel("high"),
+		});
+		pi.registerCommand("to-faux-2", {
+			handler: async (_args, ctx) => {
+				const model = ctx.modelRegistry.find("faux", "faux-2");
+				if (model) await pi.setModel(model);
+			},
+		});
+	}
+	if (script.echoCompactInstructions) {
+		pi.on("session_before_compact", (event, ctx) => {
+			ctx.ui.notify(`instructions: ${event.customInstructions}`, "info");
+		});
 	}
 	if (script.compactCommand) {
 		pi.registerCommand("compact-now", {

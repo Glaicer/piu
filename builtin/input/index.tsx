@@ -104,6 +104,8 @@ function Prompt(props: { context: ModuleContext }) {
 		const current = trigger();
 		if (!field || !current) return;
 		const typed = `${current.kind === "slash" ? "/" : "@"}${current.query}`;
+		const tail = /^\S*/.exec(field.plainText.slice(before().length))?.[0] ?? "";
+		for (const _ of new Intl.Segmenter().segment(tail)) field.deleteChar();
 		for (const _ of new Intl.Segmenter().segment(typed)) {
 			field.deleteCharBackward();
 		}
@@ -127,7 +129,12 @@ function Prompt(props: { context: ModuleContext }) {
 			const entry = list[selected()];
 			if (!entry) return;
 			const typed = before();
-			if (event.name === "return" && entry.label === typed) return;
+			if (
+				event.name === "return" &&
+				entry.label.toLowerCase() === typed.toLowerCase()
+			) {
+				return;
+			}
 			event.preventDefault();
 			accept(entry);
 		}
@@ -197,11 +204,13 @@ function Prompt(props: { context: ModuleContext }) {
 			const value = take();
 			if (value === undefined) return;
 			const { actions, pi } = props.context;
+			const [, name = "", args = ""] =
+				/^\/(\S+)(?:\s+([\s\S]*))?$/.exec(value.trim()) ?? [];
 			const command = props.context.commands.find(
-				(c) => `/${c.name}` === value.trim(),
+				(c) => c.name.toLowerCase() === name.toLowerCase(),
 			);
 			if (command) {
-				command.run();
+				command.run(args);
 				return;
 			}
 			const accepted = event.meta

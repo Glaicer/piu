@@ -128,6 +128,32 @@ test("/tree shows a branched session, and picking an earlier prompt forks from i
 	expect(agentPanel(forked)).toContain("Trunk reply");
 });
 
+test("/tree opens on the prompt of the current position, so Enter forks from it", async () => {
+	await using piu = await startPiu({
+		script: {
+			replies: ["Trunk reply", "Left reply", "Right reply"],
+			branchBackCommand: true,
+		},
+		persistSession: true,
+	});
+	await send(piu, "Trunk prompt");
+	await piu.waitForFrame((f) => agentPanel(f).includes("Trunk reply"));
+	await send(piu, "Left prompt");
+	await piu.waitForFrame((f) => agentPanel(f).includes("Left reply"));
+	await send(piu, "/branch-back Right prompt");
+	await piu.waitForFrame((f) => agentPanel(f).includes("Right reply"));
+
+	await send(piu, "/tree");
+	await piu.waitForFrame((f) => treeRows(f).length === 3);
+	piu.mockInput.pressEnter();
+
+	await piu.waitForFrame(
+		(f) =>
+			!agentPanel(f).includes("Right reply") &&
+			inputArea(f).includes("Right prompt"),
+	);
+});
+
 test("/resume with no saved sessions says so in a Toast", async () => {
 	await using piu = await startPiu({ script: { replies: [] } });
 

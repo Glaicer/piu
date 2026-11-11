@@ -30,6 +30,7 @@ export type SharedContext = Omit<PanelContext, "reportPresence" | "onKey"> & {
 type SlotProps = {
 	slot: Slot;
 	parentDirection: Direction;
+	inContent?: boolean;
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	context: SharedContext;
 };
@@ -37,17 +38,34 @@ type SlotProps = {
 export function SlotView(props: SlotProps) {
 	const slot = props.slot;
 	const { focus, ...shared } = props.context;
-	const sizing = sizeStyle(slot, props.parentDirection);
+	const sizing = sizeStyle(
+		slot,
+		props.parentDirection,
+		props.inContent ?? false,
+	);
 	const terminal = useTerminalDimensions();
+	// why: a "content" slot never takes the last two cells of the screen, so a "rest" Panel next to it keeps its frame; Yoga then shrinks the one Panel inside it that may shrink (a tall card) instead of letting the slot push the rest off screen. Yoga's shrink shares of two flexible siblings turn out unreliable, so the cap is explicit.
+	const limit = (): { maxWidth?: number; maxHeight?: number } => {
+		if (slot.size !== "content") return {};
+		return props.parentDirection === "row"
+			? { maxWidth: terminal().width - 2 }
+			: { maxHeight: terminal().height - 2 };
+	};
 	const visible = () => terminal().width >= (slot.hideBelow ?? 0);
 	if (slot.kind === "container") {
 		return (
-			<box {...sizing} visible={visible()} flexDirection={slot.direction}>
+			<box
+				{...sizing}
+				{...limit()}
+				visible={visible()}
+				flexDirection={slot.direction}
+			>
 				<For each={slot.children}>
 					{(child) => (
 						<SlotView
 							slot={child}
 							parentDirection={slot.direction}
+							inContent={slot.size === "content"}
 							panels={props.panels}
 							context={props.context}
 						/>
@@ -80,6 +98,8 @@ export function SlotView(props: SlotProps) {
 		id: slot.id,
 		element: () => element,
 		shown: () => entries.some(shown),
+		handlesKeys: () =>
+			entries.some((entry) => shown(entry) && entry.keyHandlers.length > 0),
 	});
 	const focused = () => focus?.isFocused(slot.id) ?? false;
 	const frame = () => ({
@@ -117,6 +137,7 @@ export function SlotView(props: SlotProps) {
 					element = node;
 				}}
 				{...sizing}
+				{...limit()}
 				visible={visible() && entries.some(shown)}
 				border
 				{...frame()}
@@ -190,7 +211,7 @@ function ModuleView(props: {
 	});
 }
 
-function sizeStyle(slot: Slot, parentDirection: Direction) {
+function sizeStyle(slot: Slot, parentDirection: Direction, inContent: boolean) {
 	const [length, min] =
 		parentDirection === "row"
 			? (["width", "minWidth"] as const)
@@ -200,7 +221,7 @@ function sizeStyle(slot: Slot, parentDirection: Direction) {
 		slot.size === "rest"
 			? { flexShrink: 1, [length]: "100%" as const }
 			: slot.size === "content"
-				? { flexShrink: 0 }
+				? { flexShrink: slot.kind === "panel" && inContent ? 1 : 0 }
 				: { flexShrink: 0, [length]: slot.size };
 	return { ...flex, [min]: slot.minSize };
 }

@@ -9,7 +9,16 @@ import type {
 import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.ts";
 
 export type BackendConfig = { command: string; args: string[] };
-export type BackendRecord = JsonAgentSessionEvent | RpcExtensionUIRequest;
+export type ExtensionErrorRecord = {
+	type: "extension_error";
+	extensionPath: string;
+	event: string;
+	error: string;
+};
+export type BackendRecord =
+	| JsonAgentSessionEvent
+	| RpcExtensionUIRequest
+	| ExtensionErrorRecord;
 export type BackendHealth =
 	| { status: "running" }
 	| { status: "not-found"; command: string }

@@ -29,6 +29,10 @@ export type FauxScript = {
 	compactCommand?: boolean;
 	branchBackCommand?: boolean;
 	extensionCommands?: string[];
+	contextWindow?: number;
+	failingHook?: boolean;
+	switchCommands?: boolean;
+	echoCompactInstructions?: boolean;
 	uiTool?: boolean;
 	statusOnStart?: string;
 	tokensPerSecond?: number;
@@ -96,13 +100,13 @@ export async function startPiu(options: {
 	const dir = options.dir ?? mkdtempSync(join(tmpdir(), "piu-test-"));
 	const scriptPath = join(dir, "script.json");
 	writeFileSync(scriptPath, JSON.stringify(options.script));
-	// why: Pi waits retry.baseDelayMs before an automatic retry and refuses to compact a session shorter than keepRecentTokens, so tests shrink both.
+	// why: Pi waits retry.baseDelayMs before an automatic retry and refuses to compact a session shorter than keepRecentTokens, so tests shrink both; reserveTokens 0 lets a script's small contextWindow trigger an automatic compaction.
 	mkdirSync(join(dir, "agent"), { recursive: true });
 	writeFileSync(
 		join(dir, "agent", "settings.json"),
 		JSON.stringify({
 			retry: { baseDelayMs: 20 },
-			compaction: { keepRecentTokens: 1 },
+			compaction: { keepRecentTokens: 1, reserveTokens: 0 },
 		}),
 	);
 

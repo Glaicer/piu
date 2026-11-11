@@ -27,10 +27,10 @@ export type CommandContext = {
 export type Command = {
 	readonly name: string;
 	readonly description?: string;
-	run(context: CommandContext): void;
+	run(context: CommandContext, args: string): void;
 };
 
-export type BoundCommand = Omit<Command, "run"> & { run(): void };
+export type BoundCommand = Omit<Command, "run"> & { run(args?: string): void };
 
 export type ModuleContext = {
 	readonly cwd: string;

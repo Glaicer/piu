@@ -1,6 +1,14 @@
-import type { InputRenderable } from "@opentui/core";
+import type { BoxRenderable, InputRenderable } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
-import { createMemo, createSignal, For, onCleanup, untrack } from "solid-js";
+import {
+	createEffect,
+	createMemo,
+	createSignal,
+	For,
+	on,
+	onCleanup,
+	untrack,
+} from "solid-js";
 import type { ModuleContext } from "../../src/module.ts";
 import type { Question, Reply } from "./protocol.ts";
 
@@ -135,8 +143,46 @@ export function Card(props: {
 		return `${open}${answers()[tab()]?.custom ? "x" : " "}${close}`;
 	};
 
-	const line = (selected: () => boolean, children: unknown) => (
+	// why: the card sits in a Panel that shrinks when the terminal is short, so the rows live in a clipped box and the selected one is scrolled into view by hand; a scrollbox collapses to nothing inside a Panel sized to its content.
+	const rows = new Map<number, BoxRenderable>();
+	const [visibleRows, setVisibleRows] = createSignal(Number.POSITIVE_INFINITY);
+	const [scrolled, setScrolled] = createSignal(0);
+	const [layoutPasses, setLayoutPasses] = createSignal(0);
+	let content: BoxRenderable | undefined;
+	// why: OpenTUI calls onSizeChange before the rows inside have their final layout, so the scroll position is worked out once the layout pass is over.
+	const reveal = () => {
+		const element = rows.get(row());
+		const visible = visibleRows();
+		if (!element || !content || visible <= 0) return;
+		const y = element.screenY - content.screenY;
+		const top = row() === 0 ? 0 : y;
+		const bottom = y + element.height;
+		const last = Math.max(0, content.height - visible);
+		setScrolled((offset) =>
+			Math.min(
+				last,
+				top < offset
+					? top
+					: bottom > offset + visible
+						? bottom - visible
+						: offset,
+			),
+		);
+	};
+	createEffect(
+		on([tab, row, visibleRows, layoutPasses], () => queueMicrotask(reveal)),
+	);
+	createEffect(on(tab, () => setScrolled(0), { defer: true }));
+
+	const line = (at: number, selected: () => boolean, children: unknown) => (
 		<box
+			ref={(element: BoxRenderable) => {
+				rows.set(at, element);
+				element.onSizeChange = () => setLayoutPasses((count) => count + 1);
+				onCleanup(() => {
+					if (rows.get(at) === element) rows.delete(at);
+				});
+			}}
 			flexDirection="row"
 			backgroundColor={selected() ? theme.border : undefined}
 		>
@@ -152,116 +198,142 @@ export function Card(props: {
 			focused={!typing()}
 			onKeyDown={onKeyDown}
 		>
-			{!several && <text fg={theme.accent}>{` ${questions[0]?.header}`}</text>}
-			{several && (
-				<box flexDirection="row">
-					<For each={[...questions.map((q) => q.header), "Review"]}>
-						{(header, at) => (
-							<box
-								onMouseDown={(event) => {
-									event.preventDefault();
-									goTo(at());
-								}}
-								backgroundColor={at() === tab() ? theme.border : undefined}
-							>
-								<text
-									fg={at() === tab() ? theme.accent : theme.muted}
-								>{` ${header}${at() < review && answered(answers()[at()] ?? empty) ? " ✓" : ""} `}</text>
-							</box>
-						)}
-					</For>
-				</box>
-			)}
-			{tab() < review ? (
-				<>
-					<text fg={theme.text}>{` ${question()?.question}`}</text>
-					<For each={question()?.options}>
-						{(option, at) =>
-							line(
-								() => at() === row(),
-								<box
-									flexDirection="row"
-									onMouseOver={() => setRow(at())}
-									onMouseDown={(event) => {
-										event.preventDefault();
-										setRow(at());
-										select(tab(), option.label);
-									}}
-								>
-									<text fg={theme.text}>
-										{` ${marker(tab(), option.label)} ${option.label}`}
-									</text>
-									<text fg={theme.muted}>
-										{option.description ? `  ${option.description}` : ""}
-									</text>
-								</box>,
-							)
-						}
-					</For>
-					{line(
-						typing,
-						<>
-							<text fg={theme.text}>{` ${customMarker()} `}</text>
-							{/* why: a keyed field per question, or its text leaks into the next tab */}
-							<For each={[tab()]}>
-								{(at) => (
-									<input
-										ref={(element: InputRenderable) => {
-											field = element;
+			<box
+				flexShrink={1}
+				overflow="hidden"
+				onSizeChange={function (this: BoxRenderable) {
+					setVisibleRows(this.height);
+				}}
+			>
+				<box
+					flexShrink={0}
+					onSizeChange={() => setLayoutPasses((count) => count + 1)}
+					ref={(element: BoxRenderable) => {
+						content = element;
+						createEffect(() => {
+							element.translateY = -scrolled();
+						});
+					}}
+				>
+					{!several && (
+						<text fg={theme.accent}>{` ${questions[0]?.header}`}</text>
+					)}
+					{several && (
+						<box flexDirection="row">
+							<For each={[...questions.map((q) => q.header), "Review"]}>
+								{(header, at) => (
+									<box
+										onMouseDown={(event) => {
+											event.preventDefault();
+											goTo(at());
 										}}
-										focused={typing()}
-										value={untrack(() => answers()[at]?.custom ?? "")}
-										placeholder="Type your own answer"
-										flexGrow={1}
-										textColor={theme.text}
-										onInput={(value: string) => {
-											setRow(customRow());
-											update(at, { labels: [], custom: value.trim() });
-										}}
-										onMouseDown={() => setRow(customRow())}
-										onKeyDown={onKeyDown}
-									/>
+										backgroundColor={at() === tab() ? theme.border : undefined}
+									>
+										<text
+											fg={at() === tab() ? theme.accent : theme.muted}
+										>{` ${header}${at() < review && answered(answers()[at()] ?? empty) ? " ✓" : ""} `}</text>
+									</box>
 								)}
 							</For>
-						</>,
+						</box>
 					)}
-				</>
-			) : (
-				<>
-					<text fg={theme.text}>{" Review your answers"}</text>
-					<For each={questions}>
-						{(q, at) =>
-							line(
-								() => at() === row(),
+					{tab() < review ? (
+						<>
+							<text fg={theme.text}>{` ${question()?.question}`}</text>
+							<For each={question()?.options}>
+								{(option, at) =>
+									line(
+										at(),
+										() => at() === row(),
+										<box
+											flexDirection="row"
+											onMouseOver={() => setRow(at())}
+											onMouseDown={(event) => {
+												event.preventDefault();
+												setRow(at());
+												select(tab(), option.label);
+											}}
+										>
+											<text fg={theme.text}>
+												{` ${marker(tab(), option.label)} ${option.label}`}
+											</text>
+											<text fg={theme.muted}>
+												{option.description ? `  ${option.description}` : ""}
+											</text>
+										</box>,
+									)
+								}
+							</For>
+							{line(
+								customRow(),
+								typing,
+								<>
+									<text fg={theme.text}>{` ${customMarker()} `}</text>
+									{/* why: a keyed field per question, or its text leaks into the next tab */}
+									<For each={[tab()]}>
+										{(at) => (
+											<input
+												ref={(element: InputRenderable) => {
+													field = element;
+												}}
+												focused={typing()}
+												value={untrack(() => answers()[at]?.custom ?? "")}
+												placeholder="Type your own answer"
+												flexGrow={1}
+												textColor={theme.text}
+												onInput={(value: string) => {
+													setRow(customRow());
+													update(at, { labels: [], custom: value.trim() });
+												}}
+												onMouseDown={() => setRow(customRow())}
+												onKeyDown={onKeyDown}
+											/>
+										)}
+									</For>
+								</>,
+							)}
+						</>
+					) : (
+						<>
+							<text fg={theme.text}>{" Review your answers"}</text>
+							<For each={questions}>
+								{(q, at) =>
+									line(
+										at(),
+										() => at() === row(),
+										<box
+											flexDirection="row"
+											onMouseDown={(event) => {
+												event.preventDefault();
+												edit(at());
+											}}
+										>
+											<text fg={theme.muted}>{` ${q.header}: `}</text>
+											<text fg={theme.text}>
+												{summary(answers()[at()] ?? empty)}
+											</text>
+										</box>,
+									)
+								}
+							</For>
+							{line(
+								review,
+								() => row() === review,
 								<box
-									flexDirection="row"
 									onMouseDown={(event) => {
 										event.preventDefault();
-										edit(at());
+										submit();
 									}}
 								>
-									<text fg={theme.muted}>{` ${q.header}: `}</text>
-									<text fg={theme.text}>
-										{summary(answers()[at()] ?? empty)}
-									</text>
+									<text fg={theme.accent}>{" Submit"}</text>
 								</box>,
-							)
-						}
-					</For>
-					{line(
-						() => row() === review,
-						<box
-							onMouseDown={(event) => {
-								event.preventDefault();
-								submit();
-							}}
-						>
-							<text fg={theme.accent}>{" Submit"}</text>
-						</box>,
+							)}
+						</>
 					)}
-				</>
-			)}
+				</box>
+			</box>
 			<box
+				flexShrink={0}
 				onMouseDown={(event) => {
 					event.preventDefault();
 					dismiss();

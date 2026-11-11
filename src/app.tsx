@@ -1,3 +1,4 @@
+import { EditBufferRenderable, type MouseEvent } from "@opentui/core";
 import { useKeyboard, useRenderer } from "@opentui/solid";
 import { createEffect, onCleanup } from "solid-js";
 import { createAnimate } from "./animate.ts";
@@ -13,6 +14,15 @@ import type { Command, CommandContext, PlacedModule } from "./module.ts";
 import { createPiState } from "./pi-state.ts";
 import { createTheme } from "./theme.ts";
 import { createToasts, ToastLayer } from "./toast.tsx";
+
+// why: OpenTUI focuses the nearest focusable ancestor of a clicked element, which would take the keyboard away from the input; only a click on a text field may move the focus.
+function keepFocus(event: MouseEvent) {
+	for (let node = event.target; node; node = node.parent) {
+		if (!node.focusable) continue;
+		if (!(node instanceof EditBufferRenderable)) event.preventDefault();
+		return;
+	}
+}
 
 export async function createApp(options: {
 	configPath: string;
@@ -74,7 +84,7 @@ function App(props: {
 	const focus = createPanelFocus();
 	const commands = props.commands.map((command) => ({
 		...command,
-		run: () => command.run(commandContext),
+		run: (args = "") => command.run(commandContext, args),
 	}));
 	const context = {
 		cwd: props.cwd,
@@ -99,10 +109,20 @@ function App(props: {
 		if (command) {
 			event.preventDefault();
 			command.run();
+			return;
 		}
+		focus.returnToInput(
+			event,
+			pi.state.working && pi.state.dialogs.length === 0 && !focus.held(),
+		);
 	});
 	return (
-		<box width="100%" height="100%" backgroundColor={theme.surface}>
+		<box
+			width="100%"
+			height="100%"
+			backgroundColor={theme.surface}
+			onMouseDown={keepFocus}
+		>
 			<SlotView
 				slot={props.config.layout}
 				parentDirection="column"

@@ -223,3 +223,32 @@ test("Tab inserts the chosen entry", async () => {
 			.some((line) => line.startsWith("/reasoning ")),
 	);
 });
+
+test("a command typed in capitals runs the same app command", async () => {
+	await using piu = await startPiu({ script: { replies: [] } });
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+
+	await piu.mockInput.typeText("/MODEL");
+	piu.mockInput.pressEnter();
+
+	await piu.waitForFrame((f) => f.includes("faux-2"));
+});
+
+test("completing with the cursor inside a word replaces the whole word", async () => {
+	await using piu = await startPiu({ script, promptTemplates });
+
+	await piu.mockInput.typeText("/review-code");
+	for (let i = 0; i < 5; i++) piu.mockInput.pressArrow("left");
+	await piu.waitForFrame((f) => f.includes("Review the code"));
+	piu.mockInput.pressTab();
+
+	const frame = await piu.waitForFrame((f) =>
+		inputArea(f)
+			.split("\n")
+			.some((line) => line.startsWith("/review-code")),
+	);
+	const line = inputArea(frame)
+		.split("\n")
+		.find((text) => text.startsWith("/review-code"));
+	expect(line?.trimEnd()).toBe("/review-code");
+});
