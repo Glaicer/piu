@@ -184,7 +184,7 @@ export async function startPiu(options: {
 	let view: Awaited<ReturnType<typeof createApp>>;
 	try {
 		view = await createApp({
-			cwd: options.cwd,
+			cwd: options.cwd ?? dir,
 			args: options.args ?? ["--model", "faux/faux-1"],
 		});
 	} catch (error) {
