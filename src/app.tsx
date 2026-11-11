@@ -1,5 +1,6 @@
 import { useKeyboard, useRenderer } from "@opentui/solid";
 import { createEffect, onCleanup } from "solid-js";
+import { createAnimate } from "./animate.ts";
 import { startBackend } from "./backend.ts";
 import { type Config, loadConfig } from "./config.ts";
 import { bridgeDialogs } from "./dialogs.tsx";
@@ -44,7 +45,9 @@ function App(props: {
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	commands: readonly Command[];
 }) {
-	const toasts = createToasts();
+	const renderer = useRenderer();
+	const animate = createAnimate(renderer, props.config.animations);
+	const toasts = createToasts(animate, renderer.clock);
 	onCleanup(toasts.dispose);
 	const pi = createPiState(
 		(extraArgs) =>
@@ -57,9 +60,8 @@ function App(props: {
 		new Set(props.channelTitles),
 	);
 	onCleanup(pi.dispose);
-	const modals = createModals();
+	const modals = createModals(animate);
 	bridgeDialogs(pi, modals);
-	const renderer = useRenderer();
 	createEffect(() => {
 		if (pi.state.title !== null) renderer.setTerminalTitle(pi.state.title);
 	});
@@ -78,10 +80,11 @@ function App(props: {
 		...commandContext,
 		commands,
 		keybindings: props.config.keybindings,
+		animate,
 		focus,
 	};
 	useKeyboard((event) => {
-		if (modals.stack().length > 0) return;
+		if (modals.active().length > 0) return;
 		const action = Object.entries(props.config.keybindings).find(([, chord]) =>
 			matches(chord, event),
 		)?.[0];

@@ -4,6 +4,7 @@ import { type Accessor, createSignal, For, onCleanup } from "solid-js";
 import { channelFor } from "./channel.ts";
 import type { PanelFocus } from "./focus.ts";
 import type { ModuleContext, PlacedModule, Presence } from "./module.ts";
+import { createSmoothScroll } from "./smooth-scroll.ts";
 
 export type Size = number | `${number}%` | "rest" | "content";
 type Direction = "row" | "column";
@@ -125,6 +126,8 @@ export function SlotView(props: SlotProps) {
 			</box>
 		);
 	}
+	const smoothScroll = createSmoothScroll(shared.animate);
+	onCleanup(smoothScroll.cancel);
 	return (
 		<scrollbox
 			ref={(node: Renderable) => {
@@ -135,6 +138,7 @@ export function SlotView(props: SlotProps) {
 			border
 			{...frame()}
 			onKeyDown={routeKey}
+			onMouseScroll={smoothScroll.wheel}
 			stickyScroll={followsOutput()}
 			stickyStart="bottom"
 			contentOptions={{ flexDirection: slot.direction }}
@@ -151,12 +155,31 @@ function ModuleView(props: {
 	context: ModuleViewContext;
 }) {
 	const cleanups: (() => void)[] = [];
+	const animations = new Set<() => void>();
 	onCleanup(() => {
 		for (const cleanup of cleanups) cleanup();
+		for (const cancel of animations) cancel();
 	});
 	const { pi, actions } = props.context;
 	return props.placed.module.render({
 		...props.context,
+		animate: (options) => {
+			let finished = false;
+			let cancel: () => void = () => {};
+			cancel = props.context.animate({
+				...options,
+				onComplete: () => {
+					finished = true;
+					animations.delete(cancel);
+					options.onComplete?.();
+				},
+			});
+			if (!finished) animations.add(cancel);
+			return () => {
+				animations.delete(cancel);
+				cancel();
+			};
+		},
 		settings: props.placed.settings,
 		channel: channelFor(
 			props.placed.id.split(".")[0] ?? "",

@@ -8,6 +8,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { JsonObject } from "@earendil-works/pi-ai";
+import type { ManualClock } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createApp } from "../src/app.tsx";
 
@@ -37,7 +38,7 @@ function withBackend(backend: object, config: unknown) {
 	const { backend: override, ...rest } = (config ?? {}) as {
 		backend?: object;
 	};
-	return { ...rest, backend: { ...backend, ...override } };
+	return { animations: false, ...rest, backend: { ...backend, ...override } };
 }
 
 export function panelText(frame: string, column: number, row = 0) {
@@ -76,6 +77,7 @@ export async function startPiu(options: {
 	width?: number;
 	height?: number;
 	kittyKeyboard?: boolean;
+	clock?: ManualClock;
 }) {
 	const dir = options.dir ?? mkdtempSync(join(tmpdir(), "piu-test-"));
 	const scriptPath = join(dir, "script.json");
@@ -152,6 +154,7 @@ export async function startPiu(options: {
 		height: options.height ?? 30,
 		// why: without the kitty protocol a terminal sends Shift+Enter as a plain Enter; the real renderer enables it by default.
 		kittyKeyboard: options.kittyKeyboard ?? true,
+		clock: options.clock,
 	});
 
 	async function waitForFrame(

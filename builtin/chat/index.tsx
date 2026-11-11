@@ -1,5 +1,6 @@
 import type { SyntaxStyle } from "@opentui/core";
 import { createMemo, For, Index } from "solid-js";
+import type { Animate } from "../../src/animate.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
 import type { PiMessage, ServiceRow } from "../../src/pi-state.ts";
 import type { Theme } from "../../src/theme.ts";
@@ -56,6 +57,7 @@ function Messages(props: { context: ModuleContext }) {
 										selection={selection}
 										syntaxStyle={syntaxStyle}
 										theme={theme}
+										animate={props.context.animate}
 									/>
 								)}
 							</Index>
@@ -103,6 +105,7 @@ function AssistantBlock(props: {
 	selection: Selection;
 	syntaxStyle: SyntaxStyle;
 	theme: Theme;
+	animate: Animate;
 }) {
 	// why: text_end replaces the block object; switching on the type alone keeps the renderable mounted so finished code is not re-highlighted.
 	const type = createMemo(() => props.block.type);
@@ -120,6 +123,7 @@ function AssistantBlock(props: {
 			{type() === "thinking" ? (
 				<Thinking
 					text={text()}
+					animate={props.animate}
 					selection={props.selection}
 					theme={props.theme}
 				/>
@@ -138,6 +142,7 @@ function AssistantBlock(props: {
 						return id === undefined ? undefined : props.resultFor(id);
 					}}
 					abandoned={props.abandoned}
+					animate={props.animate}
 					selection={props.selection}
 					theme={props.theme}
 				/>

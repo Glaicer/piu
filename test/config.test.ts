@@ -57,6 +57,11 @@ test("backend.command in the config decides which program is started", async () 
 test.each([
 	["a wrong type", { backend: { command: 5 } }, "backend.command"],
 	[
+		"an animations switch that is not a boolean",
+		{ animations: "yes" },
+		"animations",
+	],
+	[
 		"a malformed size",
 		{ layout: { kind: "panel", id: "p", direction: "column", size: "wide" } },
 		"layout.size",

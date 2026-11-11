@@ -6,6 +6,7 @@ import {
 	createSignal,
 	For,
 	on,
+	onCleanup,
 	Show,
 } from "solid-js";
 import { matches } from "../../src/keybindings.ts";
@@ -14,6 +15,9 @@ import { type Entry, findTrigger, narrow } from "./autocomplete.ts";
 import { listFiles } from "./files.ts";
 
 const MAX_LIST_ROWS = 8;
+const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
+const SPINNER_MS = 800;
+const SPINNER_FPS = 10;
 
 const keyBindings = [
 	{ name: "return", shift: true, action: "newline" as const },
@@ -26,6 +30,23 @@ function Prompt(props: { context: ModuleContext }) {
 	let draft = "";
 
 	const renderer = useRenderer();
+	const [spinner, setSpinner] = createSignal("");
+	createEffect(() => {
+		if (!props.context.pi.working) return;
+		const stop = props.context.animate({
+			from: 0,
+			to: SPINNER.length,
+			duration: SPINNER_MS,
+			loop: true,
+			frameRate: SPINNER_FPS,
+			onUpdate: (value) =>
+				setSpinner(`${SPINNER[Math.floor(value) % SPINNER.length]} `),
+		});
+		onCleanup(() => {
+			stop();
+			setSpinner("");
+		});
+	});
 	const [before, setBefore] = createSignal("");
 	const [selected, setSelected] = createSignal(0);
 	const [dismissed, setDismissed] = createSignal(false);
@@ -197,7 +218,7 @@ function Prompt(props: { context: ModuleContext }) {
 	return (
 		<box flexDirection="column">
 			<text fg={props.context.theme.muted}>
-				{props.context.pi.working ? "Working…" : " "}
+				{props.context.pi.working ? `${spinner()}Working…` : " "}
 			</text>
 			<textarea
 				ref={(element: TextareaRenderable) => {

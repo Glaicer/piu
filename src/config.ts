@@ -13,6 +13,7 @@ export type Config = {
 	placement: Placement;
 	modules: Readonly<Record<string, ModuleSettings>>;
 	keybindings: Keybindings;
+	animations: boolean;
 };
 
 export const defaultConfig: Omit<Config, "keybindings"> & {
@@ -65,6 +66,7 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 		side: [],
 	},
 	modules: {},
+	animations: true,
 	keybindings: {
 		"focus.next": "tab",
 		"focus.previous": "shift+tab",
@@ -97,6 +99,10 @@ export function loadConfig(path: string): Config {
 		modules: parseModules(mergeObjects(defaultConfig.modules, user.modules)),
 		keybindings: parseKeybindings(
 			mergeObjects(defaultConfig.keybindings, user.keybindings),
+		),
+		animations: boolean(
+			user.animations ?? defaultConfig.animations,
+			"animations",
 		),
 	};
 }
@@ -271,6 +277,11 @@ function array(value: unknown, path: string): unknown[] {
 function string(value: unknown, path: string): string {
 	if (typeof value === "string") return value;
 	throw fieldError(path, `expected a string, got ${describe(value)}`);
+}
+
+function boolean(value: unknown, path: string): boolean {
+	if (typeof value === "boolean") return value;
+	throw fieldError(path, `expected true or false, got ${describe(value)}`);
 }
 
 function stringArray(value: unknown, path: string): string[] {

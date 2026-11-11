@@ -1,6 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import type { JSX } from "@opentui/solid";
 import type { Accessor } from "solid-js";
+import type { Animate } from "./animate.ts";
 import type { Channel } from "./channel.ts";
 import type { Keybindings } from "./keybindings.ts";
 import type { ModalRequest } from "./modal.tsx";
@@ -40,6 +41,7 @@ export type ModuleContext = {
 	readonly settings: ModuleSettings;
 	readonly channel: Channel;
 	readonly keybindings: Keybindings;
+	readonly animate: Animate;
 	onCleanup(cleanup: () => void): void;
 	onKey(handler: (event: KeyEvent) => void): void;
 	holdFocusKeys(active: Accessor<boolean>): void;
