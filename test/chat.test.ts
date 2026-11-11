@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getTreeSitterClient, RGBA } from "@opentui/core";
-import { defaultTheme } from "../src/theme.ts";
+import { darkTheme } from "../src/theme.ts";
 import { panelText, startPiu } from "./harness.ts";
 
 const FAUX_CHARS_PER_TOKEN = 4;
@@ -74,7 +74,7 @@ test("a reply with headings, lists, a table and code renders without raw Markdow
 
 test("a keyword in a code block is drawn in the keyword colour", async () => {
 	await using piu = await startPiu({ script: { replies: [formatted] } });
-	const keyword = RGBA.fromHex(defaultTheme.accent);
+	const keyword = RGBA.fromHex(darkTheme.accent);
 
 	await piu.mockInput.typeText("Notes");
 	piu.mockInput.pressEnter();

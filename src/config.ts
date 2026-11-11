@@ -4,6 +4,7 @@ import { type Keybindings, parseChord } from "./keybindings.ts";
 import type { Size, Slot } from "./layout.tsx";
 import type { ModuleSettings } from "./module.ts";
 import { StartupError } from "./startup-error.ts";
+import { isThemeToken, type ThemeOverrides, themeTokens } from "./theme.ts";
 
 export type Placement = Readonly<Record<string, readonly string[]>>;
 
@@ -13,6 +14,7 @@ export type Config = {
 	placement: Placement;
 	modules: Readonly<Record<string, ModuleSettings>>;
 	keybindings: Keybindings;
+	theme: ThemeOverrides;
 	animations: boolean;
 };
 
@@ -66,6 +68,7 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 		side: [],
 	},
 	modules: {},
+	theme: {},
 	animations: true,
 	keybindings: {
 		"focus.next": "tab",
@@ -100,6 +103,7 @@ export function loadConfig(path: string): Config {
 		keybindings: parseKeybindings(
 			mergeObjects(defaultConfig.keybindings, user.keybindings),
 		),
+		theme: parseTheme(mergeObjects(defaultConfig.theme, user.theme)),
 		animations: boolean(
 			user.animations ?? defaultConfig.animations,
 			"animations",
@@ -247,6 +251,25 @@ function parseKeybindings(value: unknown): Keybindings {
 				);
 			}
 			return [action, chord];
+		}),
+	);
+}
+
+function parseTheme(value: unknown): ThemeOverrides {
+	return Object.fromEntries(
+		Object.entries(object(value, "theme")).map(([name, color]) => {
+			const path = `theme.${name}`;
+			if (!isThemeToken(name)) {
+				throw fieldError(path, `expected one of ${themeTokens.join(", ")}`);
+			}
+			const hex = string(color, path);
+			if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+				throw fieldError(
+					path,
+					`expected a color like "#7aa2f7", got ${JSON.stringify(hex)}`,
+				);
+			}
+			return [name, hex];
 		}),
 	);
 }

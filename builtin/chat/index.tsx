@@ -1,5 +1,5 @@
 import type { SyntaxStyle } from "@opentui/core";
-import { createMemo, For, Index } from "solid-js";
+import { createMemo, For, Index, onCleanup } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
 import type { PiMessage, ServiceRow } from "../../src/pi-state.ts";
@@ -19,13 +19,16 @@ import {
 function Messages(props: { context: ModuleContext }) {
 	const theme = props.context.theme;
 	const pi = props.context.pi;
-	const syntaxStyle = createSyntaxStyle(theme);
+	const syntaxStyle = createMemo(() => {
+		const style = createSyntaxStyle(theme);
+		onCleanup(() => style.destroy());
+		return style;
+	});
 	const resultFor = (id: string) =>
 		pi.messages.find(
 			(message): message is ToolResultMessage =>
 				message.role === "toolResult" && message.toolCallId === id,
 		);
-	props.context.onCleanup(() => syntaxStyle.destroy());
 	const selection = createSelection();
 	props.context.onKey((event) => {
 		if (event.name === "return") {
@@ -55,7 +58,7 @@ function Messages(props: { context: ModuleContext }) {
 											blockIndex === message.content.length - 1
 										}
 										selection={selection}
-										syntaxStyle={syntaxStyle}
+										syntaxStyle={syntaxStyle()}
 										theme={theme}
 										animate={props.context.animate}
 									/>

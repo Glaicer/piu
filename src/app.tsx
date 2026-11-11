@@ -11,7 +11,7 @@ import { SlotView } from "./layout.tsx";
 import { createModals, ModalLayer } from "./modal.tsx";
 import type { Command, CommandContext, PlacedModule } from "./module.ts";
 import { createPiState } from "./pi-state.ts";
-import { defaultTheme } from "./theme.ts";
+import { createTheme } from "./theme.ts";
 import { createToasts, ToastLayer } from "./toast.tsx";
 
 export async function createApp(options: {
@@ -46,6 +46,7 @@ function App(props: {
 	commands: readonly Command[];
 }) {
 	const renderer = useRenderer();
+	const theme = createTheme(renderer, props.config.theme);
 	const animate = createAnimate(renderer, props.config.animations);
 	const toasts = createToasts(animate, renderer.clock);
 	onCleanup(toasts.dispose);
@@ -68,7 +69,7 @@ function App(props: {
 	const commandContext: CommandContext = {
 		pi: pi.state,
 		actions: { ...pi.actions, openModal: modals.open, showToast: toasts.show },
-		theme: defaultTheme,
+		theme,
 	};
 	const focus = createPanelFocus();
 	const commands = props.commands.map((command) => ({
@@ -101,7 +102,7 @@ function App(props: {
 		}
 	});
 	return (
-		<box width="100%" height="100%" backgroundColor={defaultTheme.surface}>
+		<box width="100%" height="100%" backgroundColor={theme.surface}>
 			<SlotView
 				slot={props.config.layout}
 				parentDirection="column"
@@ -109,7 +110,7 @@ function App(props: {
 				context={context}
 			/>
 			<ModalLayer modals={modals} context={context} />
-			<ToastLayer toasts={toasts} theme={defaultTheme} />
+			<ToastLayer toasts={toasts} theme={theme} />
 		</box>
 	);
 }

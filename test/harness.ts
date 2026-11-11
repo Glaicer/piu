@@ -8,6 +8,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { JsonObject } from "@earendil-works/pi-ai";
+import type { ThemeMode } from "@opentui/core";
 import type { ManualClock } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createApp } from "../src/app.tsx";
@@ -63,6 +64,18 @@ export function inputArea(frame: string) {
 	return panelText(frame, 10, lastRow - 4);
 }
 
+// why: a terminal tells the renderer its background with an OSC 11 reply on stdin, and the renderer works out light or dark from its brightness.
+function reportTerminalBackground(
+	renderer: { stdin: NodeJS.ReadStream },
+	mode: ThemeMode,
+) {
+	const level = mode === "light" ? "ffff" : "0000";
+	renderer.stdin.emit(
+		"data",
+		Buffer.from(`\x1b]11;rgb:${level}/${level}/${level}\x07`),
+	);
+}
+
 export async function startPiu(options: {
 	script: FauxScript;
 	args?: string[];
@@ -78,6 +91,7 @@ export async function startPiu(options: {
 	height?: number;
 	kittyKeyboard?: boolean;
 	clock?: ManualClock;
+	terminalBackground?: ThemeMode;
 }) {
 	const dir = options.dir ?? mkdtempSync(join(tmpdir(), "piu-test-"));
 	const scriptPath = join(dir, "script.json");
@@ -157,6 +171,10 @@ export async function startPiu(options: {
 		clock: options.clock,
 	});
 
+	if (options.terminalBackground) {
+		reportTerminalBackground(setup.renderer, options.terminalBackground);
+	}
+
 	async function waitForFrame(
 		predicate: (frame: string) => boolean,
 		timeoutMs = 4000,
@@ -177,6 +195,8 @@ export async function startPiu(options: {
 		...setup,
 		dir,
 		waitForFrame,
+		reportTerminalBackground: (mode: ThemeMode) =>
+			reportTerminalBackground(setup.renderer, mode),
 		async [Symbol.asyncDispose]() {
 			await setup.dispose();
 			removeDir();
