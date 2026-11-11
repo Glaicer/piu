@@ -4,6 +4,11 @@ import { useKeyboard, useRenderer } from "@opentui/solid";
 import { createEffect, onCleanup } from "solid-js";
 import { createAnimate } from "./animate.ts";
 import { startBackend } from "./backend.ts";
+import {
+	startUpdateCheck,
+	type UpdateCheckOptions,
+} from "./backend-updates.ts";
+import { changelogModal } from "./changelog.tsx";
 import { type Config, loadConfig } from "./config.ts";
 import { bridgeDialogs } from "./dialogs.tsx";
 import { builtinDir, findExtensions, resolvePlacement } from "./extensions.ts";
@@ -21,6 +26,7 @@ import { createTheme } from "./theme.ts";
 import { createToasts, ToastLayer } from "./toast.tsx";
 
 export type ExitRequest = { readonly restartArgs?: readonly string[] };
+const UPDATE_NOTICE_MS = 12_000;
 
 // why: OpenTUI focuses the nearest focusable ancestor of a clicked element, which would take the keyboard away from the input; only a click on a text field may move the focus.
 function keepFocus(event: MouseEvent) {
@@ -35,6 +41,7 @@ export async function createApp(options: {
 	args: string[];
 	cwd?: string;
 	exit: (request: ExitRequest) => void;
+	updateCheck?: UpdateCheckOptions;
 }) {
 	const cwd = options.cwd ?? process.cwd();
 	const home = piuHome();
@@ -59,6 +66,9 @@ export async function createApp(options: {
 			cwd={cwd}
 			panels={panels}
 			commands={commands}
+			updateCheck={options.updateCheck ?? { fetch }}
+			env={{ ...process.env }}
+			home={home}
 		/>
 	);
 }
@@ -72,6 +82,9 @@ function App(props: {
 	cwd: string;
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	commands: readonly Command[];
+	updateCheck: UpdateCheckOptions;
+	env: NodeJS.ProcessEnv;
+	home: string;
 }) {
 	const renderer = useRenderer();
 	const theme = createTheme(renderer, props.config.theme);
@@ -90,6 +103,24 @@ function App(props: {
 	);
 	onCleanup(pi.dispose);
 	const modals = createModals(animate);
+	if (props.updateCheck) {
+		onCleanup(
+			startUpdateCheck(
+				{
+					config: props.config.backend,
+					cwd: props.cwd,
+					home: props.home,
+					env: props.env,
+					fetch: props.updateCheck.fetch,
+				},
+				{
+					notify: (message) => toasts.show(message, "info", UPDATE_NOTICE_MS),
+					showChangelog: (markdown, onSeen) =>
+						modals.open(changelogModal(markdown, onSeen)),
+				},
+			),
+		);
+	}
 	bridgeDialogs(pi, modals);
 	createEffect(() => {
 		if (pi.state.title !== null) renderer.setTerminalTitle(pi.state.title);

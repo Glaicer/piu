@@ -13,6 +13,7 @@ import type { ThemeMode } from "@opentui/core";
 import type { ManualClock } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createApp, type ExitRequest } from "../src/app.tsx";
+import type { UpdateCheckOptions } from "../src/backend-updates.ts";
 import "./hooks.ts";
 
 const piBin = join(import.meta.dir, "../node_modules/.bin/pi");
@@ -97,6 +98,8 @@ export type FixtureOptions = {
 	promptTemplates?: Record<string, string>;
 	installedPiExtensions?: string[];
 	backendEnv?: Record<string, string>;
+	backendCommand?: string;
+	updateCheck?: UpdateCheckOptions;
 	dir?: string;
 	config?: unknown;
 	extensions?: string;
@@ -137,7 +140,7 @@ export function prepareFixture(options: FixtureOptions) {
 		/API_KEY|_TOKEN|_SECRET/.test(name),
 	);
 	const backend = {
-		command: "env",
+		command: options.backendCommand ?? "env",
 		args: [
 			`PI_CODING_AGENT_DIR=${join(dir, "agent")}`,
 			...credentialVars.map((name) => `${name}=`),
@@ -206,6 +209,7 @@ export async function startPiu(
 			cwd: options.cwd ?? dir,
 			args: options.args ?? ["--model", "faux/faux-1"],
 			exit: (request) => exits.push(request),
+			updateCheck: options.updateCheck ?? false,
 		});
 	} catch (error) {
 		removeDir();
