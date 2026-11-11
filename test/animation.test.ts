@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { ManualClock } from "@opentui/core/testing";
 import { type FauxScript, startPiu } from "./harness.ts";
+import { hooks } from "./hooks.ts";
 
 const none: FauxScript = { replies: [] };
 
@@ -102,10 +103,44 @@ for (const animations of [true, false]) {
 		await clickText(app.piu, "faux-1");
 		await app.frame();
 		await clickText(app.piu, "faux-2");
+		const closed = await app.frame();
+		expect([...closed.matchAll(/┌─ ([\w-]+) /g)].map((m) => m[1])).toEqual([
+			"input",
+		]);
+		expect(closed).not.toContain("faux-1");
 		await app.piu.mockInput.typeText("draft");
 		const frame = await app.frame();
 		expect(frame).toContain("draft");
-		expect(frame).not.toContain("faux-1");
+	});
+
+	test(`programmatically closing a Modal removes it on the first frame (animations ${animations})`, async () => {
+		await using app = await start({
+			animations,
+			extensions: join(import.meta.dir, "fixtures/extensions"),
+			config: { placement: { status: ["model.current", "probe.capture"] } },
+		});
+		const close = hooks.probe.actions?.openModal({
+			slot: {
+				kind: "panel",
+				id: "programmatic",
+				direction: "column",
+				size: "rest",
+			},
+			panels: new Map([["programmatic", []]]),
+			width: 20,
+			height: 3,
+			left: 4,
+			top: 2,
+		});
+		expect(close).toBeFunction();
+		const border = `┌${"─".repeat(18)}┐`;
+		expect((await app.frame()).split("\n")[2]?.slice(4, 24)).toBe(border);
+		close?.();
+		const closed = await app.frame();
+		expect(closed.split("\n")[2]?.slice(4, 24)).not.toBe(border);
+		expect([...closed.matchAll(/┌─ ([\w-]+) /g)].map((m) => m[1])).toEqual([
+			"input",
+		]);
 	});
 
 	test(`Esc immediately closes only the top Modal (animations ${animations})`, async () => {
