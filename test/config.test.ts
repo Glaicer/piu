@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startPiu } from "./harness.ts";
-import { loaded } from "./loaded.ts";
+import { hooks } from "./hooks.ts";
 
-const extensionsDir = join(import.meta.dir, "fixtures/extensions");
+const extensions = join(import.meta.dir, "fixtures/extensions");
 const clashDir = join(import.meta.dir, "fixtures/extensions-clash");
 const dupCommandDir = join(import.meta.dir, "fixtures/extensions-dup-command");
 const dotDir = join(import.meta.dir, "fixtures/extensions-dot");
@@ -18,7 +19,7 @@ function lineOf(frame: string, text: string) {
 test("a config that reorders one Panel changes the order without copying the Layout", async () => {
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		config: { placement: { side: ["greeter.bye", "greeter.hello"] } },
 	});
 
@@ -235,7 +236,7 @@ test.each([
 	"%s stops startup with an error naming the field path",
 	async (_name, config, path) => {
 		await expect(
-			startPiu({ script: none, extensionsDir, config }),
+			startPiu({ script: none, extensions, config }),
 		).rejects.toThrow(path);
 	},
 );
@@ -255,7 +256,7 @@ test("a config.json that is not valid JSON stops startup with a readable error",
 test("an Extension in extensions/ is rendered when placed and not loaded when not placed", async () => {
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		config: {
 			placement: { side: ["greeter.hello"] },
 			modules: { "greeter.hello": { name: "Ada" } },
@@ -263,33 +264,40 @@ test("an Extension in extensions/ is rendered when placed and not loaded when no
 	});
 
 	await piu.waitForFrame((f) => f.includes("Hello Ada"));
-	expect(loaded).not.toContain("lazy");
+	expect(hooks.loaded).not.toContain("lazy");
 });
 
 test("an Extension without a Modules list stops startup naming the Extension", async () => {
 	await expect(
 		startPiu({
 			script: none,
-			extensionsDir,
+			extensions,
 			config: { placement: { side: ["broken.anything"] } },
 		}),
 	).rejects.toThrow('Extension "broken"');
 });
 
 test("the same Extension name in builtin/ and extensions/ fails startup naming both paths", async () => {
-	const error = await startPiu({ script: none, extensionsDir: clashDir }).then(
+	const dir = mkdtempSync(join(tmpdir(), "piu-test-"));
+	const error = await startPiu({
+		script: none,
+		dir,
+		extensions: clashDir,
+	}).then(
 		() => undefined,
 		(e: Error) => e,
 	);
 
-	expect(error?.message).toContain(join(clashDir, "chat"));
+	rmSync(dir, { recursive: true, force: true });
+
+	expect(error?.message).toContain(join(dir, "extensions/chat"));
 	expect(error?.message).toContain(join(import.meta.dir, "../builtin/chat"));
 });
 
 test("two enabled Extensions defining the same command name fail startup naming both", async () => {
 	const error = await startPiu({
 		script: none,
-		extensionsDir: dupCommandDir,
+		extensions: dupCommandDir,
 		config: { placement: { side: ["first.tag", "second.tag"] } },
 	}).then(
 		() => undefined,
@@ -302,10 +310,13 @@ test("two enabled Extensions defining the same command name fail startup naming 
 });
 
 test("an Extension folder with a dot in its name fails startup naming its path", async () => {
-	const error = await startPiu({ script: none, extensionsDir: dotDir }).then(
+	const dir = mkdtempSync(join(tmpdir(), "piu-test-"));
+	const error = await startPiu({ script: none, dir, extensions: dotDir }).then(
 		() => undefined,
 		(e: Error) => e,
 	);
 
-	expect(error?.message).toContain(join(dotDir, "my.ext"));
+	rmSync(dir, { recursive: true, force: true });
+
+	expect(error?.message).toContain(join(dir, "extensions/my.ext"));
 });

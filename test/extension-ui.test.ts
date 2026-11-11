@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 import { inputArea, panelText, startPiu } from "./harness.ts";
-import { probe } from "./probe.ts";
+import { hooks } from "./hooks.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 type UiArgs = Record<string, string | number | string[]>;
@@ -336,12 +336,12 @@ test("a dialog raised by a tool that is then aborted disappears, and the run end
 			options: ["A", "B"],
 		}),
 		config: { placement: { status: ["probe.capture"] } },
-		extensionsDir: join(import.meta.dir, "fixtures/extensions"),
+		extensions: join(import.meta.dir, "fixtures/extensions"),
 	});
 	await send(piu, "go");
 	await piu.waitForFrame((f) => f.includes("Doomed question"));
 
-	await probe.actions?.abort();
+	await hooks.probe.actions?.abort();
 	await piu.waitForFrame(
 		(f) => !f.includes("Doomed question") && !inputArea(f).includes("Working"),
 	);

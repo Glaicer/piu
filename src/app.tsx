@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { EditBufferRenderable, type MouseEvent } from "@opentui/core";
 import { useKeyboard, useRenderer } from "@opentui/solid";
 import { createEffect, onCleanup } from "solid-js";
@@ -7,6 +8,7 @@ import { type Config, loadConfig } from "./config.ts";
 import { bridgeDialogs } from "./dialogs.tsx";
 import { builtinDir, findExtensions, resolvePlacement } from "./extensions.ts";
 import { createPanelFocus } from "./focus.ts";
+import { piuHome } from "./home.ts";
 import { commandAction, matches } from "./keybindings.ts";
 import { SlotView } from "./layout.tsx";
 import { createModals, ModalLayer } from "./modal.tsx";
@@ -24,15 +26,11 @@ function keepFocus(event: MouseEvent) {
 	}
 }
 
-export async function createApp(options: {
-	configPath: string;
-	extensionsDir: string;
-	args: string[];
-	cwd?: string;
-}) {
+export async function createApp(options: { args: string[]; cwd?: string }) {
 	const cwd = options.cwd ?? process.cwd();
-	const config = loadConfig(options.configPath);
-	const folders = findExtensions([builtinDir, options.extensionsDir]);
+	const home = piuHome();
+	const config = loadConfig(join(home, "config.json"));
+	const folders = findExtensions([builtinDir, join(home, "extensions")]);
 	const { panels, commands, channelTitles, piExtensions } =
 		await resolvePlacement(config, folders);
 	return () => (

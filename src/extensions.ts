@@ -1,10 +1,14 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support";
 import { channelTitle } from "./channel.ts";
 import { type Config, defaultConfig, fieldError } from "./config.ts";
 import { commandAction } from "./keybindings.ts";
 import type { Command, Extension, Module, PlacedModule } from "./module.ts";
 import { StartupError } from "./startup-error.ts";
+
+// why: a personal Extension has no node_modules, so its solid-js, solid-js/store and @opentui/* imports must resolve to the app's own instances.
+ensureRuntimePluginSupport();
 
 export const builtinDir = join(import.meta.dir, "../builtin");
 

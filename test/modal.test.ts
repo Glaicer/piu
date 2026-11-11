@@ -5,7 +5,7 @@ import { type FauxScript, startPiu } from "./harness.ts";
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
 const none: FauxScript = { replies: [] };
-const extensionsDir = join(import.meta.dir, "fixtures/extensions");
+const extensions = join(import.meta.dir, "fixtures/extensions");
 const modelConfig = {
 	placement: { status: ["model.current", "reasoning.level"] },
 };
@@ -138,7 +138,7 @@ test("Esc closes the Modal and does not abort a running agent", async () => {
 test("a Modal opened from a Modal stacks, and Esc closes only the top one", async () => {
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		config: { placement: { status: ["stacker.opener"] } },
 	});
 
@@ -162,7 +162,7 @@ test("a Modal opened from a Modal stacks, and Esc closes only the top one", asyn
 test("typing is held back from the input even when nothing in the Modal takes keys", async () => {
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		config: { placement: { status: ["stacker.opener"] } },
 	});
 	await piu.mockInput.typeText("draft");
@@ -198,7 +198,7 @@ test("the model picker works from the keyboard: Down moves, Enter picks", async 
 test("a click outside a stacked Modal closes only the top one", async () => {
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		config: { placement: { status: ["stacker.opener"] } },
 	});
 	await piu.waitForFrame((f) => f.includes("open outer"));

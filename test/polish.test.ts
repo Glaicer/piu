@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { panelText, startPiu } from "./harness.ts";
-import { probe } from "./probe.ts";
+import { hooks } from "./hooks.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -18,11 +18,11 @@ test("a refused model switch shows Pi's error in a Toast and keeps the shown mod
 	await using piu = await startPiu({
 		script: { replies: [] },
 		config: { placement: { side: ["probe.capture"] } },
-		extensionsDir: join(import.meta.dir, "fixtures/extensions"),
+		extensions: join(import.meta.dir, "fixtures/extensions"),
 	});
 	await piu.waitForFrame((f) => statusPanel(f).includes("faux-1"));
 
-	await probe.actions?.setModel({
+	await hooks.probe.actions?.setModel({
 		provider: "faux",
 		id: "missing",
 		name: "Missing",
@@ -75,8 +75,8 @@ test("an automatic compaction leaves the chat matching Pi's messages", async () 
 	await using piu = await startPiu({
 		script: {
 			replies: ["Answer one", "Answer two", "Summary one", "Summary two"],
-			// why: the system prompt alone is about 3290 tokens, so this window is crossed only once the second turn is in the context.
-			contextWindow: 3300,
+			// why: the system prompt alone is about 3310 tokens, so this window is crossed only once the second turn is in the context.
+			contextWindow: 3320,
 		},
 	});
 	await send(piu, "First question");

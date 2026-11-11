@@ -1,5 +1,6 @@
 import {
 	copyFileSync,
+	cpSync,
 	mkdirSync,
 	mkdtempSync,
 	rmSync,
@@ -12,6 +13,7 @@ import type { ThemeMode } from "@opentui/core";
 import type { ManualClock } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createApp } from "../src/app.tsx";
+import "./hooks.ts";
 
 const piBin = join(import.meta.dir, "../node_modules/.bin/pi");
 const fauxBackend = join(import.meta.dir, "fixtures/faux-backend.ts");
@@ -80,6 +82,13 @@ function reportTerminalBackground(
 	);
 }
 
+export function restoreEnv(saved: Record<string, string | undefined>) {
+	for (const [name, value] of Object.entries(saved)) {
+		if (value === undefined) delete process.env[name];
+		else process.env[name] = value;
+	}
+}
+
 export async function startPiu(options: {
 	script: FauxScript;
 	args?: string[];
@@ -90,7 +99,8 @@ export async function startPiu(options: {
 	installedPiExtensions?: string[];
 	dir?: string;
 	config?: unknown;
-	extensionsDir?: string;
+	extensions?: string;
+	homeFromHomeDir?: boolean;
 	width?: number;
 	height?: number;
 	kittyKeyboard?: boolean;
@@ -143,9 +153,14 @@ export async function startPiu(options: {
 			...(options.extraBackendArgs ?? []),
 		],
 	};
-	const configPath = join(dir, "config.json");
+	// why: PIU_HOME is a folder outside the repo, so a fixture Extension is copied in and runs where a user's would; with homeFromHomeDir the app finds it as $HOME/.piu instead.
+	const home = options.homeFromHomeDir ? join(dir, ".piu") : dir;
+	mkdirSync(home, { recursive: true });
+	if (options.extensions) {
+		cpSync(options.extensions, join(home, "extensions"), { recursive: true });
+	}
 	writeFileSync(
-		configPath,
+		join(home, "config.json"),
 		typeof options.config === "string"
 			? options.config
 			: JSON.stringify(withBackend(backend, options.config)),
@@ -155,17 +170,24 @@ export async function startPiu(options: {
 		if (!options.dir) rmSync(dir, { recursive: true, force: true });
 	};
 
+	const savedEnv = { HOME: process.env.HOME, PIU_HOME: process.env.PIU_HOME };
+	if (options.homeFromHomeDir) {
+		process.env.HOME = dir;
+		delete process.env.PIU_HOME;
+	} else {
+		process.env.PIU_HOME = home;
+	}
 	let view: Awaited<ReturnType<typeof createApp>>;
 	try {
 		view = await createApp({
-			configPath,
-			extensionsDir: options.extensionsDir ?? join(dir, "extensions"),
 			cwd: options.cwd,
 			args: options.args ?? ["--model", "faux/faux-1"],
 		});
 	} catch (error) {
 		removeDir();
 		throw error;
+	} finally {
+		restoreEnv(savedEnv);
 	}
 	const setup = await testRender(view, {
 		width: options.width ?? 160,

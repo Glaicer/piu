@@ -15,7 +15,7 @@ export function BackendCard(props: {
 		if (health.status === "not-found") {
 			return (
 				<text fg={props.context.theme.error}>
-					{`Backend command "${health.command}" was not found. Set backend.command in config.json to a program that exists.`}
+					{`Backend command "${health.command}" was not found. Set backend.command in your piu config.json to a program that exists.`}
 				</text>
 			);
 		}

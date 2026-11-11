@@ -1,7 +1,6 @@
 import type { Extension, ModuleContext } from "../../../../src/module.ts";
-import { loaded } from "../../../loaded.ts";
 
-loaded.push("greeter");
+globalThis.piuTestHooks.loaded.push("greeter");
 
 function Hello(props: { context: ModuleContext }) {
 	return <text>{`Hello ${props.context.settings.name}`}</text>;

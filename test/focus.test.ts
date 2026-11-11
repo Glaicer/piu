@@ -25,7 +25,7 @@ async function clickAndStay(
 	expect(focusedPanels(piu.captureCharFrame())).toEqual(["input"]);
 }
 
-const extensionsDir = join(import.meta.dir, "fixtures/extensions");
+const extensions = join(import.meta.dir, "fixtures/extensions");
 
 test("Tab moves the focus indication through the Panels that take keys in Layout order and wraps around", async () => {
 	await using piu = await startPiu({ script: none });
@@ -55,7 +55,7 @@ test("a Panel whose Module handles keys is part of the Tab order", async () => {
 	await using piu = await startPiu({
 		script: none,
 		config: sideHasModule,
-		extensionsDir,
+		extensions,
 	});
 
 	await focusedAfter(piu, "input");
@@ -80,7 +80,7 @@ test("Tab skips a Panel hidden below its hideBelow width", async () => {
 	await using piu = await startPiu({
 		script: none,
 		config: sideHasModule,
-		extensionsDir,
+		extensions,
 		width: 100,
 	});
 

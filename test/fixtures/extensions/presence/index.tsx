@@ -1,19 +1,18 @@
 import type { Extension } from "../../../../src/module.ts";
-import { follower, note, takeover } from "../../../presence.ts";
 
 export default {
 	modules: [
 		{
 			id: "note",
 			render: (context) => {
-				context.reportPresence(note);
+				context.reportPresence(globalThis.piuTestHooks.note);
 				return <text>Note</text>;
 			},
 		},
 		{
 			id: "takeover",
 			render: (context) => {
-				context.reportPresence(takeover);
+				context.reportPresence(globalThis.piuTestHooks.takeover);
 				return <text>Takeover</text>;
 			},
 		},
@@ -21,7 +20,7 @@ export default {
 			id: "follower",
 			followsOutput: true,
 			render: (context) => {
-				context.reportPresence(follower);
+				context.reportPresence(globalThis.piuTestHooks.follower);
 				return <text>Follower</text>;
 			},
 		},

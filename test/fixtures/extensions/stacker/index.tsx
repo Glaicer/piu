@@ -1,5 +1,17 @@
-import { moduleModal } from "../../../../src/modal.tsx";
-import type { Extension } from "../../../../src/module.ts";
+import type { ModalRequest } from "../../../../src/modal.tsx";
+import type { Extension, Module } from "../../../../src/module.ts";
+
+function moduleModal(
+	module: Module,
+	size: { width: number; height: number; left?: number; top?: number },
+): ModalRequest {
+	const id = `modal-${module.id}`;
+	return {
+		slot: { kind: "panel", id, direction: "column", size: "rest" },
+		panels: new Map([[id, [{ id, module, settings: {} }]]]),
+		...size,
+	};
+}
 
 function inner() {
 	return moduleModal(

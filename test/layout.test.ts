@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { startPiu } from "./harness.ts";
-import { setFollower, setNote, setTakeover } from "./presence.ts";
+import { hooks } from "./hooks.ts";
 
-const extensionsDir = join(import.meta.dir, "fixtures/extensions");
+const extensions = join(import.meta.dir, "fixtures/extensions");
 const none = { replies: [] };
 
 function panel(id: string, size: unknown, extra: object = {}) {
@@ -31,7 +31,7 @@ function cornerRows(frame: string, column: number) {
 test("fixed, percentage, rest and minSize sizes divide the screen as written", async () => {
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		width: 100,
 		height: 30,
 		config: {
@@ -92,7 +92,7 @@ test("the default second column is absent below 120 columns and returns on resiz
 test("a row Panel shows its Modules side by side", async () => {
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		config: {
 			layout: panel("strip", "rest", { direction: "row" }),
 			placement: { strip: ["greeter.hello", "greeter.bye"] },
@@ -107,7 +107,7 @@ test("a row Panel shows its Modules side by side", async () => {
 test("the wheel scrolls the Panel under the pointer, not the focused one", async () => {
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		width: 100,
 		config: {
 			layout: {
@@ -152,10 +152,10 @@ test("the wheel scrolls the Panel under the pointer, not the focused one", async
 });
 
 test("a hidden Module takes no rows and a shown one takes its own", async () => {
-	setNote("hidden");
+	hooks.setNote("hidden");
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		config: {
 			layout: panel("stack", "rest"),
 			placement: { stack: ["greeter.hello", "presence.note", "greeter.bye"] },
@@ -167,16 +167,16 @@ test("a hidden Module takes no rows and a shown one takes its own", async () => 
 	expect(hidden).not.toContain("Note");
 	expect(lineOf(hidden, "Bye")).toBe(lineOf(hidden, "Hello Ada") + 1);
 
-	setNote("shown");
+	hooks.setNote("shown");
 	const shown = await piu.waitForFrame((f) => f.includes("Note"));
 	expect(lineOf(shown, "Bye")).toBe(lineOf(shown, "Hello Ada") + 2);
 });
 
 test("a content-sized Panel fits its shown Modules and takes no rows when they are all hidden", async () => {
-	setNote("hidden");
+	hooks.setNote("hidden");
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		config: {
 			layout: {
 				kind: "container",
@@ -207,16 +207,16 @@ test("a content-sized Panel fits its shown Modules and takes no rows when they a
 	const hidden = await piu.waitForFrame((f) => f.includes("Bye"));
 	expect(cornerRows(hidden, 0)).toEqual([0, 27]);
 
-	setNote("shown");
+	hooks.setNote("shown");
 	const shown = await piu.waitForFrame((f) => f.includes("Note"));
 	expect(cornerRows(shown, 0)).toEqual([0, 3, 27]);
 });
 
 test("an exclusive Module hides its siblings until it stops claiming the Panel", async () => {
-	setTakeover("hidden");
+	hooks.setTakeover("hidden");
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		config: {
 			layout: panel("stack", "rest"),
 			placement: {
@@ -227,12 +227,12 @@ test("an exclusive Module hides its siblings until it stops claiming the Panel",
 	});
 	await piu.waitForFrame((f) => f.includes("Hello Ada") && f.includes("Bye"));
 
-	setTakeover("exclusive");
+	hooks.setTakeover("exclusive");
 	const claimed = await piu.waitForFrame((f) => f.includes("Takeover"));
 	expect(claimed).not.toContain("Hello Ada");
 	expect(claimed).not.toContain("Bye");
 
-	setTakeover("hidden");
+	hooks.setTakeover("hidden");
 	const released = await piu.waitForFrame((f) => !f.includes("Takeover"));
 	expect(released).toContain("Hello Ada");
 	expect(released).toContain("Bye");
@@ -241,7 +241,7 @@ test("an exclusive Module hides its siblings until it stops claiming the Panel",
 test("the default input area has a row Panel for status Modules below the input", async () => {
 	await using piu = await startPiu({
 		script: none,
-		extensionsDir,
+		extensions,
 		config: {
 			placement: { status: ["greeter.hello", "greeter.bye"] },
 			modules: { "greeter.hello": { name: "Ada" } },
@@ -258,10 +258,10 @@ test("the default input area has a row Panel for status Modules below the input"
 
 test("a Panel follows output only when a Module that follows output is visible in it", async () => {
 	const start = (presence: "hidden" | "shown") => {
-		setFollower(presence);
+		hooks.setFollower(presence);
 		return startPiu({
 			script: none,
-			extensionsDir,
+			extensions,
 			config: {
 				layout: panel("stack", "rest"),
 				placement: { stack: ["scroll.alpha", "presence.follower"] },
