@@ -29,9 +29,17 @@ export function findExtensions(roots: readonly string[]): ExtensionFolders {
 
 function extensionNames(root: string) {
 	if (!existsSync(root)) return [];
-	return readdirSync(root).filter((name) =>
+	const names = readdirSync(root).filter((name) =>
 		statSync(join(root, name)).isDirectory(),
 	);
+	for (const name of names) {
+		if (name.includes(".")) {
+			throw new StartupError(
+				`Extension folder ${join(root, name)} has a dot in its name, so Modules in it can't be addressed as <extension>.<module>`,
+			);
+		}
+	}
+	return names;
 }
 
 export async function resolvePlacement(

@@ -7,6 +7,7 @@ import { loaded } from "./loaded.ts";
 const extensionsDir = join(import.meta.dir, "fixtures/extensions");
 const clashDir = join(import.meta.dir, "fixtures/extensions-clash");
 const dupCommandDir = join(import.meta.dir, "fixtures/extensions-dup-command");
+const dotDir = join(import.meta.dir, "fixtures/extensions-dot");
 const wrapper = join(import.meta.dir, "fixtures/backend-wrapper.sh");
 const none = { replies: [] };
 
@@ -163,6 +164,68 @@ test.each([
 		{ keybindings: { "focus.next": "constructor+tab" } },
 		"keybindings.focus.next",
 	],
+	["a misspelled top-level key", { palcement: {} }, "palcement"],
+	[
+		"a misspelled key inside backend",
+		{ backend: { comand: "pi" } },
+		"backend.comand",
+	],
+	[
+		"a misspelled key in a Layout Slot",
+		{
+			layout: {
+				kind: "container",
+				id: "root",
+				direction: "row",
+				size: "rest",
+				children: [
+					{
+						kind: "panel",
+						id: "p",
+						direction: "column",
+						size: "rest",
+						hidebelow: 80,
+					},
+				],
+			},
+		},
+		"layout.children[0].hidebelow",
+	],
+	[
+		"children on a Panel",
+		{
+			layout: {
+				kind: "panel",
+				id: "p",
+				direction: "column",
+				size: "rest",
+				children: [],
+			},
+		},
+		"layout.children",
+	],
+	[
+		"a layout whose Panels the default Placement does not cover",
+		{
+			layout: { kind: "panel", id: "solo", direction: "column", size: "rest" },
+		},
+		"no Module is placed",
+	],
+	[
+		"an empty Placement",
+		{ placement: { agent: [], input: [], status: [], side: [] } },
+		"no Module is placed",
+	],
+	[
+		"a key name OpenTUI never reports (esc)",
+		{ keybindings: { "focus.next": "esc" } },
+		"keybindings.focus.next",
+	],
+	[
+		"a key name OpenTUI never reports (ctrl+enter)",
+		{ keybindings: { "input.newline": "ctrl+enter" } },
+		"keybindings.input.newline",
+	],
 	[
 		"a settings entry that is not an object",
 		{ modules: { "chat.messages": 3 } },
@@ -236,4 +299,13 @@ test("two enabled Extensions defining the same command name fail startup naming 
 	expect(error?.message).toContain("/twice");
 	expect(error?.message).toContain('"first"');
 	expect(error?.message).toContain('"second"');
+});
+
+test("an Extension folder with a dot in its name fails startup naming its path", async () => {
+	const error = await startPiu({ script: none, extensionsDir: dotDir }).then(
+		() => undefined,
+		(e: Error) => e,
+	);
+
+	expect(error?.message).toContain(join(dotDir, "my.ext"));
 });

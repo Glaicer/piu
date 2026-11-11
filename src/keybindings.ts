@@ -1,4 +1,4 @@
-import type { KeyEvent } from "@opentui/core";
+import { type KeyEvent, terminalNamedSingleStrokeKeys } from "@opentui/core";
 
 export type Chord = {
 	readonly name: string;
@@ -17,6 +17,10 @@ const MODIFIERS = new Map<string, "ctrl" | "shift" | "meta">([
 	["alt", "meta"],
 	["meta", "meta"],
 ]);
+
+export function isKeyName(name: string) {
+	return [...name].length === 1 || terminalNamedSingleStrokeKeys.includes(name);
+}
 
 export function parseChord(spec: string): Chord | undefined {
 	const parts = spec.toLowerCase().split("+");

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { BackendConfig } from "./backend.ts";
-import { type Keybindings, parseChord } from "./keybindings.ts";
+import { isKeyName, type Keybindings, parseChord } from "./keybindings.ts";
 import type { Size, Slot } from "./layout.tsx";
 import type { ModuleSettings } from "./module.ts";
 import { StartupError } from "./startup-error.ts";
@@ -81,6 +81,27 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 
 type Fields = Record<string, unknown>;
 
+const topLevelKeys = [
+	"backend",
+	"layout",
+	"placement",
+	"modules",
+	"keybindings",
+	"theme",
+	"animations",
+];
+
+function onlyKeys(fields: Fields, allowed: readonly string[], parent: string) {
+	for (const key of Object.keys(fields)) {
+		if (!allowed.includes(key)) {
+			throw fieldError(
+				parent ? `${parent}.${key}` : key,
+				`unknown key, expected one of: ${allowed.join(", ")}`,
+			);
+		}
+	}
+}
+
 export function loadConfig(path: string): Config {
 	const user = readUserConfig(path);
 	const panelIds = new Set<string>();
@@ -119,7 +140,9 @@ function readUserConfig(path: string): Fields {
 	} catch (error) {
 		throw new StartupError(`${path}: ${(error as Error).message}`);
 	}
-	return object(parsed, "config");
+	const fields = object(parsed, "config");
+	onlyKeys(fields, topLevelKeys, "");
+	return fields;
 }
 
 function mergeObjects(base: Fields, over: unknown): unknown {
@@ -135,11 +158,14 @@ function mergeObjects(base: Fields, over: unknown): unknown {
 
 function parseBackend(value: unknown): BackendConfig {
 	const fields = object(value, "backend");
+	onlyKeys(fields, ["command", "args"], "backend");
 	return {
 		command: string(fields.command, "backend.command"),
 		args: stringArray(fields.args, "backend.args"),
 	};
 }
+
+const slotKeys = ["kind", "id", "direction", "size", "minSize", "hideBelow"];
 
 function parseSlot(value: unknown, path: string, panelIds: Set<string>): Slot {
 	const fields = object(value, path);
@@ -150,6 +176,11 @@ function parseSlot(value: unknown, path: string, panelIds: Set<string>): Slot {
 			`expected "container" or "panel", got ${JSON.stringify(kind)}`,
 		);
 	}
+	onlyKeys(
+		fields,
+		[...slotKeys, ...(kind === "container" ? ["children"] : [])],
+		path,
+	);
 	const base = {
 		id: string(fields.id, `${path}.id`),
 		direction: direction(fields.direction, `${path}.direction`),
@@ -219,7 +250,7 @@ function direction(value: unknown, path: string): "row" | "column" {
 
 function parsePlacement(value: unknown, panelIds: ReadonlySet<string>) {
 	const fields = object(value, "placement");
-	return Object.fromEntries(
+	const placement = Object.fromEntries(
 		Object.entries(fields).map(([panelId, moduleIds]) => {
 			const path = `placement.${panelId}`;
 			if (!panelIds.has(panelId)) {
@@ -228,6 +259,13 @@ function parsePlacement(value: unknown, panelIds: ReadonlySet<string>) {
 			return [panelId, stringArray(moduleIds, path)];
 		}),
 	);
+	if (Object.values(placement).every((moduleIds) => moduleIds.length === 0)) {
+		throw fieldError(
+			"placement",
+			"no Module is placed, so the frame would be empty; place Modules in the Layout's Panels",
+		);
+	}
+	return placement;
 }
 
 function parseModules(value: unknown) {
@@ -248,6 +286,12 @@ function parseKeybindings(value: unknown): Keybindings {
 				throw fieldError(
 					path,
 					`expected a key like "ctrl+j" or "shift+tab", got ${JSON.stringify(spec)}`,
+				);
+			}
+			if (!isKeyName(chord.name)) {
+				throw fieldError(
+					path,
+					`OpenTUI never reports a key named ${JSON.stringify(chord.name)} (it says "escape" and "return", for example)`,
 				);
 			}
 			return [action, chord];
