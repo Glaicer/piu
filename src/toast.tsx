@@ -23,7 +23,7 @@ export function createToasts(animate: Animate, clock: Clock) {
 	let nextId = 0;
 	return {
 		toasts,
-		show(message: string, kind: ToastKind = "info") {
+		show(message: string, kind: ToastKind = "info", timeoutMs = TOAST_MS) {
 			const [offset, setOffset] = createSignal(SLIDE_COLUMNS);
 			const toast = { id: nextId++, message, kind, offset };
 			const slide = (from: number, to: number, onComplete?: () => void) =>
@@ -43,7 +43,7 @@ export function createToasts(animate: Animate, clock: Clock) {
 					pending.delete(cancel);
 					setToasts((current) => current.filter((t) => t !== toast));
 				});
-			}, TOAST_MS);
+			}, timeoutMs);
 			const cancel = () => {
 				clock.clearTimeout(timer);
 				stop();
