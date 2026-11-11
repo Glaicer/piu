@@ -47,7 +47,7 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 ### Config
 
 23. As a user, I want the repo to ship a typed default config, so that the app works with no setup.
-24. As a user, I want a personal JSON config, ignored by git, that overrides the default, so that my changes survive `git pull`.
+24. As a user, I want a personal JSON config in `~/.piu/config.json`, outside the app, that overrides the default, so that my changes survive updates and work without the repo.
 25. As a user, I want objects in my personal config to merge with the default key by key, while lists and the whole layout tree replace the default, so that the result is predictable.
 26. As a user, I want Module placement (which Modules go in which Panel, in which order) kept separate from the layout tree, so that I can reorder one Panel with a single line without copying the layout.
 27. As a user, I want to disable an Extension by removing its Modules from placement, so that turning things off needs no code.
@@ -70,7 +70,7 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 41. As an Extension author, I want my Extension to optionally carry a Pi extension that the app loads into the Backend whenever my Extension is enabled, so that one package can add both a tool and its UI.
 42. As an Extension author, I want a request/response channel between my Pi extension and my Modules that works on both Backends, so that the tool can ask the UI something and wait for the answer.
 43. As an Extension author, I want my Pi extension to replace an installed tool by registering its own tool name and deactivating the old one, so that my UI-aware version is the one the model calls on either Backend.
-44. As a user, I want my own Extensions in a git-ignored `extensions/` folder, separate from the repo's built-in `builtin/` folder, so that updates never touch my code.
+44. As a user, I want my own Extensions in `~/.piu/extensions/`, separate from the built-in `builtin/` folder, so that updates never touch my code and I don't need the repo.
 45. As a user, I want a startup error naming both paths when one of my Extensions has the same name as a built-in one, so that nothing gets silently shadowed.
 46. As a user, I want the chat, input, model, reasoning and status pieces to be built-in Extensions on the same contract as mine, so that I can disable or replace any of them.
 
@@ -171,13 +171,13 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 
 ### Config
 
-- Two layers: a typed default config in the repo, and a personal config in JSON that git ignores. Merge rule: objects merge by key, while arrays and the `layout` tree replace.
+- Two layers: a typed default config in the app, and a personal config in `~/.piu/config.json`. The `PIU_HOME` environment variable replaces `~/.piu`, like `PI_CODING_AGENT_DIR` for Pi. A missing personal config means the default. Merge rule: objects merge by key, while arrays and the `layout` tree replace.
 - The merged config is validated once at startup against a schema. Errors name the field path and stop startup with a readable message. Cross-reference checks: every Placement key is a Panel id in the Layout, every Module id belongs to a discovered Extension, and Module settings keys refer to placed Modules.
 - Config sections: `backend` (command, args), `layout`, `placement`, `modules` (per-Module settings), `keybindings`, `theme` (token overrides), `animations` (boolean), `breakpoints` if needed beyond per-Slot `hideBelow`.
 
 ### Extensions and Modules
 
-- Two Extension roots: `builtin/` (shipped, committed) and `extensions/` (personal, git-ignored except a README explaining how to write one). Both are discovered the same way. A name that appears in both is a startup error naming both paths.
+- Two Extension roots: `builtin/` (shipped, committed) and `~/.piu/extensions/` (personal; how to write one is in `docs/extensions.md`). Both are discovered the same way. A personal Extension has no `node_modules` of its own for the app's packages: `@opentui/solid/runtime-plugin-support` (`ensureRuntimePluginSupport()`) maps its imports of `solid-js`, `solid-js/store` and `@opentui/*` to the app's own instances, because two copies of Solid break reactivity. Other npm packages it imports live in its own folder. A name that appears in both is a startup error naming both paths.
 - An Extension is enabled exactly when at least one of its Modules appears in the merged Placement. An enabled Extension's Pi extension, if any, is passed to the Backend with `-e`.
 - So an Extension is enabled through a Module. One that only adds commands places a Module that reports `"hidden"`: it stays mounted and takes no space. The built-in session commands live in the `chat` Extension instead. A command that only acts on the agent or on files belongs in a Pi extension installed in Pi, which `piu` lists in `/` too; a `piu` command is for what the Backend can't reach, such as interface state or the terminal. Add another way to enable an Extension only if the hidden Module gets in the way.
 - Module contract: an Extension exports Modules. Each Module has an `id`, an optional `title`, and a render function that receives the Module context and returns a Solid component. A Module can report itself invisible (it then takes no space) and can request exclusivity in its Panel while visible. A Module can declare that it follows output (the chat does): a Panel sticks to the bottom while any of its visible Modules does, so the behaviour moves with the Module when Placement or a replaced Layout puts it elsewhere.
@@ -208,7 +208,7 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 ## Testing Decisions
 
 - A good test drives the app the way a user does (keys, mouse, terminal size, config file, the model's scripted replies) and checks what the user sees (the rendered frame text) or what Pi observably received (what reached the model, what a tool returned). Never assert on internal state, store shape or component structure. Delete any test that would still pass if the app rendered nothing.
-- **Primary seam: the whole app against a real Backend with a scripted model.** The app boots in OpenTUI's `createTestRenderer` (fixed terminal size, `mockKeys`, `mockMouse`, captured frames). The Backend is a real `pi --mode rpc` from a pinned dev dependency (`@earendil-works/pi-coding-agent` 1.5.0). It is isolated from the developer's Pi setup with `PI_CODING_AGENT_DIR` pointing at a temp dir, plus `PI_OFFLINE=1` and `--no-session`. The model is the faux provider from `@earendil-works/pi-ai` (`fauxText`, `fauxThinking`, `fauxToolCall`, `setResponses`), registered by a test-only Pi extension passed with `-e`. Each test points `backend` in a fixture personal config at this setup, the same knob a user turns. The only other injection point is the path of the personal `extensions/` folder, because fixture Extensions must live inside the repo (to resolve `solid-js` and the JSX settings) while the fixture config is written to a temp dir.
+- **Primary seam: the whole app against a real Backend with a scripted model.** The app boots in OpenTUI's `createTestRenderer` (fixed terminal size, `mockKeys`, `mockMouse`, captured frames). The Backend is a real `pi --mode rpc` from a pinned dev dependency (`@earendil-works/pi-coding-agent` 1.5.0). It is isolated from the developer's Pi setup with `PI_CODING_AGENT_DIR` pointing at a temp dir, plus `PI_OFFLINE=1` and `--no-session`. The model is the faux provider from `@earendil-works/pi-ai` (`fauxText`, `fauxThinking`, `fauxToolCall`, `setResponses`), registered by a test-only Pi extension passed with `-e`. Each test points `backend` in a fixture personal config at this setup, the same knob a user turns. That fixture config and any fixture Extensions sit in a temp dir that `PIU_HOME` points at. No other injection point is introduced.
 - To keep the suite fast, one Backend process is shared per test file and reset between tests with `new_session`.
 - What the primary seam covers: Layout and breakpoint hiding, independent scrolling and wheel-under-pointer, config merge and validation errors, Extension discovery and name collisions, streaming chat with Markdown, thinking and tool cards, input with history, autocomplete, steer, follow-up and abort, every built-in command Modal, extension dialogs and Toasts, both halves of ask-user-question including channel round-trip, cancellation, replacing a test-installed `ask_user_question` (only ours active) and auto-closing of stale dialogs, Backend not-found, crash and restart (the faux extension can exit the process on cue).
 - Tests run with `animations: false`. **Narrow seam for animation**: `animate` itself is tested on OpenTUI's controllable timeline. Intermediate frames must exist when enabled, and the end state must be immediate when disabled.
@@ -223,10 +223,10 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 - Subagent cards and live subagent streams (Pi-Bolt only).
 - Replaceable per-message renderers (a second extension point for message types).
 - Messages that Pi extensions add to the conversation (`role: "custom"`, `display: true`, e.g. `/in` and subagent results). The chat shows only user and assistant messages, so these stay invisible. Revisit after the MVP.
-- Loading Extensions from anywhere other than `builtin/` and `extensions/`. No package distribution of Extensions.
+- Loading Extensions from anywhere other than `builtin/` and `~/.piu/extensions/`. No package distribution of Extensions.
 - Reimplementing Pi's `/settings`, `/hotkeys`, `/login` and other built-in TUI commands not listed above.
 - Pi extensions that need Pi's own TUI (`custom()`, `setFooter`, `setHeader`, `setEditorComponent`, autocomplete providers). They are no-ops over RPC.
-- Publishing, licensing, release packaging.
+- Publishing, licensing, release packaging, and the compiled `piu` binary (see Further Notes).
 
 ## Further Notes
 
@@ -235,3 +235,7 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 - Ticket 02 settled the early risks. Pi-Bolt fails on a duplicate tool name (hence Tool replacement), and its compiled-in TUI-API Pi extensions are harmless in RPC mode. Ticket 13 checked tool replacement on Pi-Bolt: `setActiveTools()` is undone by the installed package, and editing `selectedTools` holds (ADR-0001).
 - The first implementation ticket should be a walking skeleton: Bun app, Slot engine with config and validation, Backend lifecycle over RPC, chat as plain text, input sending prompts, all exercised through the primary test seam.
 - The author's machine runs Pi through a `pi()` shell function (Pi-Bolt under nonopi). The test Backend must call the pinned dev-dependency `pi` binary directly, not the shell function.
+- After the MVP, `piu` ships as one binary from `bun build --compile`, so users never clone the repo. Known so far (OpenTUI docs: Standalone executables, Runtime plugins):
+  - OpenTUI embeds its native library, parser worker, default grammars and Tree-sitter WASM in the binary. Build one binary per target; Linux glibc and musl differ, and `process.env.OPENTUI_LIBC` must be defined at build time.
+  - Personal Extensions in `~/.piu/extensions/` load at run time through the same runtime module map as in development, so nothing changes for their authors.
+  - The Backend is another process and can't read files inside the binary, so each built-in Extension's `pi-extension.ts` has to be written to disk (e.g. `~/.piu/cache/`) before it's passed with `-e`.
