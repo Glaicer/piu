@@ -97,6 +97,7 @@ export async function startPiu(options: {
 	cwd?: string;
 	promptTemplates?: Record<string, string>;
 	installedPiExtensions?: string[];
+	backendEnv?: Record<string, string>;
 	dir?: string;
 	config?: unknown;
 	extensions?: string;
@@ -145,6 +146,9 @@ export async function startPiu(options: {
 			...credentialVars.map((name) => `${name}=`),
 			"PI_OFFLINE=1",
 			`PIU_FAUX_SCRIPT=${scriptPath}`,
+			...Object.entries(options.backendEnv ?? {}).map(
+				([name, value]) => `${name}=${value}`,
+			),
 			piBin,
 			...(options.persistSession ? [] : ["--no-session"]),
 			"--no-skills",

@@ -214,7 +214,9 @@ test.each([
 	],
 	[
 		"an empty Placement",
-		{ placement: { agent: [], input: [], status: [], side: [] } },
+		{
+			placement: { agent: [], pinned: [], input: [], status: [], side: [] },
+		},
 		"no Module is placed",
 	],
 	[

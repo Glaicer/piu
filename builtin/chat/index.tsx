@@ -1,6 +1,7 @@
 import type { SyntaxStyle } from "@opentui/core";
 import { createMemo, For, Index, onCleanup } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
+import type { BackgroundJob } from "../../src/background.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
 import type {
 	PendingMessage,
@@ -53,6 +54,7 @@ function Messages(props: { context: ModuleContext }) {
 									<AssistantBlock
 										block={block()}
 										resultFor={resultFor}
+										jobs={() => pi.backgroundJobs}
 										abandoned={
 											message.stopReason === "error" ||
 											message.stopReason === "aborted"
@@ -114,6 +116,7 @@ type AssistantBlockData = Extract<
 function AssistantBlock(props: {
 	block: AssistantBlockData;
 	resultFor: (toolCallId: string) => ToolResultMessage | undefined;
+	jobs: () => readonly BackgroundJob[];
 	abandoned: boolean;
 	streaming: boolean;
 	selection: Selection;
@@ -155,6 +158,7 @@ function AssistantBlock(props: {
 						const id = toolCall()?.id;
 						return id === undefined ? undefined : props.resultFor(id);
 					}}
+					jobs={props.jobs}
 					abandoned={props.abandoned}
 					animate={props.animate}
 					selection={props.selection}

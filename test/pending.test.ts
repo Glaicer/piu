@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { blocker } from "./blocker.ts";
 import { inputArea, panelText, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -16,25 +15,6 @@ const slowCompact = join(
 	import.meta.dir,
 	"fixtures/pi-extensions/slow-compact.ts",
 );
-
-// why: the blocking command ends when the test says so (or when the folder goes), so no wall-clock sleep decides the order of events.
-function blocker() {
-	const dir = mkdtempSync(join(tmpdir(), "piu-block-"));
-	return {
-		step: {
-			toolCalls: [
-				{
-					name: "bash",
-					args: {
-						command: `while [ -d ${dir} ] && [ ! -e ${dir}/release ]; do sleep 0.05; done`,
-					},
-				},
-			],
-		},
-		release: () => writeFileSync(join(dir, "release"), ""),
-		[Symbol.dispose]: () => rmSync(dir, { recursive: true, force: true }),
-	};
-}
 
 async function send(piu: Piu, text: string, options?: { alt?: boolean }) {
 	await piu.mockInput.typeText(text);

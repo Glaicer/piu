@@ -75,8 +75,8 @@ test("an automatic compaction leaves the chat matching Pi's messages", async () 
 	await using piu = await startPiu({
 		script: {
 			replies: ["Answer one", "Answer two", "Summary one", "Summary two"],
-			// why: the system prompt alone is about 3310 tokens, so this window is crossed only once the second turn is in the context.
-			contextWindow: 3320,
+			// why: the system prompt alone is about 3545 tokens, so this window is crossed only once the second turn is in the context.
+			contextWindow: 3548,
 		},
 	});
 	await send(piu, "First question");

@@ -7,6 +7,11 @@ import type {
 import { batch } from "solid-js";
 import { createStore, produce, reconcile } from "solid-js/store";
 import type { Backend, BackendHealth, BackendRecord } from "./backend.ts";
+import {
+	BACKGROUND_STATUS_KEY,
+	type BackgroundJob,
+	parseJobs,
+} from "./background.ts";
 import { type ChannelPayload, parseChannelRequest } from "./channel.ts";
 import type { ToastKind } from "./toast.tsx";
 
@@ -88,6 +93,7 @@ export type PiState = {
 	readonly backendHealth: BackendHealth;
 	readonly dialogs: readonly Dialog[];
 	readonly statuses: Readonly<Record<string, string>>;
+	readonly backgroundJobs: readonly BackgroundJob[];
 	readonly title: string | null;
 	readonly editorText: EditorText;
 };
@@ -130,6 +136,7 @@ export function createPiState(
 		backendHealth: BackendHealth;
 		dialogs: Dialog[];
 		statuses: Record<string, string>;
+		backgroundJobs: BackgroundJob[];
 		title: string | null;
 		editorText: EditorText;
 	}>({
@@ -147,6 +154,7 @@ export function createPiState(
 		backendHealth: { status: "running" },
 		dialogs: [],
 		statuses: {},
+		backgroundJobs: [],
 		title: null,
 		editorText: { seq: 0, text: "" },
 	});
@@ -193,6 +201,7 @@ export function createPiState(
 		runningTools.clear();
 		closeDialogs(() => true);
 		setState("statuses", reconcile({}));
+		setState("backgroundJobs", []);
 	}
 
 	function closeDialogs(shouldClose: (id: string) => boolean) {
@@ -222,6 +231,7 @@ export function createPiState(
 		const offHealth = backend.onHealth((health) => {
 			setState("backendHealth", reconcile(health));
 			setState("working", false);
+			setState("backgroundJobs", []);
 			clearPending(() => true);
 		});
 		detach = () => {
@@ -483,6 +493,10 @@ export function createPiState(
 				notify(record.message, record.notifyType ?? "info");
 				break;
 			case "setStatus":
+				if (record.statusKey === BACKGROUND_STATUS_KEY) {
+					setState("backgroundJobs", reconcile(parseJobs(record.statusText)));
+					break;
+				}
 				setState(
 					"statuses",
 					produce((statuses) => {

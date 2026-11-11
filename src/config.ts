@@ -35,6 +35,7 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 				size: "rest",
 				children: [
 					{ kind: "panel", id: "agent", direction: "column", size: "rest" },
+					{ kind: "panel", id: "pinned", direction: "column", size: "content" },
 					{
 						kind: "container",
 						id: "input-area",
@@ -63,6 +64,7 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 	},
 	placement: {
 		agent: ["chat.messages"],
+		pinned: ["background.processes"],
 		input: ["ask-user-question.card", "input.prompt"],
 		status: ["model.current", "reasoning.level", "status.line"],
 		side: [],

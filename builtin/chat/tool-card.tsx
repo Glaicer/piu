@@ -1,5 +1,6 @@
 import { createMemo } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
+import type { BackgroundJob } from "../../src/background.ts";
 import type { PiMessage } from "../../src/pi-state.ts";
 import type { Theme } from "../../src/theme.ts";
 import { createReveal } from "./reveal.ts";
@@ -47,9 +48,20 @@ function resultText(result: ToolResultMessage): string {
 		.join("\n");
 }
 
+// why: a `bash` call that handed its job back to the model has a result long before the process ends, so the card follows the job's own status instead of the result's.
+function launchedJobId(result: ToolResultMessage | undefined) {
+	const details = result?.details as
+		| { background?: unknown; id?: unknown }
+		| undefined;
+	return details?.background === true && typeof details.id === "string"
+		? details.id
+		: undefined;
+}
+
 export function ToolCard(props: {
 	call: () => ToolCallBlock | undefined;
 	result: () => ToolResultMessage | undefined;
+	jobs: () => readonly BackgroundJob[];
 	abandoned: boolean;
 	animate: Animate;
 	selection: Selection;
@@ -57,19 +69,33 @@ export function ToolCard(props: {
 }) {
 	const reveal = createReveal(props.animate);
 	const row = selectable(props.selection, reveal.toggle);
+	const jobId = () => launchedJobId(props.result());
 	const status = createMemo(() => {
 		const result = props.result();
 		if (!result) return props.abandoned ? "error" : "running";
+		const id = jobId();
+		if (id !== undefined) {
+			return props.jobs().find((job) => job.id === id)?.status ?? "background";
+		}
 		return result.isError ? "error" : "done";
 	});
 	const color = () => {
 		const current = status();
-		if (current === "error") return props.theme.error;
-		return current === "done" ? props.theme.success : props.theme.warning;
+		if (current === "error" || current === "failed") return props.theme.error;
+		if (current === "done") return props.theme.success;
+		return current === "running" || current === "killed"
+			? props.theme.warning
+			: props.theme.muted;
 	};
 	const duration = () => {
 		const ms = props.result()?.durationMs;
-		return ms === undefined ? "" : `  ${formatDuration(ms)}`;
+		return ms === undefined || jobId() !== undefined
+			? ""
+			: `  ${formatDuration(ms)}`;
+	};
+	const label = () => {
+		const id = jobId();
+		return id === undefined ? status() : `${id} ${status()}`;
 	};
 	const header = () => {
 		const call = props.call();
@@ -87,7 +113,7 @@ export function ToolCard(props: {
 		<box flexDirection="column" border borderColor={color()}>
 			<box ref={row.ref} flexDirection="row" onMouseDown={row.activate}>
 				<text fg={props.theme.text}>{header()}</text>
-				<text fg={color()}>{`  ${status()}${duration()}`}</text>
+				<text fg={color()}>{`  ${label()}${duration()}`}</text>
 			</box>
 			{shown() !== undefined && <text fg={props.theme.muted}>{shown()}</text>}
 		</box>
