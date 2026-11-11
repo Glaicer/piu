@@ -4,6 +4,7 @@ import type {
 	RpcSessionState,
 	SessionTreeNode,
 } from "@earendil-works/pi-coding-agent";
+import { batch } from "solid-js";
 import { createStore, produce, reconcile } from "solid-js/store";
 import type { Backend, BackendHealth, BackendRecord } from "./backend.ts";
 import { type ChannelPayload, parseChannelRequest } from "./channel.ts";
@@ -23,6 +24,12 @@ export type ServiceRow = {
 	readonly position: number;
 	readonly status: "active" | "ok" | "failed";
 	readonly text: string;
+};
+
+export type PendingMessage = {
+	readonly id: number;
+	readonly text: string;
+	readonly mode: "prompt" | "steer" | "followUp";
 };
 
 export type ThinkingLevel = RpcSessionState["thinkingLevel"];
@@ -75,6 +82,7 @@ export type PiState = {
 	readonly thinkingLevels: readonly ThinkingLevel[];
 	readonly messages: readonly PiMessage[];
 	readonly serviceRows: readonly ServiceRow[];
+	readonly pending: readonly PendingMessage[];
 	readonly streamingMessage: PiMessage | null;
 	readonly working: boolean;
 	readonly backendHealth: BackendHealth;
@@ -116,6 +124,7 @@ export function createPiState(
 		thinkingLevels: ThinkingLevel[];
 		messages: PiMessage[];
 		serviceRows: ServiceRow[];
+		pending: PendingMessage[];
 		streamingMessage: PiMessage | null;
 		working: boolean;
 		backendHealth: BackendHealth;
@@ -132,6 +141,7 @@ export function createPiState(
 		thinkingLevels: ["off"],
 		messages: [],
 		serviceRows: [],
+		pending: [],
 		streamingMessage: null,
 		working: false,
 		backendHealth: { status: "running" },
@@ -153,6 +163,30 @@ export function createPiState(
 		setState("streamingMessage", null);
 		setState("working", false);
 		setState("serviceRows", []);
+		clearPending(() => true);
+	}
+
+	let lastPendingId = 0;
+	// why: Pi answers a send only after it has queued it, and the message can start before that answer is read, so the end of a run drops only the entries whose answer has arrived.
+	const unconfirmed = new Set<number>();
+	const inFlight = new Set<Promise<boolean>>();
+
+	function clearPending(shouldClear: (entry: PendingMessage) => boolean) {
+		const cleared = new Set(
+			state.pending.filter(shouldClear).map(({ id }) => id),
+		);
+		if (cleared.size === 0) return;
+		for (const id of cleared) unconfirmed.delete(id);
+		setState("pending", (pending) =>
+			pending.filter(({ id }) => !cleared.has(id)),
+		);
+	}
+
+	// why: Pi removes a queued message when it starts and queues the expanded text of a skill or prompt template, so an exact text match comes first and the oldest entry stands in when the text differs.
+	function startPending(text: string) {
+		const started =
+			state.pending.find((entry) => entry.text === text) ?? state.pending[0];
+		if (started) clearPending(({ id }) => id === started.id);
 	}
 
 	function clearExtensionUi() {
@@ -188,6 +222,7 @@ export function createPiState(
 		const offHealth = backend.onHealth((health) => {
 			setState("backendHealth", reconcile(health));
 			setState("working", false);
+			clearPending(() => true);
 		});
 		detach = () => {
 			offRecords();
@@ -288,6 +323,7 @@ export function createPiState(
 				break;
 			case "agent_settled":
 				setState("working", false);
+				clearPending(({ id }) => !unconfirmed.has(id));
 				if (compactionStale) void syncAfterCompaction();
 				break;
 			case "thinking_level_changed":
@@ -300,8 +336,13 @@ export function createPiState(
 				);
 				break;
 			case "message_start":
-				setState("messages", state.messages.length, record.message);
-				setState("streamingMessage", record.message);
+				batch(() => {
+					if (record.message.role === "user") {
+						startPending(userText(record.message.content));
+					}
+					setState("messages", state.messages.length, record.message);
+					setState("streamingMessage", record.message);
+				});
 				break;
 			case "message_update":
 				setState(
@@ -544,28 +585,43 @@ export function createPiState(
 	attach([]);
 
 	// why: `prompt` with streamingBehavior starts a run when Pi is idle and queues otherwise, so a message sent in the gap before `agent_start` arrives is not lost; the `steer` and `follow_up` commands would be refused there.
-	const send = (
-		text: string,
-		streamingBehavior?: "steer" | "followUp",
-	): Promise<boolean> =>
-		backend
-			.request({ type: "prompt", message: text, streamingBehavior })
+	function send(text: string, mode: PendingMessage["mode"]): Promise<boolean> {
+		const entry: PendingMessage = { id: ++lastPendingId, text, mode };
+		unconfirmed.add(entry.id);
+		setState("pending", state.pending.length, entry);
+		const drop = () => clearPending(({ id }) => id === entry.id);
+		const sent = backend
+			.request({
+				type: "prompt",
+				message: text,
+				streamingBehavior: mode === "prompt" ? undefined : mode,
+			})
 			.then((response) => {
+				unconfirmed.delete(entry.id);
 				if (!response.success) {
+					drop();
 					notify(response.error, "error");
 					return false;
 				}
-				// why: Pi has no model-change event, and a Pi extension command that switches the model has finished by the time its prompt is answered "handled".
 				if (
 					response.command === "prompt" &&
 					response.data?.disposition === "handled"
 				) {
+					drop();
+					// why: Pi has no model-change event, and a Pi extension command that switches the model has finished by the time its prompt is answered "handled".
 					void refreshSession();
 				}
 				return true;
 			})
 			// why: a dead Backend is already shown by the error card, so only Pi's own refusal hands the text back to the input.
-			.catch(() => true);
+			.catch(() => {
+				drop();
+				return true;
+			});
+		inFlight.add(sent);
+		void sent.finally(() => inFlight.delete(sent));
+		return sent;
+	}
 
 	async function refuseToToast(command: RpcCommand) {
 		const response = await backend.request(command).catch(ignoreDeadBackend);
@@ -573,16 +629,19 @@ export function createPiState(
 	}
 
 	const actions: PiActions = {
-		prompt: (text) => send(text),
+		prompt: (text) => send(text, "prompt"),
 		steer: (text) => send(text, "steer"),
 		followUp: (text) => send(text, "followUp"),
 		answerDialog,
 		async abort() {
 			for (const { id } of state.dialogs) answerDialog(id, { cancelled: true });
+			// why: Pi queues a message some time after reading it, so a clear_queue sent at once could overtake the message the user just sent and let it run after the abort.
+			await Promise.all(inFlight);
 			// why: Pi continues queued messages after an abort, so the queue is emptied first and its text goes back to the caller.
 			const cleared = await backend
 				.request({ type: "clear_queue" })
 				.catch(ignoreDeadBackend);
+			clearPending(({ id, mode }) => mode !== "prompt" && !unconfirmed.has(id));
 			await backend.request({ type: "abort" }).catch(ignoreDeadBackend);
 			return cleared?.success && cleared.command === "clear_queue"
 				? [...cleared.data.steering, ...cleared.data.followUp]
@@ -639,6 +698,13 @@ export function createPiState(
 			backend.stop();
 		},
 	};
+}
+
+function userText(content: Extract<PiMessage, { role: "user" }>["content"]) {
+	if (typeof content === "string") return content;
+	return content
+		.map((block) => (block.type === "text" ? block.text : ""))
+		.join("");
 }
 
 function extensionName(path: string) {

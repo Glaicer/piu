@@ -219,7 +219,7 @@ function Prompt(props: { context: ModuleContext }) {
 					? actions.steer(value)
 					: actions.prompt(value);
 			void accepted.then((ok) => {
-				if (!ok && field && !field.plainText) show(value);
+				if (!ok) restore([value]);
 			});
 		}
 	}

@@ -2,7 +2,11 @@ import type { SyntaxStyle } from "@opentui/core";
 import { createMemo, For, Index, onCleanup } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
-import type { PiMessage, ServiceRow } from "../../src/pi-state.ts";
+import type {
+	PendingMessage,
+	PiMessage,
+	ServiceRow,
+} from "../../src/pi-state.ts";
 import type { Theme } from "../../src/theme.ts";
 import { BackendCard } from "./backend-card.tsx";
 import { createSyntaxStyle, Markdown } from "./markdown.tsx";
@@ -73,6 +77,13 @@ function Messages(props: { context: ModuleContext }) {
 				)}
 			</For>
 			<ServiceRows context={props.context} position={pi.messages.length} />
+			<For each={pi.pending}>
+				{(entry) => (
+					<text
+						fg={theme.muted}
+					>{`> ${entry.text}  ${pendingLabel(entry)}`}</text>
+				)}
+			</For>
 			<BackendCard context={props.context} selection={selection} />
 		</>
 	);
@@ -152,6 +163,16 @@ function AssistantBlock(props: {
 			) : null}
 		</>
 	);
+}
+
+const PENDING_LABELS = {
+	prompt: "[sending]",
+	steer: "[queued: steering]",
+	followUp: "[queued: follow-up]",
+} as const;
+
+function pendingLabel(entry: PendingMessage) {
+	return PENDING_LABELS[entry.mode];
 }
 
 function messageText(message: PiMessage): string {

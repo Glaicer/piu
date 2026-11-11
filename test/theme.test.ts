@@ -8,7 +8,9 @@ const none = { replies: [] };
 async function userEcho(piu: Awaited<ReturnType<typeof startPiu>>) {
 	await piu.mockInput.typeText("Hi");
 	piu.mockInput.pressEnter();
-	await piu.waitForFrame((frame) => frame.includes("> Hi"));
+	await piu.waitForFrame(
+		(frame) => frame.includes("> Hi") && !frame.includes("[sending]"),
+	);
 	return piu
 		.captureSpans()
 		.lines.flatMap((line) => line.spans)
