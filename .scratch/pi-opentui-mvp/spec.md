@@ -142,6 +142,26 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 92. As a user, I want a light and a dark theme chosen to match my terminal background, so that the app is readable in either.
 93. As a user, I want to override theme color tokens in my personal config, so that I can tune colors.
 
+### Queued messages and background processes
+
+94. As a user, I want a submitted message to appear in the agent Panel immediately, with a visible waiting status until it is processed, even while a blocking process runs, so that I know it was sent without sending it again.
+95. As a user, I want running non-blocking background processes pinned at the bottom of the agent Panel, still visible as new messages arrive or I scroll up, and unpinned when they finish while their final cards remain in history, so that I can follow their lifecycle without losing my place.
+
+### Subagents
+
+96. As a user, I want running subagents visible in the agent Panel and clickable to open a live view of their messages and tool calls, so that I can see what they are doing before they finish.
+
+### Application lifecycle commands
+
+97. As a user, I want `/restart` to restart my current piu instance and its Backend and continue my current saved session without interrupting other instances, so that I can restart the whole application without manually relaunching it or losing my conversation.
+98. As a user, I want `/q`, `/quit` and `/exit` to close only my current piu instance and its Backend cleanly and return me to a usable terminal while other instances keep working, so that leaving the app works like quitting Pi.
+
+### Backend updates
+
+99. As a user, I want piu to check for updates to my configured Pi or Pi-Bolt at startup without blocking the interface or installing anything, so that I know when an update is available.
+100. As a user, I want `/update` to install the configured Backend's update regardless of whether it was installed through curl, npm, pnpm or bun, then automatically restart my Pi and piu instance in the same saved session, so that I do not need to update or restart them manually.
+101. As a user, I want the installed Backend update's changelog shown in a Modal after startup, including when continuing a session, so that I can read what changed without leaving piu.
+
 ## Implementation Decisions
 
 ### Runtime and Backend
@@ -149,12 +169,28 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 - Runtime is Bun (OpenTUI 0.8.x needs Bun ≥ 1.3.14 or Node ≥ 26.4; the target machine has Bun 1.4.4 and Node 24). UI framework is `@opentui/solid`. Package manager is pnpm. Resolve current stable versions from the registry when adding dependencies and pin them.
 - The Backend is a child process started as `<backend.command> <backend.args…> --mode rpc <Pi extension -e paths…> <user args…>`. The app talks to it through its own thin Backend client, not Pi's `RpcClient` (ADR-0001). The SDK is not used in-process.
 - The default config's Backend is `pi`. The personal config on the author's machine sets `pi-bolt`.
-- Pi-Bolt-only protocol features (`set_client_features`, `subagent_subscribe`) are optional. They are used only if the Backend accepts them. Nothing in this version depends on them.
+- Pi-Bolt-only protocol features (`set_client_features`, `subagent_subscribe`) are optional and used only if the Backend accepts them. Extension-backed subagent support must not assume these capabilities are present.
 - Wire `message_update` records are delta-only. The app keeps a reconstructed in-progress message per stream and replaces it with the authoritative content from `text_end` / `thinking_end` / `toolcall_end` and `message_end`.
 - RPC framing is strict JSONL split on LF only (no generic line reader: `U+2028/2029` are valid inside JSON). The Backend client copies Pi's `jsonl.ts` reader for this, since it isn't exported, and keeps the Backend's stderr in memory without ever writing it to the terminal.
 - A **Pi state store** is the single place that turns RPC events and responses into reactive state: messages, streaming state, model, reasoning level, available models and levels, session stats (`get_session_stats`: tokens, cost, `contextUsage`), extension statuses, pending extension dialogs, Backend health. Modules read it only through the Module context. Session stats refresh after each `message_end` and after model or session changes.
 - Backend lifecycle: start, health (running, exited with code and stderr tail, not found), and restart with `-c` added so the same session continues.
-- Pi's built-in TUI commands don't exist over RPC. The app implements its own: model picker, reasoning level, new session, resume, tree/fork, compact. Pi's `/settings` is not reimplemented. Slash autocomplete merges the Backend's `get_commands` with the app's own commands.
+- Pi's built-in TUI commands don't exist over RPC. The app implements its own: model picker, reasoning level, new session, resume, tree/fork, compact, full application restart, quit and Backend update. Pi's `/settings` is not reimplemented. Slash autocomplete merges the Backend's `get_commands` with the app's own commands.
+
+### Application lifecycle commands
+
+- `/restart`, `/q`, `/quit` and `/exit` are local piu commands listed in slash autocomplete. They are never sent to the model as prompts, steering or follow-ups, and work while the agent is busy or the Backend has already exited. Once shutdown begins, repeated requests do not start another shutdown or multiple replacement processes.
+- Shutdown and restart belong to one piu instance: only its Backend and owned children are stopped. Other instances keep running, including ones in the same working directory with the same personal Config. Cleanup must not terminate processes globally by executable name or a shared process group.
+- `/q`, `/quit` and `/exit` are aliases for the same graceful exit: stop active work, allow Backend and Pi extension cleanup, dispose the interface, restore the terminal and exit successfully. Saved conversation history is retained. The old Backend and its managed children must not remain running after shutdown.
+- `/restart` gracefully ends both processes and starts a fresh piu process and Backend in the same working directory and environment, with Config and Extensions loaded again. It resumes the saved session active at the time of the command, not whichever session an earlier startup argument or a generic latest-session lookup would select. Other startup parameters are retained. Old work is not automatically replayed, and a failed new launch reports a readable startup error without leaving the terminal in raw mode.
+- An empty session with no saved file must not accidentally resume another conversation. An explicit no-session mode remains non-persistent; carrying its unsaved conversation or unsent drafts across a full restart is not part of this change. The existing crash-card Restart action remains Backend-only and is distinct from `/restart`.
+
+### Backend updates
+
+- Startup checks updates asynchronously for the configured Backend only; it does not install anything or hold up input. Identify the actual installation, its distribution version and its official release source. Pi-Bolt's distribution version is distinct from its included Pi version. A notice names the current and available versions and `/update`; offline mode and network failures do not prevent startup or pretend a successful check.
+- Local `/update` downloads and installs the selected Backend's update using its installation method. Required methods for both Pi and Pi-Bolt are the curl installer, npm, pnpm and bun. Update the configured installation in place rather than a different PATH copy, preserve its manager and build variant, and retain the native updater's integrity checks and supported compiled-extension configuration. Printed manual instructions or an installer exit code alone are not proof that the target installation changed. Unknown installation ownership or insufficient permissions is a readable error, not permission to guess another installer or elevate privileges.
+- Installation progress is visible without dumping subprocess output into the terminal. Requests affecting the same installation must not run concurrent installers, even across piu instances. After a verified successful update, automatically perform the full restart above and continue the active saved session. Restart only the initiating instance; other instances using the shared installation keep working until their own next launch. Failed updates do not trigger a success restart, and an already-current installation does not need reinstallation.
+- After startup, a newly installed Backend version opens a scrollable Markdown changelog Modal, including when continuing a saved session. Show the changes since the previous known version from the correct distribution, not installer logs or another Backend's notes. Persist installed/seen-version information on the piu side, separately per Backend installation, so the Modal works across restarts and does not reappear after dismissal for the same version. This also allows detecting updates installed outside piu. Missing changelog content gets a clear message and official source link, never invented release notes.
+- These tickets update the Backend, not piu itself, Pi extensions or model catalogs. Designing piu's own update mechanism is future work; its implementation and release packaging are not added here.
 
 ### Layout model
 
@@ -197,6 +233,20 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 - Chat Markdown rendering is incremental: completed blocks are kept and only the trailing block(s) of a streaming message are re-rendered. Finished blocks keep their renderables, so each is highlighted once while mounted; a remount (Restart, resume) highlights again. This avoids the per-delta full re-lex that makes stock Pi's own TUI expensive.
 - Animations in this version: working indicator, Modal and Toast enter and exit, tool-card and thinking expand and collapse, smooth Panel scrolling. All go through `animate`. With `animations: false` every animation jumps to its end state.
 
+### Queued messages and background processes
+
+- A submitted conversation message appears immediately with a textual waiting status and a theme-token visual distinction while it awaits processing. Once the Backend begins processing it, the same visible message becomes an ordinary history entry without a duplicate. Repeated submissions with identical text remain separate. Enter's steering and Alt+Enter's follow-up semantics do not change. Rejected submissions cannot remain falsely waiting, and Esc still clears the queue and returns its text to the input, removing the waiting entries from the chat.
+- Running non-blocking background jobs stay pinned at the bottom of the chat, above the input and outside the scrolling history. Pinning stays with the chat when Placement or Layout changes; it neither needs column 2 nor forces a reader who scrolled up back to the bottom. When no jobs are running, the pinned area takes no space. A job's completion, failure or confirmed stop removes its pin and leaves one final card in history. Jobs and waiting messages belong to their Backend session and do not leak into another session.
+- The initial supported job source is the installed Pi extension `@pify/shell-background` (0.7.0 inspected), including explicit background launches and automatic foreground-to-background transitions. A returned tool result or an ended agent turn does not imply that its background job ended. Job-state updates must work over the subprocess boundary without requiring model tool calls or another user message. The package's Pi TUI widget factory is not available over RPC, and its automatic result delivery may be delayed or disabled, so neither alone is a sufficient lifecycle source. The integration does not modify the user's installed package or personal settings, and an absent package leaves the existing app working unchanged.
+- A `pify-shell-background-result` custom message may update its matching job card without adding another copy. This is a narrow job-lifecycle integration, not a general custom-message renderer or a reimplementation of the package's job browser and controls.
+
+### Subagents
+
+- The initial supported source is the installed Pi extension `@chthub/pi-subagents` (0.5.0 inspected), which runs child Pi processes and also works on stock Pi. Running subagents appear as cards in the agent Panel with their id, task label and status. Foreground and background launches are supported; a returned spawn tool result or a finished parent turn does not mean its child finished. Cards track each child's actual lifecycle, distinguish resident idle agents from working agents, and retain final details without duplication.
+- Clicking a card, or activating it by keyboard, opens a read-only Modal with that subagent's conversation and tool calls. Existing content is visible on open, and further output appears live without reopening or sending a message. Its history scrolls independently, follows output at the bottom and stays put when scrolled up. Opening and closing the Modal neither sends a message nor stops a subagent; the normal Modal focus and dismissal rules apply. Cards and subscriptions belong to the parent Backend session and do not leak into another session.
+- Live data must cross the Backend subprocess boundary. The installed package creates its roster widget only in Pi TUI, opens its viewer through `custom()`, and refuses `/agents` in RPC, so those UI paths cannot be reused as a data source. Its completion notification alone is not a live stream, and Pi-Bolt's optional subscription is not assumed to expose this package's children. Choose and verify a source compatible with the installed package without modifying it or the user's settings. Without a subagent source, the app works unchanged and displays no empty area.
+- A `subagent-notification` custom message may update its matching subagent card; this does not introduce a general custom-message renderer. Direct side chat, `/continue`, stop or restart controls, and a separate column-2 view are outside this ticket's scope.
+
 ### Theme
 
 - Semantic color tokens: text, muted, accent, success, warning, error, surface, border. Built-in light and dark themes are chosen by the terminal background. Token overrides come from config. Modules use only tokens.
@@ -211,6 +261,10 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 - **Primary seam: the whole app against a real Backend with a scripted model.** The app boots in OpenTUI's `createTestRenderer` (fixed terminal size, `mockKeys`, `mockMouse`, captured frames). The Backend is a real `pi --mode rpc` from a pinned dev dependency (`@earendil-works/pi-coding-agent` 1.5.0). It is isolated from the developer's Pi setup with `PI_CODING_AGENT_DIR` pointing at a temp dir, plus `PI_OFFLINE=1` and `--no-session`. The model is the faux provider from `@earendil-works/pi-ai` (`fauxText`, `fauxThinking`, `fauxToolCall`, `setResponses`), registered by a test-only Pi extension passed with `-e`. Each test points `backend` in a fixture personal config at this setup, the same knob a user turns. That fixture config and any fixture Extensions sit in a temp dir that `PIU_HOME` points at. No other injection point is introduced.
 - To keep the suite fast, one Backend process is shared per test file and reset between tests with `new_session`.
 - What the primary seam covers: Layout and breakpoint hiding, independent scrolling and wheel-under-pointer, config merge and validation errors, Extension discovery and name collisions, streaming chat with Markdown, thinking and tool cards, input with history, autocomplete, steer, follow-up and abort, every built-in command Modal, extension dialogs and Toasts, both halves of ask-user-question including channel round-trip, cancellation, replacing a test-installed `ask_user_question` (only ours active) and auto-closing of stale dialogs, Backend not-found, crash and restart (the faux extension can exit the process on cue).
+- Queued-message checks observe the waiting entry before a controlled blocking process finishes, its transition without duplication, delivery to the model and queue cancellation. Background-job checks cover explicit and automatic backgrounding, multiple jobs, pinned visibility during new output and manual history scrolling, and completion without another model tool call or user message. Fixture Pi extensions reproduce the relevant installed package behaviour; tests never depend on the developer's installed packages or real jobs.
+- Subagent checks observe a card before its controlled task finishes, open its viewer by mouse and keyboard, receive further output while the viewer stays open, keep concurrent agents separate, and show the actual settled state. Data crosses the real RPC boundary; fixtures reproduce the installed package's relevant launch and streaming behaviour without using the developer's Pi configuration, credentials or running agents.
+- **Narrow seam for application lifecycle:** start piu as a separate process through its public entry point with a controlled terminal, fixture Config and the isolated scripted Backend. Check each quit alias, real process termination or replacement, terminal restoration and continuation of the selected saved session after `/restart`. Also run two concurrent instances and prove that exiting or restarting one neither closes the other nor aborts its work. Frame tests alone cannot prove process exit, and lifecycle commands must never terminate the test runner. Use a persistent fixture session for restart checks; the normal no-session default is not a persistence test.
+- Backend-update checks cover both distributions and all four required installation methods, correct installation identity, update availability and failure, progress, verified installation, automatic restart and changelog in the resumed session. Use controlled release responses and disposable test installations/installers, never real global package-manager updates or the developer's Pi installation. Process checks also prove that another running instance remains usable and concurrent update requests cannot modify one installation at the same time.
 - Tests run with `animations: false`. **Narrow seam for animation**: `animate` itself is tested on OpenTUI's controllable timeline. Intermediate frames must exist when enabled, and the end state must be immediate when disabled.
 - **Manual Pi-Bolt check** (not in the regular suite, because not everyone has Pi-Bolt): a script that starts `pi-bolt --mode rpc` with the ask-user-question Pi extension and confirms that (a) our `ask_user` starts without a conflict and the model is not offered the compiled-in `ask_user_question`, and (b) the compiled-in Pi extensions that use Pi's own TUI API don't break or spam RPC mode.
 - Prior art: none in this repo yet. Copy the patterns from OpenTUI's testing docs (`createTestRenderer`, `createMockMouse`) and Pi's checked examples: the RPC extension UI client example and the faux provider in `pi-ai`.
@@ -218,15 +272,14 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 ## Out of Scope
 
 - Sandboxing the Backend with nono or nonopi, and the `piu` shell wrapper for it.
-- Any Module in column 2: extension widgets, Pi-Bolt extension views, background processes, timer, context and token dashboard.
+- Any Module in column 2: extension widgets, Pi-Bolt extension views, background processes, timer, context and token dashboard. Pinning running background jobs inside the chat is in scope and does not populate column 2.
 - Diff view for `edit`, images in messages, pasting images into the input.
-- Subagent cards and live subagent streams (Pi-Bolt only).
 - Replaceable per-message renderers (a second extension point for message types).
-- Messages that Pi extensions add to the conversation (`role: "custom"`, `display: true`, e.g. `/in` and subagent results). The chat shows only user and assistant messages, so these stay invisible. Revisit after the MVP.
+- General rendering of messages that Pi extensions add to the conversation (`role: "custom"`, `display: true`, e.g. `/in` and subagent results). These stay invisible, except that `pify-shell-background-result` and `subagent-notification` may update their corresponding job or subagent cards. Revisit general custom-message rendering after the MVP.
 - Loading Extensions from anywhere other than `builtin/` and `~/.piu/extensions/`. No package distribution of Extensions.
 - Reimplementing Pi's `/settings`, `/hotkeys`, `/login` and other built-in TUI commands not listed above.
 - Pi extensions that need Pi's own TUI (`custom()`, `setFooter`, `setHeader`, `setEditorComponent`, autocomplete providers). They are no-ops over RPC.
-- Publishing, licensing, release packaging, and the compiled `piu` binary (see Further Notes).
+- Publishing, licensing, release packaging, the compiled `piu` binary and implementing piu's own updater (see Further Notes). Backend updates are in scope; piu self-update is separate future work.
 
 ## Further Notes
 
@@ -235,6 +288,7 @@ Everything shown in a Panel is a **Module** contributed by an **Extension**. Tha
 - Ticket 02 settled the early risks. Pi-Bolt fails on a duplicate tool name (hence Tool replacement), and its compiled-in TUI-API Pi extensions are harmless in RPC mode. Ticket 13 checked tool replacement on Pi-Bolt: `setActiveTools()` is undone by the installed package, and editing `selectedTools` holds (ADR-0001).
 - The first implementation ticket should be a walking skeleton: Bun app, Slot engine with config and validation, Backend lifecycle over RPC, chat as plain text, input sending prompts, all exercised through the primary test seam.
 - The author's machine runs Pi through a `pi()` shell function (Pi-Bolt under nonopi). The test Backend must call the pinned dev-dependency `pi` binary directly, not the shell function.
+- Future design task: define how piu itself is updated, including release/install identity, source and binary distributions, integrity checks, safe replacement, recovery after interruption, personal Config/Extensions preservation and coexistence of running instances. Keep this separate from updating the Pi/Pi-Bolt Backend; do not implement it as part of `/update` above.
 - After the MVP, `piu` ships as one binary from `bun build --compile`, so users never clone the repo. Known so far (OpenTUI docs: Standalone executables, Runtime plugins):
   - OpenTUI embeds its native library, parser worker, default grammars and Tree-sitter WASM in the binary. Build one binary per target; Linux glibc and musl differ, and `process.env.OPENTUI_LIBC` must be defined at build time.
   - Personal Extensions in `~/.piu/extensions/` load at run time through the same runtime module map as in development, so nothing changes for their authors.
