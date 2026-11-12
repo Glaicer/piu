@@ -49,6 +49,7 @@ function Prompt(props: { context: ModuleContext }) {
 	});
 	const [before, setBefore] = createSignal("");
 	const [selected, setSelected] = createSignal(0);
+	const [windowStart, setWindowStart] = createSignal(0);
 	const [dismissed, setDismissed] = createSignal(false);
 	const trigger = createMemo(() => findTrigger(before()));
 	const [files, setFiles] = createSignal<readonly string[]>([]);
@@ -86,15 +87,28 @@ function Prompt(props: { context: ModuleContext }) {
 	createEffect(
 		on(
 			() => trigger()?.query,
-			() => setSelected(0),
+			() => {
+				setSelected(0);
+				setWindowStart(0);
+			},
 		),
 	);
 	createEffect(() => {
 		if (!trigger()) setDismissed(false);
 	});
-	const firstShown = () => Math.max(0, selected() - MAX_LIST_ROWS + 1);
+	// why: the window start is its own signal, so hovering a row that is already on screen selects it in place; deriving it from the selection would scroll the list under the pointer.
+	const firstShown = () =>
+		Math.min(windowStart(), Math.max(0, entries().length - MAX_LIST_ROWS));
 	const shown = () =>
 		entries().slice(firstShown(), firstShown() + MAX_LIST_ROWS);
+
+	function reveal(at: number) {
+		const start = firstShown();
+		if (at < start) setWindowStart(at);
+		else if (at >= start + MAX_LIST_ROWS) {
+			setWindowStart(at - MAX_LIST_ROWS + 1);
+		}
+	}
 
 	function sync() {
 		setBefore(field?.getTextRange(0, field.cursorOffset) ?? "");
@@ -121,7 +135,9 @@ function Prompt(props: { context: ModuleContext }) {
 		} else if (event.name === "up" || event.name === "down") {
 			event.preventDefault();
 			const step = event.name === "up" ? -1 : 1;
-			setSelected((at) => Math.max(0, Math.min(list.length - 1, at + step)));
+			const next = Math.max(0, Math.min(list.length - 1, selected() + step));
+			setSelected(next);
+			reveal(next);
 		} else if (
 			event.name === "tab" ||
 			(event.name === "return" && !event.shift && !event.meta)
@@ -268,6 +284,11 @@ function Prompt(props: { context: ModuleContext }) {
 											? props.context.theme.border
 											: undefined
 									}
+									onMouseOver={() => setSelected(firstShown() + at())}
+									onMouseDown={(event) => {
+										event.preventDefault();
+										accept(entry);
+									}}
 								>
 									<text
 										flexShrink={0}
