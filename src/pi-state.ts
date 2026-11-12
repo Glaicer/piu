@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type {
 	JsonAgentSessionEvent,
 	RpcCommand,
@@ -13,6 +14,17 @@ import {
 	parseJobs,
 } from "./background.ts";
 import { type ChannelPayload, parseChannelRequest } from "./channel.ts";
+import {
+	explicitSession,
+	explicitThinking,
+	maybeSession,
+	modelOverride,
+	optionValue,
+} from "./cli-args.ts";
+import {
+	type createModelSelection,
+	isThinkingLevel,
+} from "./model-selection.ts";
 import {
 	parseLog,
 	parseRoster,
@@ -127,11 +139,14 @@ export type PiActions = {
 const ignoreDeadBackend = () => {};
 const SESSION_FILE_TIMEOUT_MS = 2000;
 
-export function createPiState(
-	launch: (extraArgs: string[]) => Backend,
-	notify: (message: string, kind: ToastKind) => void,
-	channelTitles: ReadonlySet<string>,
-) {
+export function createPiState(options: {
+	launch: (extraArgs: string[]) => Backend;
+	notify: (message: string, kind: ToastKind) => void;
+	channelTitles: ReadonlySet<string>;
+	selection: ReturnType<typeof createModelSelection>;
+	args: readonly string[];
+}) {
+	const { launch, notify, channelTitles, selection, args } = options;
 	const [state, setState] = createStore<{
 		sessionFile: string | null;
 		commands: BackendCommand[];
@@ -174,8 +189,9 @@ export function createPiState(
 		editorText: { seq: 0, text: "" },
 	});
 
-	let backend: Backend;
+	let backend!: Backend;
 	let detach = () => {};
+	let sessionEpoch = 0;
 	const runningTools = new Set<string>();
 	// why: the protocol never says which tool call raised a dialog, so a dialog belongs to the tool calls running when it arrived and closes once all of them have ended; one raised with no tool running lasts until the run ends.
 	const dialogOwners = new Map<string, ReadonlySet<string>>();
@@ -246,6 +262,7 @@ export function createPiState(
 	}
 
 	function attach(extraArgs: string[]) {
+		sessionEpoch += 1;
 		detach();
 		backend = launch(extraArgs);
 		const offRecords = backend.onRecord(applyRecord);
@@ -598,6 +615,8 @@ export function createPiState(
 			{ type: "new_session" | "switch_session" | "fork" }
 		>,
 	) {
+		// why: a session switch during startup restoration would otherwise resume its own model and stop being the choice that wins.
+		await ready;
 		clearExtensionUi();
 		const response = await backend.request(command).catch(ignoreDeadBackend);
 		if (!response) return;
@@ -613,6 +632,7 @@ export function createPiState(
 		) {
 			return;
 		}
+		sessionEpoch += 1;
 		clearRun();
 		await Promise.all([loadMessages(), loadCommands(), refreshSession()]);
 		return response;
@@ -633,6 +653,62 @@ export function createPiState(
 	}
 
 	attach([]);
+	const loaded = selection.read();
+	const saved = loaded.selection;
+	if (loaded.error)
+		notify(`Could not read model selection: ${loaded.error}`, "error");
+	const sessionOverride = explicitSession(args);
+	const maybeSessionFile = maybeSession(args);
+	const selectionOverride = modelOverride(args);
+	const cliThinking = optionValue(args, "--thinking");
+	const ready = (async () => {
+		if (!saved || sessionOverride) return;
+		const epoch = sessionEpoch;
+		await refreshSession();
+		if (epoch !== sessionEpoch) return;
+		// why: Pi assigns a path to a new session before writing it; -c and --session-id can either resume a file or create a fresh session.
+		if (maybeSessionFile && state.sessionFile && existsSync(state.sessionFile))
+			return;
+		if (!selectionOverride) {
+			const response = await backend
+				.request({
+					type: "set_model",
+					provider: saved.model.provider,
+					modelId: saved.model.id,
+				})
+				.catch(ignoreDeadBackend);
+			if (epoch !== sessionEpoch) return;
+			if (!response?.success) {
+				if (response)
+					notify(`Could not restore model: ${response.error}`, "error");
+				return;
+			}
+		}
+		const thinkingOverride = explicitThinking(args);
+		const requestedLevel = !thinkingOverride
+			? saved.thinkingLevel
+			: !selectionOverride && isThinkingLevel(cliThinking)
+				? cliThinking
+				: undefined;
+		if (requestedLevel)
+			await backend
+				.request({ type: "set_thinking_level", level: requestedLevel })
+				.catch(ignoreDeadBackend);
+		if (epoch !== sessionEpoch) return;
+		await refreshSession();
+	})();
+
+	function saveSelection() {
+		if (!state.model) return;
+		try {
+			selection.write({
+				model: { provider: state.model.provider, id: state.model.id },
+				thinkingLevel: state.thinkingLevel,
+			});
+		} catch (error) {
+			notify(`Could not save model selection: ${String(error)}`, "error");
+		}
+	}
 
 	// why: `prompt` with streamingBehavior starts a run when Pi is idle and queues otherwise, so a message sent in the gap before `agent_start` arrives is not lost; the `steer` and `follow_up` commands would be refused there.
 	function send(text: string, mode: PendingMessage["mode"]): Promise<boolean> {
@@ -640,12 +716,14 @@ export function createPiState(
 		unconfirmed.add(entry.id);
 		setState("pending", state.pending.length, entry);
 		const drop = () => clearPending(({ id }) => id === entry.id);
-		const sent = backend
-			.request({
-				type: "prompt",
-				message: text,
-				streamingBehavior: mode === "prompt" ? undefined : mode,
-			})
+		const sent = ready
+			.then(() =>
+				backend.request({
+					type: "prompt",
+					message: text,
+					streamingBehavior: mode === "prompt" ? undefined : mode,
+				}),
+			)
 			.then((response) => {
 				unconfirmed.delete(entry.id);
 				if (!response.success) {
@@ -676,6 +754,7 @@ export function createPiState(
 	async function refuseToToast(command: RpcCommand) {
 		const response = await backend.request(command).catch(ignoreDeadBackend);
 		if (response && !response.success) notify(response.error, "error");
+		return response?.success === true;
 	}
 
 	const actions: PiActions = {
@@ -698,12 +777,23 @@ export function createPiState(
 				: [];
 		},
 		async setModel({ provider, id }) {
-			await refuseToToast({ type: "set_model", provider, modelId: id });
+			await ready;
+			const success = await refuseToToast({
+				type: "set_model",
+				provider,
+				modelId: id,
+			});
 			await refreshSession();
+			if (success) saveSelection();
 		},
 		async setThinkingLevel(level) {
-			await refuseToToast({ type: "set_thinking_level", level });
+			await ready;
+			const success = await refuseToToast({
+				type: "set_thinking_level",
+				level,
+			});
 			await refreshSession();
+			if (success) saveSelection();
 		},
 		async newSession() {
 			await replaceSession({ type: "new_session" });

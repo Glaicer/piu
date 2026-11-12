@@ -33,6 +33,53 @@ for (const alias of ["/q", "/quit", "/exit"]) {
 	}, 20000);
 }
 
+test("favorites and the selected model and reasoning survive a full process exit", async () => {
+	const fixture = prepareFixture({
+		script: {
+			replies: [
+				"Answered by {model} with {reasoning}",
+				"Answered by {model} with {reasoning}",
+			],
+		},
+	});
+	try {
+		{
+			await using piu = spawnPiu(fixture);
+			await piu.waitForText("faux-1");
+			piu.submit("/model");
+			await piu.waitForText("Favorites");
+			const search = piu.mark();
+			piu.type("faux-2");
+			await piu.waitForText("faux-2", search);
+			piu.type("\tf");
+			await piu.waitForText("★");
+			piu.type("\r");
+			piu.submit("first");
+			await piu.waitForText("Answered by faux-2 with off");
+			piu.type("\x1bt");
+			await piu.waitForText("high");
+			piu.type("\x1b[B\x1b[B\x1b[B\x1b[B\r");
+			piu.submit("second");
+			await piu.waitForText("Answered by faux-2 with high");
+			piu.submit("/quit");
+			expect(await piu.proc.exited).toBe(0);
+		}
+		{
+			await using piu = spawnPiu(fixture, { args: [] });
+			await piu.waitForText("faux-1");
+			piu.submit("Hi");
+			await piu.waitForText("Answered by faux-2 with high");
+			piu.submit("/model");
+			await piu.waitForText("★ faux-2");
+			piu.type("\r");
+			piu.submit("/quit");
+			expect(await piu.proc.exited).toBe(0);
+		}
+	} finally {
+		fixture.removeDir();
+	}
+}, 30000);
+
 // why: `exec` makes the shell the sleeping process itself, so one pid stands for the whole tool run.
 function runningTool(dir: string): { step: FauxStep; pidFile: string } {
 	const pidFile = join(dir, "tool.pid");

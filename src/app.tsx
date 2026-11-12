@@ -18,6 +18,8 @@ import { commandAction, matches } from "./keybindings.ts";
 import { SlotView } from "./layout.tsx";
 import { lifecycleCommands } from "./lifecycle-commands.ts";
 import { createModals, ModalLayer } from "./modal.tsx";
+import { createModelFavorites } from "./model-favorites.ts";
+import { createModelSelection } from "./model-selection.ts";
 import type { Command, CommandContext, PlacedModule } from "./module.ts";
 import { createPiState } from "./pi-state.ts";
 import { restartArgs } from "./restart.ts";
@@ -91,16 +93,18 @@ function App(props: {
 	const animate = createAnimate(renderer, props.config.animations);
 	const toasts = createToasts(renderer.clock);
 	onCleanup(toasts.dispose);
-	const pi = createPiState(
-		(extraArgs) =>
+	const pi = createPiState({
+		launch: (extraArgs) =>
 			startBackend(
 				props.config.backend,
 				[...extraArgs, ...props.args],
 				props.cwd,
 			),
-		toasts.show,
-		new Set(props.channelTitles),
-	);
+		notify: toasts.show,
+		channelTitles: new Set(props.channelTitles),
+		selection: createModelSelection(props.home),
+		args: [...props.config.backend.args, ...props.cliArgs],
+	});
 	onCleanup(pi.dispose);
 	const modals = createModals();
 	if (props.updateCheck) {
@@ -140,6 +144,9 @@ function App(props: {
 	}
 	const commandContext: CommandContext = {
 		pi: pi.state,
+		modelFavorites: createModelFavorites(props.home, (message) =>
+			toasts.show(message, "error"),
+		),
 		actions: {
 			...pi.actions,
 			openModal: modals.open,

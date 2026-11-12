@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import {
 	type FauxContentBlock,
 	fauxAssistantMessage,
@@ -20,7 +20,23 @@ export default function (pi: ExtensionAPI) {
 		provider: "faux",
 		models: [
 			{ id: "faux-1", contextWindow: script.contextWindow },
-			{ id: "faux-2", reasoning: true, contextWindow: script.contextWindow },
+			{
+				id: "faux-2",
+				name: script.longModelName
+					? "A very long model name that stretches well beyond the width of the model picker"
+					: script.namedModel
+						? "Faux Reasoner"
+						: undefined,
+				reasoning: true,
+				contextWindow: script.contextWindow,
+			},
+			...(script.manyModels
+				? Array.from({ length: 25 }, (_, index) => ({
+						id: `extra-${String(index).padStart(2, "0")}`,
+					}))
+				: []),
+			...(script.colonModel ? [{ id: "faux-2:free", reasoning: true }] : []),
+			...(script.altReasoningModel ? [{ id: "faux-3", reasoning: true }] : []),
 		],
 		tokensPerSecond: script.tokensPerSecond,
 		tokenSize: script.tokenSize
@@ -48,9 +64,11 @@ export default function (pi: ExtensionAPI) {
 		text: string,
 		context: { messages: Message[] },
 		modelId: string,
+		reasoning: string,
 	) =>
 		text
 			.replaceAll("{model}", modelId)
+			.replaceAll("{reasoning}", reasoning)
 			.replaceAll("{lastUser}", lastUser(context))
 			.replaceAll("{toolResult}", lastToolResult(context))
 			.replaceAll(
@@ -69,14 +87,27 @@ export default function (pi: ExtensionAPI) {
 					).length,
 				),
 			);
+	if (script.limitedReasoning) {
+		const model = faux.getModel("faux-2");
+		if (model) model.thinkingLevelMap = { xhigh: null, max: null };
+	}
 	faux.setResponses(
-		script.replies.map((reply) => (context, _options, _state, model) => {
+		script.replies.map((reply) => (context, options, _state, model) => {
 			const step: FauxStep =
 				typeof reply === "string" ? { text: reply } : reply;
 			const blocks: FauxContentBlock[] = [];
 			if (step.thinking) blocks.push(fauxThinking(step.thinking));
 			if (step.text)
-				blocks.push(fauxText(substitute(step.text, context, model.id)));
+				blocks.push(
+					fauxText(
+						substitute(
+							step.text,
+							context,
+							model.id,
+							options?.reasoning ?? "off",
+						),
+					),
+				);
 			for (const call of step.toolCalls ?? [])
 				blocks.push(fauxToolCall(call.name, call.args));
 			return step.error
@@ -88,6 +119,27 @@ export default function (pi: ExtensionAPI) {
 		}),
 	);
 	pi.registerProvider(faux.provider);
+	if (script.sameIdProvider) {
+		const other = fauxProvider({
+			provider: "other",
+			api: "other-faux",
+			models: [{ id: "faux-1" }],
+		});
+		pi.registerProvider(
+			script.denyOtherOnFile
+				? {
+						...other.provider,
+						auth: {
+							apiKey: {
+								name: "Faux",
+								resolve: async () =>
+									existsSync(`${scriptPath}.deny`) ? undefined : { auth: {} },
+							},
+						},
+					}
+				: other.provider,
+		);
+	}
 	const pidLog = process.env.PIU_PID_LOG;
 	if (pidLog) {
 		const note = (event: string) =>
