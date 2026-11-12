@@ -27,7 +27,6 @@ function Prompt(props: { context: ModuleContext }) {
 	let field: TextareaRenderable | undefined;
 	const history: string[] = [];
 	let recalled = 0;
-	let draft = "";
 
 	const renderer = useRenderer();
 	const [spinner, setSpinner] = createSignal("");
@@ -48,6 +47,7 @@ function Prompt(props: { context: ModuleContext }) {
 		});
 	});
 	const [before, setBefore] = createSignal("");
+	const [scroll, setScroll] = createSignal({ up: false, down: false });
 	const [selected, setSelected] = createSignal(0);
 	const [windowStart, setWindowStart] = createSignal(0);
 	const [dismissed, setDismissed] = createSignal(false);
@@ -115,7 +115,19 @@ function Prompt(props: { context: ModuleContext }) {
 	}
 
 	function sync() {
+		if (field && field.plainText !== history[recalled])
+			recalled = history.length;
 		setBefore(field?.getTextRange(0, field.cursorOffset) ?? "");
+		queueMicrotask(() => {
+			if (!field || field.isDestroyed) return;
+			const viewport = field.editorView.getViewport();
+			setScroll({
+				up: viewport.offsetY > 0,
+				down:
+					viewport.offsetY + viewport.height <
+					field.editorView.getTotalVirtualLineCount(),
+			});
+		});
 	}
 
 	function accept(entry: Entry) {
@@ -189,7 +201,6 @@ function Prompt(props: { context: ModuleContext }) {
 	function remember(text: string) {
 		if (history.at(-1) !== text) history.push(text);
 		recalled = history.length;
-		draft = "";
 	}
 
 	function take() {
@@ -202,17 +213,17 @@ function Prompt(props: { context: ModuleContext }) {
 
 	function walkHistory(event: KeyEvent, step: -1 | 1) {
 		if (!field || event.shift || event.meta || event.ctrl) return;
-		const edge = step < 0 ? 0 : field.virtualLineCount - 1;
+		if (field.plainText && field.plainText !== history[recalled]) return;
+		if (field.editorView.getTotalVirtualLineCount() > 1) return;
 		const next = recalled + step;
-		if (field.visualCursor.visualRow !== edge) return;
 		if (next < 0 || next > history.length) return;
 		event.preventDefault();
-		if (recalled === history.length) draft = field.plainText;
 		recalled = next;
-		show(history[recalled] ?? draft);
+		show(history[recalled] ?? "");
 	}
 
 	function onKeyDown(event: KeyEvent) {
+		if (event.name === "up" || event.name === "down") queueMicrotask(sync);
 		const newline = props.context.keybindings["input.newline"];
 		const bound = newline !== undefined && matches(newline, event);
 		// why: the textarea itself turns a bare line feed (Ctrl+J without the kitty protocol) into a newline, so a remapped key has to swallow it.
@@ -261,18 +272,29 @@ function Prompt(props: { context: ModuleContext }) {
 			<text fg={props.context.theme.muted}>
 				{props.context.pi.working ? `${spinner()}Working…` : " "}
 			</text>
-			<textarea
-				ref={(element: TextareaRenderable) => {
-					field = element;
-				}}
-				focused
-				height={2}
-				textColor={props.context.theme.text}
-				keyBindings={keyBindings}
-				onKeyDown={onKeyDown}
-				onContentChange={sync}
-				onCursorChange={sync}
-			/>
+			<box flexDirection="row">
+				<textarea
+					ref={(element: TextareaRenderable) => {
+						field = element;
+					}}
+					focused
+					height={2}
+					flexGrow={1}
+					textColor={props.context.theme.text}
+					keyBindings={keyBindings}
+					onKeyDown={onKeyDown}
+					onContentChange={sync}
+					onCursorChange={sync}
+					onSizeChange={sync}
+					onMouseScroll={sync}
+				/>
+				<box width={1} flexDirection="column">
+					<text fg={props.context.theme.muted}>{scroll().up ? "↑" : " "}</text>
+					<text fg={props.context.theme.muted}>
+						{scroll().down ? "↓" : " "}
+					</text>
+				</box>
+			</box>
 			<Show when={open()}>
 				<Portal
 					mount={renderer.root}

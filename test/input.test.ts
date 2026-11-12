@@ -69,6 +69,60 @@ test("Up and Down walk the prompt history and back to the empty draft", async ()
 	);
 });
 
+test("pasting overflowing lines keeps the last line and cursor in the input", async () => {
+	await using piu = await startPiu({ script: { replies: [] } });
+	await piu.renderOnce();
+	await piu.mockInput.pasteBracketedText("first\nsecond\nthird\nfourth\n");
+	await piu.renderOnce();
+	const frame = piu.captureCharFrame();
+	const input = inputArea(frame);
+	expect(input).toContain("fourth");
+	const cursor = piu.renderer.getCursorState();
+	expect(cursor.visible).toBe(true);
+	const rows = frame.split("\n");
+	const fourthRow = rows.findIndex((row) => row.includes("fourth"));
+	expect(cursor.y - 1).toBe(fourthRow + 1);
+	expect(rows[cursor.y - 1]).toContain("│");
+});
+
+test("overflow shows scroll position and arrows move through pasted lines", async () => {
+	await using piu = await startPiu({ script: { replies: ["Got {lastUser}"] } });
+	await piu.renderOnce();
+	await piu.mockInput.pasteBracketedText("first\nsecond\nthird\nfourth");
+	await piu.renderOnce();
+	expect(
+		piu
+			.captureCharFrame()
+			.split("\n")
+			.find((row) => row.includes("third")),
+	).toContain("↑");
+	piu.mockInput.pressArrow("up");
+	piu.mockInput.pressArrow("up");
+	piu.mockInput.pressArrow("up");
+	await piu.renderOnce();
+	const top = piu.captureCharFrame();
+	expect(top.split("\n").find((row) => row.includes("second"))).toContain("↓");
+	piu.mockInput.pressArrow("down");
+	piu.mockInput.pressArrow("down");
+	await piu.mockInput.typeText("X");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) =>
+		f.includes('Got "first\\nsecond\\nthirdX\\nfourth"'),
+	);
+});
+
+test("Up keeps a nonempty draft instead of recalling history", async () => {
+	await using piu = await startPiu({
+		script: { replies: ["Reply one", "Got {lastUser}"] },
+	});
+	await sendAndSettle(piu, "alpha", "Reply one");
+	await piu.mockInput.typeText("draft");
+	piu.mockInput.pressArrow("up");
+	await piu.mockInput.typeText("X");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) => f.includes('Got "draftX"'));
+});
+
 test("during a run Enter steers it and Alt+Enter queues a follow-up for after it", async () => {
 	await using piu = await startPiu({
 		script: {
@@ -106,20 +160,14 @@ test("Esc during a run aborts it and the indicator goes away", async () => {
 	expect(frame).not.toContain("Never reached");
 });
 
-test("Down after the newest history entry brings back the half-typed draft", async () => {
+test("Down keeps a nonempty draft instead of recalling history", async () => {
 	await using piu = await startPiu({ script: { replies: ["Reply one"] } });
 	await sendAndSettle(piu, "alpha", "Reply one");
 
 	await piu.mockInput.typeText("half-typed");
-	piu.mockInput.pressArrow("up");
-	await piu.waitForFrame(
-		(f) => inputArea(f).includes("alpha") && !inputArea(f).includes("half"),
-	);
 	piu.mockInput.pressArrow("down");
-	await piu.waitForFrame(
-		(f) =>
-			inputArea(f).includes("half-typed") && !inputArea(f).includes("alpha"),
-	);
+	await piu.renderOnce();
+	expect(inputArea(piu.captureCharFrame())).toContain("half-typed");
 });
 
 test("the indicator goes away when the Backend dies mid-run", async () => {
