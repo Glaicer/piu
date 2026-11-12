@@ -217,6 +217,53 @@ test("the agent Panel follows new output at the bottom and stays put when scroll
 	await piu.waitForFrame((frame) => agentPanel(frame).includes("Third reply"));
 });
 
+test("Ctrl+Home and Ctrl+End jump through chat and show a bottom hint when scrolled up", async () => {
+	await using piu = await startPiu({
+		script: { replies: [numberedLines("Line", 120)] },
+	});
+	await piu.mockInput.typeText("Lines");
+	piu.mockInput.pressEnter();
+	const bottom = await piu.waitForFrame((frame) =>
+		agentPanel(frame).includes("Line 119"),
+	);
+	expect(agentPanel(bottom)).not.toContain("CTRL+End: jump to bottom");
+
+	piu.mockInput.pressKey("HOME", { ctrl: true });
+	const top = await piu.waitForFrame(
+		(frame) =>
+			agentPanel(frame).includes("Line 000") &&
+			agentPanel(frame).includes("CTRL+End: jump to bottom"),
+	);
+	expect(agentPanel(top)).not.toContain("Line 119");
+
+	piu.mockInput.pressKey("END", { ctrl: true });
+	const end = await piu.waitForFrame(
+		(frame) =>
+			agentPanel(frame).includes("Line 119") &&
+			!agentPanel(frame).includes("CTRL+End: jump to bottom"),
+	);
+	expect(agentPanel(end)).not.toContain("Line 000");
+});
+
+test("the bottom hint follows mouse scrolling", async () => {
+	await using piu = await startPiu({
+		script: { replies: [numberedLines("Line", 120)] },
+	});
+	await piu.mockInput.typeText("Lines");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((frame) => agentPanel(frame).includes("Line 119"));
+	await piu.mockMouse.scroll(10, 5, "up");
+	await piu.waitForFrame((frame) =>
+		agentPanel(frame).includes("CTRL+End: jump to bottom"),
+	);
+	await piu.mockMouse.scroll(10, 5, "down");
+	await piu.waitForFrame(
+		(frame) =>
+			agentPanel(frame).includes("Line 119") &&
+			!agentPanel(frame).includes("CTRL+End: jump to bottom"),
+	);
+});
+
 test("a replaced layout keeps the chat following output in whichever Panel holds it", async () => {
 	await using piu = await startPiu({
 		script: { replies: [numberedLines("Row", 60)] },

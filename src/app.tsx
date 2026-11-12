@@ -285,6 +285,15 @@ function App(props: {
 	};
 	useKeyboard((event) => {
 		if (modals.stack().length > 0) return;
+		if (
+			event.ctrl &&
+			!event.shift &&
+			!event.meta &&
+			(event.name === "home" || event.name === "end")
+		) {
+			if (focus.jumpChat(event.name === "end")) event.preventDefault();
+			return;
+		}
 		const action = Object.entries(props.config.keybindings).find(([, chord]) =>
 			matches(chord, event),
 		)?.[0];

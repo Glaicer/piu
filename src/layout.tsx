@@ -1,4 +1,8 @@
-import type { KeyEvent, Renderable } from "@opentui/core";
+import {
+	type KeyEvent,
+	type Renderable,
+	ScrollBoxRenderable,
+} from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/solid";
 import { type Accessor, createSignal, For, onCleanup } from "solid-js";
 import { channelFor } from "./channel.ts";
@@ -100,6 +104,17 @@ export function SlotView(props: SlotProps) {
 		shown: () => entries.some(shown),
 		handlesKeys: () =>
 			entries.some((entry) => shown(entry) && entry.keyHandlers.length > 0),
+		jumpChat: (bottom) => {
+			if (
+				!visible() ||
+				!followsOutput() ||
+				!(element instanceof ScrollBoxRenderable)
+			)
+				return false;
+			smoothScroll.cancel();
+			element.scrollTo(bottom ? Infinity : 0);
+			return true;
+		},
 	});
 	const focused = () => focus?.isFocused(slot.id) ?? false;
 	const frame = () => ({
@@ -149,23 +164,43 @@ export function SlotView(props: SlotProps) {
 	}
 	const smoothScroll = createSmoothScroll(shared.animate);
 	onCleanup(smoothScroll.cancel);
+	const [awayFromBottom, setAwayFromBottom] = createSignal(false);
 	return (
-		<scrollbox
-			ref={(node: Renderable) => {
-				element = node;
-			}}
-			{...sizing}
-			visible={visible()}
-			border
-			{...frame()}
-			onKeyDown={routeKey}
-			onMouseScroll={smoothScroll.wheel}
-			stickyScroll={followsOutput()}
-			stickyStart="bottom"
-			contentOptions={{ flexDirection: slot.direction }}
-		>
-			{modules}
-		</scrollbox>
+		<box {...sizing} visible={visible()}>
+			<scrollbox
+				ref={(node: ScrollBoxRenderable) => {
+					element = node;
+					const update = () =>
+						setAwayFromBottom(
+							node.scrollTop < node.scrollHeight - node.viewport.height,
+						);
+					node.verticalScrollBar.on("change", update);
+					node.content.on("resize", update);
+					node.viewport.on("resize", update);
+				}}
+				width="100%"
+				height="100%"
+				border
+				{...frame()}
+				onKeyDown={routeKey}
+				onMouseScroll={smoothScroll.wheel}
+				stickyScroll={followsOutput()}
+				stickyStart="bottom"
+				contentOptions={{ flexDirection: slot.direction }}
+			>
+				{modules}
+			</scrollbox>
+			{followsOutput() && awayFromBottom() && (
+				<box
+					position="absolute"
+					right={2}
+					bottom={1}
+					backgroundColor={shared.theme.surface}
+				>
+					<text fg={shared.theme.muted}>CTRL+End: jump to bottom</text>
+				</box>
+			)}
+		</box>
 	);
 }
 
