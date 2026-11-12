@@ -408,6 +408,24 @@ test("hovering the top row of a scrolled list keeps the window still, and Enter 
 	await piu.waitForFrame((f) => inputStartsWith(f, "/tpl-08 "));
 });
 
+test("a pointer resting where the list opens leaves the first entry selected", async () => {
+	await using piu = await startPiu({ script: { replies: [] } });
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+
+	await piu.mockInput.typeText("/");
+	const frame = await piu.waitForFrame((f) => f.includes("/tree"));
+	piu.mockInput.pressBackspace();
+	await piu.waitForFrame((f) => !f.includes("/tree"));
+	await piu.mockMouse.moveTo(EMPTY_COLUMN, rowOf(frame, "/tree"));
+
+	await piu.mockInput.typeText("/");
+	await piu.waitForFrame((f) => f.includes("/tree"));
+	await piu.renderOnce();
+	piu.mockInput.pressTab();
+
+	await piu.waitForFrame((f) => inputStartsWith(f, "/new "));
+});
+
 test("completing with the cursor inside a word replaces the whole word", async () => {
 	await using piu = await startPiu({ script, promptTemplates });
 

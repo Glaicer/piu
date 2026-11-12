@@ -284,7 +284,8 @@ function Prompt(props: { context: ModuleContext }) {
 											? props.context.theme.border
 											: undefined
 									}
-									onMouseOver={() => setSelected(firstShown() + at())}
+									// why: OpenTUI sends `over` to whatever lands under a resting pointer after each frame, which would select a row the user never pointed at.
+									onMouseMove={() => setSelected(firstShown() + at())}
 									onMouseDown={(event) => {
 										event.preventDefault();
 										accept(entry);
