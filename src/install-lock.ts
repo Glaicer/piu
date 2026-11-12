@@ -13,14 +13,17 @@ class InstallBusyError extends Error {
 	}
 }
 
-export async function acquireProbeLock(root: string) {
+export async function acquireProbeLock(root: string, onBusy?: () => void) {
 	const deadline = Date.now() + 2000;
+	let waited = false;
 	while (true) {
 		try {
 			return acquireInstallLock(root);
 		} catch (error) {
-			if (!(error instanceof InstallBusyError) || Date.now() >= deadline)
-				throw error;
+			if (!(error instanceof InstallBusyError)) throw error;
+			if (!onBusy && Date.now() >= deadline) throw error;
+			if (!waited) onBusy?.();
+			waited = true;
 			await setTimeout(25);
 		}
 	}

@@ -22,14 +22,37 @@ type ProbeOptions = {
 	lease?: InstallLease;
 };
 
+const SLOW_PREPARE_MS = 1000;
+
 export async function prepareBackendLease(
 	config: BackendConfig,
-	options: { cwd: string; env: NodeJS.ProcessEnv },
+	options: {
+		cwd: string;
+		env: NodeJS.ProcessEnv;
+		notice?: (message: string) => void;
+	},
 ) {
 	const origin = installOrigin(config, options);
 	if (origin?.family !== "pi-bolt" || origin.manager === "curl")
 		return undefined;
-	const lease = await acquireProbeLock(origin.root);
+	const { notice } = options;
+	const lease = await acquireProbeLock(
+		origin.root,
+		notice &&
+			(() =>
+				notice(
+					"waiting for another piu to finish with this Backend installation",
+				)),
+	);
+	const slow =
+		notice &&
+		setTimeout(
+			() =>
+				notice(
+					"preparing the Backend; the first start after an install downloads its native build",
+				),
+			SLOW_PREPARE_MS,
+		);
 	try {
 		const install = await detectInstall(config, {
 			...options,
@@ -42,6 +65,8 @@ export async function prepareBackendLease(
 	} catch (error) {
 		lease.close();
 		throw error;
+	} finally {
+		clearTimeout(slow);
 	}
 }
 

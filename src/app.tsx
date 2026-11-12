@@ -48,6 +48,7 @@ export async function createApp(options: {
 	exit: (request: ExitRequest) => void;
 	updateCheck?: UpdateCheckOptions;
 	env?: NodeJS.ProcessEnv;
+	notice?: (message: string) => void;
 }) {
 	const cwd = options.cwd ?? process.cwd();
 	const home = piuHome();
@@ -65,7 +66,11 @@ export async function createApp(options: {
 	}
 	let startupLease: InstallLease | undefined;
 	try {
-		startupLease = await prepareBackendLease(config.backend, { cwd, env });
+		startupLease = await prepareBackendLease(config.backend, {
+			cwd,
+			env,
+			notice: options.notice,
+		});
 	} catch (error) {
 		throw new StartupError(
 			error instanceof Error ? error.message : String(error),

@@ -6,6 +6,7 @@ import { StartupError } from "./startup-error.ts";
 
 const view = await createApp({
 	args: process.argv.slice(2),
+	notice: (message) => console.error(`piu: ${message}`),
 	exit: ({ restartArgs }) => {
 		const handoff = process.env[HANDOFF_ENV];
 		if (!restartArgs) process.exit(0);

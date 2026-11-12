@@ -6,6 +6,7 @@ import { alive, eventually, spawnPiu, waitForPid } from "./process.ts";
 import { updateFixture } from "./update-install.ts";
 
 const preload = join(import.meta.dir, "fixtures/update-releases.ts");
+const BUSY_NOTICE = "waiting for another piu to finish with this Backend";
 
 test("a slow RPC startup after /update still opens the changelog once the Backend is ready", async () => {
 	const install = updateFixture("pi-bolt", "npm", { holdRpcAfterUpdate: true });
@@ -59,16 +60,16 @@ test("the package-installed Pi-Bolt RPC launch retains its lease until the first
 			"the RPC launcher to start",
 		);
 		await using starting = spawnPiu(fixture, { env });
-		const result = await eventually(
-			() => starting.proc.exitCode !== null && { code: starting.proc.exitCode },
-			"the second launch to refuse the busy installation",
-		);
-		expect(result.code).toBe(1);
-		expect(starting.text).toContain("Another update is already running");
+		await starting.waitForText(BUSY_NOTICE);
+		expect(starting.proc.exitCode).toBeNull();
+		expect(starting.text).not.toContain("faux-1");
 		writeFileSync(join(install.dir, "rpc-release"), "");
 		await first.waitForText("faux-1");
+		await starting.waitForText("faux-1");
 		first.submit("/q");
+		starting.submit("/q");
 		expect(await first.proc.exited).toBe(0);
+		expect(await starting.proc.exited).toBe(0);
 	} finally {
 		fixture.removeDir();
 		install.cleanup();
@@ -106,13 +107,15 @@ test("Pi-Bolt's lazy native download stays inside the update lock, including ano
 				.split("\n"),
 		).toHaveLength(1);
 		await using starting = spawnPiu(fixture, { env });
-		expect(await starting.proc.exited).toBe(1);
-		expect(starting.text).toContain("Another update is already running");
+		await starting.waitForText(BUSY_NOTICE);
+		expect(starting.proc.exitCode).toBeNull();
 		expect(
 			readFileSync(join(install.dir, "native-starts"), "utf8")
 				.trim()
 				.split("\n"),
 		).toHaveLength(1);
+		starting.proc.kill();
+		await starting.proc.exited;
 		writeFileSync(join(install.dir, "native-release"), "");
 		await initiator.waitForStarts(3);
 		await initiator.waitForText("Verified update note");
@@ -361,3 +364,27 @@ test("two instances cannot install concurrently and updating one leaves the neig
 		install.cleanup();
 	}
 }, 40000);
+
+test("a slow first start of a package-installed Pi-Bolt says why the terminal is still empty", async () => {
+	const install = updateFixture("pi-bolt", "npm", { verifyDelaySeconds: 2 });
+	writeFileSync(
+		join(install.dir, "version-output"),
+		"1.5.2 (Pi-Bolt 1.0.1, linux-x64-jit, JIT on)\n",
+	);
+	const fixture = prepareFixture({
+		backendCommand: install.command,
+		script: { replies: [] },
+	});
+	try {
+		await using piu = spawnPiu(fixture, {
+			env: { ...install.env, BUN_OPTIONS: `--preload=${preload}` },
+		});
+		await piu.waitForText("faux-1");
+		expect(piu.text).toContain("preparing the Backend");
+		piu.submit("/q");
+		expect(await piu.proc.exited).toBe(0);
+	} finally {
+		fixture.removeDir();
+		install.cleanup();
+	}
+}, 30000);
