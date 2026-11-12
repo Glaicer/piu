@@ -6,6 +6,7 @@ import {
 	alive,
 	eventually,
 	leftModes,
+	type PidEntry,
 	spawnPiu,
 	waitForPid,
 } from "./process.ts";
@@ -320,3 +321,19 @@ for (const command of ["/q", "/quit", "/exit", "/restart"]) {
 		}
 	}, 30000);
 }
+
+test("leaving a test without quitting ends the launcher, the app and its Backend", async () => {
+	const fixture = prepareFixture({ script: { replies: [] } });
+	try {
+		let backend: PidEntry | undefined;
+		{
+			await using piu = spawnPiu(fixture);
+			await piu.waitForText("faux-1");
+			[backend] = await piu.waitForStarts(1);
+		}
+		expect(alive(backend?.ppid ?? 0)).toBe(false);
+		expect(alive(backend?.pid ?? 0)).toBe(false);
+	} finally {
+		fixture.removeDir();
+	}
+}, 20000);

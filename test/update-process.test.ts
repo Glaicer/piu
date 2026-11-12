@@ -388,3 +388,42 @@ test("a slow first start of a package-installed Pi-Bolt says why the terminal is
 		install.cleanup();
 	}
 }, 30000);
+
+test("closing the terminal while piu waits for the Backend installation ends piu", async () => {
+	const install = updateFixture("pi-bolt", "npm", { holdNativeDownload: true });
+	writeFileSync(
+		join(install.dir, "version-output"),
+		"1.5.2 (Pi-Bolt 1.0.1, linux-x64-jit, JIT on)\n",
+	);
+	const fixture = prepareFixture({
+		backendCommand: install.command,
+		script: { replies: [] },
+	});
+	try {
+		await using piu = spawnPiu(fixture, {
+			env: { ...install.env, BUN_OPTIONS: `--preload=${preload}` },
+		});
+		const probe = await waitForPid(
+			join(install.dir, "native-starts"),
+			"the --version probe to wait for the native build",
+		);
+		const app = Number(
+			Bun.spawnSync([
+				"ps",
+				"-o",
+				"ppid=",
+				"-p",
+				String(probe),
+			]).stdout.toString(),
+		);
+		expect(alive(app)).toBe(true);
+
+		piu.hangUp();
+
+		await eventually(() => !alive(app), "the app to end");
+		await piu.proc.exited;
+	} finally {
+		fixture.removeDir();
+		install.cleanup();
+	}
+}, 30000);

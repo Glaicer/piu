@@ -2,8 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { prepareFixture } from "./harness.ts";
 
-const launcher = join(import.meta.dir, "../bin/piu.ts");
+const launcher = join(import.meta.dir, "session-launcher.ts");
 const decoder = new TextDecoder();
+const SHUTDOWN_GRACE_MS = 2000;
 
 // why: a CSI/OSC sequence between two letters would split a word that the user sees whole, so the text a test searches has them removed.
 const ESC = String.fromCharCode(27);
@@ -139,8 +140,15 @@ export function spawnPiu(
 				return [];
 			}
 		},
+		hangUp: () => terminal.close(),
+		// why: the launcher forwards SIGTERM to the app and exits after it, while a SIGKILL to the launcher alone would leave the app running; the launcher leads its own session (session-launcher.ts), so its group holds piu and nothing of the runner's.
 		[Symbol.asyncDispose]: async () => {
-			if (proc.exitCode === null) proc.kill("SIGKILL");
+			proc.kill("SIGTERM");
+			const ended = await Promise.race([
+				proc.exited.then(() => true),
+				Bun.sleep(SHUTDOWN_GRACE_MS).then(() => false),
+			]);
+			if (!ended) process.kill(-proc.pid, "SIGKILL");
 			await proc.exited;
 			terminal.close();
 		},
