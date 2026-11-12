@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+	chmodSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -8,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type FauxScript, startPiu } from "./harness.ts";
+import { type FauxScript, inputArea, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -513,6 +514,96 @@ test("a backend.args suffix does not override the saved level when CLI chooses t
 	}
 }, 20000);
 
+test("a --model suffix applies even when --models comes later", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
+	try {
+		writeFileSync(
+			join(dir, "model-selection.json"),
+			JSON.stringify({
+				model: { provider: "faux", id: "faux-2" },
+				thinkingLevel: "low",
+			}),
+		);
+		await using piu = await startPiu({
+			dir,
+			args: ["--models", "faux/faux-1"],
+			extraBackendArgs: ["--model", "faux/faux-2:high"],
+			script: { replies: ["Answered by {model} with {reasoning}"] },
+			config: modelConfig,
+		});
+		await piu.waitForFrame(
+			(f) => f.includes("faux-2") && f.includes("Reasoning: high"),
+		);
+		await piu.mockInput.typeText("Hi");
+		piu.mockInput.pressEnter();
+		await piu.waitForFrame((f) => f.includes("Answered by faux-2 with high"));
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}, 20000);
+
+test("a scoped suffix does not override the saved level when --model has no suffix", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
+	try {
+		writeFileSync(
+			join(dir, "model-selection.json"),
+			JSON.stringify({
+				model: { provider: "faux", id: "faux-2" },
+				thinkingLevel: "high",
+			}),
+		);
+		await using piu = await startPiu({
+			dir,
+			args: ["--models", "faux/faux-3:high"],
+			extraBackendArgs: ["--model", "faux/faux-2"],
+			script: {
+				replies: ["Answered by {model} with {reasoning}"],
+				altReasoningModel: true,
+			},
+			config: modelConfig,
+		});
+		await piu.waitForFrame(
+			(f) => f.includes("faux-2") && f.includes("Reasoning: high"),
+		);
+		await piu.mockInput.typeText("Hi");
+		piu.mockInput.pressEnter();
+		await piu.waitForFrame((f) => f.includes("Answered by faux-2 with high"));
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}, 20000);
+
+test("a scoped suffix only counts for the model the Backend selects", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
+	try {
+		writeFileSync(
+			join(dir, "model-selection.json"),
+			JSON.stringify({
+				model: { provider: "faux", id: "faux-2" },
+				thinkingLevel: "high",
+			}),
+		);
+		await using piu = await startPiu({
+			dir,
+			args: [],
+			extraBackendArgs: ["--models", "faux/faux-2,faux/faux-3:high"],
+			script: {
+				replies: ["Answered by {model} with {reasoning}"],
+				altReasoningModel: true,
+			},
+			config: modelConfig,
+		});
+		await piu.waitForFrame(
+			(f) => f.includes("faux-2") && f.includes("Reasoning: high"),
+		);
+		await piu.mockInput.typeText("Hi");
+		piu.mockInput.pressEnter();
+		await piu.waitForFrame((f) => f.includes("Answered by faux-2 with high"));
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}, 20000);
+
 test("CLI thinking applies to the restored personal model", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
 	try {
@@ -814,6 +905,31 @@ test("an unavailable saved model reports an error without erasing the default", 
 	}
 }, 20000);
 
+test("a corrupt personal selection is reported and left untouched", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
+	const file = join(dir, "model-selection.json");
+	const saved = "{not json";
+	try {
+		writeFileSync(file, saved);
+		await using piu = await startPiu({
+			dir,
+			args: [],
+			script: { replies: ["Answered by {model}"] },
+			config: modelConfig,
+		});
+		await piu.waitForFrame(
+			(f) =>
+				f.includes("Could not read model selection") && f.includes("faux-1"),
+		);
+		await piu.mockInput.typeText("Hi");
+		piu.mockInput.pressEnter();
+		await piu.waitForFrame((f) => f.includes("Answered by faux-1"));
+		expect(readFileSync(file, "utf8")).toBe(saved);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}, 20000);
+
 test("an unsupported saved reasoning level is clamped by the Backend", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
 	const file = join(dir, "model-selection.json");
@@ -845,6 +961,36 @@ test("an unsupported saved reasoning level is clamped by the Backend", async () 
 	}
 }, 20000);
 
+test("a saved level unsupported by the model is clamped to the nearest level", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
+	const file = join(dir, "model-selection.json");
+	const saved = JSON.stringify({
+		model: { provider: "faux", id: "faux-2" },
+		thinkingLevel: "max",
+	});
+	try {
+		writeFileSync(file, saved);
+		await using piu = await startPiu({
+			dir,
+			args: [],
+			script: {
+				replies: ["Answered by {model} with {reasoning}"],
+				limitedReasoning: true,
+			},
+			config: modelConfig,
+		});
+		await piu.waitForFrame(
+			(f) => f.includes("faux-2") && f.includes("Reasoning: high"),
+		);
+		await piu.mockInput.typeText("Hi");
+		piu.mockInput.pressEnter();
+		await piu.waitForFrame((f) => f.includes("Answered by faux-2 with high"));
+		expect(readFileSync(file, "utf8")).toBe(saved);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}, 20000);
+
 test("a failed personal selection write is shown without undoing the Backend selection", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
 	try {
@@ -870,7 +1016,7 @@ test("a failed personal selection write is shown without undoing the Backend sel
 test("a failed favorites write is shown and does not mark the model saved", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
 	try {
-		mkdirSync(join(dir, "model-favorites.json"));
+		writeFileSync(join(dir, "model-favorites.json"), "[]");
 		await using piu = await startPiu({
 			dir,
 			script: none,
@@ -879,15 +1025,90 @@ test("a failed favorites write is shown and does not mark the model saved", asyn
 		await piu.waitForFrame((f) => f.includes("faux-1"));
 		await clickText(piu, "faux-1");
 		await piu.waitForFrame((f) => f.includes("☆ faux-2"));
-		await clickText(piu, "☆ faux-2");
-		const frame = await piu.waitForFrame(
-			(f) => f.includes("Could not save favorites") && f.includes("☆ faux-2"),
+		chmodSync(dir, 0o500);
+		try {
+			await clickText(piu, "☆ faux-2");
+			const frame = await piu.waitForFrame(
+				(f) => f.includes("Could not save favorites") && f.includes("☆ faux-2"),
+			);
+			expect(frame).not.toContain("★ faux-2");
+		} finally {
+			chmodSync(dir, 0o700);
+		}
+	} finally {
+		chmodSync(dir, 0o700);
+		rmSync(dir, { recursive: true, force: true });
+	}
+}, 20000);
+
+test("a corrupt favorites file is reported and not overwritten", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
+	const file = join(dir, "model-favorites.json");
+	const saved = "{not json";
+	try {
+		writeFileSync(file, saved);
+		await using piu = await startPiu({
+			dir,
+			script: none,
+			config: modelConfig,
+		});
+		await piu.waitForFrame(
+			(f) => f.includes("Could not read favorites") && f.includes("faux-1"),
 		);
-		expect(frame).not.toContain("★ faux-2");
+		await clickText(piu, "faux-1");
+		await piu.waitForFrame((f) => f.includes("Search models"));
+		await clickText(piu, "☆ faux-1");
+		await piu.waitForFrame(
+			(f) => f.includes("Could not read favorites") && f.includes("☆ faux-1"),
+		);
+		expect(readFileSync(file, "utf8")).toBe(saved);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
 }, 20000);
+
+test("a favorites entry of the wrong shape is reported and not overwritten", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
+	const file = join(dir, "model-favorites.json");
+	const saved = JSON.stringify([
+		{ provider: "faux", id: "faux-1" },
+		{ provider: 42 },
+	]);
+	try {
+		writeFileSync(file, saved);
+		await using piu = await startPiu({
+			dir,
+			script: none,
+			config: modelConfig,
+		});
+		await piu.waitForFrame(
+			(f) => f.includes("Could not read favorites") && f.includes("faux-1"),
+		);
+		await clickText(piu, "faux-1");
+		await piu.waitForFrame((f) => f.includes("Search models"));
+		await clickText(piu, "☆ faux-1");
+		await piu.waitForFrame(
+			(f) => f.includes("Could not read favorites") && f.includes("☆ faux-1"),
+		);
+		expect(readFileSync(file, "utf8")).toBe(saved);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}, 20000);
+
+test("search text stays out of the prompt and Esc returns the keyboard to it", async () => {
+	await using piu = await start();
+	await clickText(piu, "faux-1");
+	await piu.waitForFrame((f) => f.includes("Search models"));
+	await piu.mockInput.typeText("faux-2");
+	await piu.waitForFrame((f) => f.includes("Search: faux-2"));
+	expect(inputArea(piu.captureCharFrame())).not.toContain("faux-2");
+
+	piu.mockInput.pressEscape();
+	await piu.waitForFrame((f) => !f.includes("Search models"));
+	await piu.mockInput.typeText("after");
+	await piu.waitForFrame((f) => inputArea(f).includes("after"));
+});
 
 test("clicking the model opens a centered Modal of the Backend's models, and picking one switches the Backend", async () => {
 	await using piu = await start({ replies: ["Answered by {model}"] });

@@ -87,6 +87,10 @@ export default function (pi: ExtensionAPI) {
 					).length,
 				),
 			);
+	if (script.limitedReasoning) {
+		const model = faux.getModel("faux-2");
+		if (model) model.thinkingLevelMap = { xhigh: null, max: null };
+	}
 	faux.setResponses(
 		script.replies.map((reply) => (context, options, _state, model) => {
 			const step: FauxStep =

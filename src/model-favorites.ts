@@ -1,48 +1,61 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createSignal } from "solid-js";
-import type { ModelInfo } from "./pi-state.ts";
+import { readJson, writeJson } from "./json-file.ts";
+import { type ModelKey, sameModel } from "./model.ts";
 
-type ModelKey = Pick<ModelInfo, "provider" | "id">;
+type ReadResult = {
+	favorites: ModelKey[];
+	error?: string;
+};
 
-function read(file: string): ModelKey[] {
-	try {
-		const value: unknown = JSON.parse(readFileSync(file, "utf8"));
-		if (!Array.isArray(value)) return [];
-		return value.filter(
-			(item): item is ModelKey =>
-				typeof item === "object" &&
-				item !== null &&
-				typeof item.provider === "string" &&
-				typeof item.id === "string",
-		);
-	} catch {
-		return [];
-	}
+function isModelKey(item: unknown): item is ModelKey {
+	return (
+		typeof item === "object" &&
+		item !== null &&
+		"provider" in item &&
+		"id" in item &&
+		typeof item.provider === "string" &&
+		typeof item.id === "string"
+	);
 }
 
-const same = (a: ModelKey, b: ModelKey) =>
-	a.provider === b.provider && a.id === b.id;
+function read(file: string): ReadResult {
+	const result = readJson(file);
+	if (result.error) return { favorites: [], error: result.error };
+	if (result.value === undefined) return { favorites: [] };
+	if (!Array.isArray(result.value))
+		return { favorites: [], error: "expected a list of models" };
+	if (!result.value.every(isModelKey))
+		return { favorites: [], error: "the file contains an invalid model" };
+	return {
+		favorites: result.value.map(({ provider, id }) => ({ provider, id })),
+	};
+}
 
 export function createModelFavorites(
 	home: string,
 	notify: (message: string) => void,
 ) {
 	const file = join(home, "model-favorites.json");
-	const [favorites, setFavorites] = createSignal(read(file));
+	const initial = read(file);
+	if (initial.error) notify(`Could not read favorites: ${initial.error}`);
+	const [favorites, setFavorites] = createSignal(initial.favorites);
 	return {
-		has: (model: ModelKey) => favorites().some((item) => same(item, model)),
+		has: (model: ModelKey) =>
+			favorites().some((item) => sameModel(item, model)),
 		toggle(model: ModelKey) {
+			// why: another piu may have changed the file since this instance started, so merge against the file instead of the live list.
 			const current = read(file);
-			const next = current.filter((item) => !same(item, model));
-			if (!favorites().some((item) => same(item, model))) {
+			if (current.error) {
+				notify(`Could not read favorites: ${current.error}`);
+				return;
+			}
+			const next = current.favorites.filter((item) => !sameModel(item, model));
+			if (!favorites().some((item) => sameModel(item, model))) {
 				next.push({ provider: model.provider, id: model.id });
 			}
 			try {
-				mkdirSync(home, { recursive: true });
-				const temp = `${file}.${crypto.randomUUID()}.tmp`;
-				writeFileSync(temp, JSON.stringify(next));
-				renameSync(temp, file);
+				writeJson(file, next);
 				setFavorites(next);
 			} catch (error) {
 				notify(`Could not save favorites: ${String(error)}`);

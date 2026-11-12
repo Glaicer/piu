@@ -15,6 +15,13 @@ import {
 } from "./background.ts";
 import { type ChannelPayload, parseChannelRequest } from "./channel.ts";
 import {
+	explicitSession,
+	explicitThinking,
+	maybeSession,
+	modelOverride,
+	optionValue,
+} from "./cli-args.ts";
+import {
 	type createModelSelection,
 	isThinkingLevel,
 } from "./model-selection.ts";
@@ -132,37 +139,14 @@ export type PiActions = {
 const ignoreDeadBackend = () => {};
 const SESSION_FILE_TIMEOUT_MS = 2000;
 
-// why: a thinking suffix belongs to the model pattern it is written on, so only the last model option Pi applies may count as an explicit reasoning choice; an earlier suffix is overridden with its model.
-function lastModelSelection(args: readonly string[]) {
-	let last: string | undefined;
-	for (const [index, arg] of args.entries()) {
-		if (arg === "--model" || arg === "--models") last = args[index + 1];
-		else {
-			const option = ["--model", "--models"].find((name) =>
-				arg.startsWith(`${name}=`),
-			);
-			if (option) last = arg.slice(option.length + 1);
-		}
-	}
-	return last;
-}
-
-function hasThinkingSuffix(patterns: string | undefined) {
-	return (
-		patterns?.split(",").some((pattern) => {
-			const colon = pattern.lastIndexOf(":");
-			return colon >= 0 && isThinkingLevel(pattern.slice(colon + 1));
-		}) ?? false
-	);
-}
-
-export function createPiState(
-	launch: (extraArgs: string[]) => Backend,
-	notify: (message: string, kind: ToastKind) => void,
-	channelTitles: ReadonlySet<string>,
-	selection: ReturnType<typeof createModelSelection>,
-	args: readonly string[],
-) {
+export function createPiState(options: {
+	launch: (extraArgs: string[]) => Backend;
+	notify: (message: string, kind: ToastKind) => void;
+	channelTitles: ReadonlySet<string>;
+	selection: ReturnType<typeof createModelSelection>;
+	args: readonly string[];
+}) {
+	const { launch, notify, channelTitles, selection, args } = options;
 	const [state, setState] = createStore<{
 		sessionFile: string | null;
 		commands: BackendCommand[];
@@ -669,31 +653,23 @@ export function createPiState(
 	}
 
 	attach([]);
-	const saved = selection.read();
-	const hasOption = (...names: string[]) =>
-		args.some((arg) =>
-			names.some((name) => arg === name || arg.startsWith(`${name}=`)),
-		);
-	const explicitSession = hasOption("-r", "--resume", "--session", "--fork");
-	const maybeSession = hasOption("-c", "--continue", "--session-id");
-	const modelOverride = hasOption("--model", "--provider", "--models");
-	let cliThinking: string | undefined;
-	for (const [index, arg] of args.entries()) {
-		if (arg === "--thinking") cliThinking = args[index + 1];
-		else if (arg.startsWith("--thinking="))
-			cliThinking = arg.slice("--thinking=".length);
-	}
-	const thinkingOverride =
-		hasOption("--thinking") || hasThinkingSuffix(lastModelSelection(args));
+	const loaded = selection.read();
+	const saved = loaded.selection;
+	if (loaded.error)
+		notify(`Could not read model selection: ${loaded.error}`, "error");
+	const sessionOverride = explicitSession(args);
+	const maybeSessionFile = maybeSession(args);
+	const selectionOverride = modelOverride(args);
+	const cliThinking = optionValue(args, "--thinking");
 	const ready = (async () => {
-		if (!saved || explicitSession) return;
+		if (!saved || sessionOverride) return;
 		const epoch = sessionEpoch;
 		await refreshSession();
 		if (epoch !== sessionEpoch) return;
 		// why: Pi assigns a path to a new session before writing it; -c and --session-id can either resume a file or create a fresh session.
-		if (maybeSession && state.sessionFile && existsSync(state.sessionFile))
+		if (maybeSessionFile && state.sessionFile && existsSync(state.sessionFile))
 			return;
-		if (!modelOverride) {
+		if (!selectionOverride) {
 			const response = await backend
 				.request({
 					type: "set_model",
@@ -708,9 +684,10 @@ export function createPiState(
 				return;
 			}
 		}
+		const thinkingOverride = explicitThinking(args, state.model);
 		const requestedLevel = !thinkingOverride
 			? saved.thinkingLevel
-			: !modelOverride && isThinkingLevel(cliThinking)
+			: !selectionOverride && isThinkingLevel(cliThinking)
 				? cliThinking
 				: undefined;
 		if (requestedLevel)

@@ -1,7 +1,8 @@
-import { type BoxRenderable, ScrollBoxRenderable } from "@opentui/core";
+import type { BoxRenderable } from "@opentui/core";
 import { createEffect, createSignal, For } from "solid-js";
 import { moduleModal } from "./modal.tsx";
 import type { CommandContext } from "./module.ts";
+import { scrollIntoView } from "./scroll.ts";
 import type { Theme } from "./theme.ts";
 
 export type PickerItem<T> = {
@@ -26,14 +27,7 @@ export function Picker<T>(props: {
 	const move = (step: number) =>
 		setIndex((at) => Math.max(0, Math.min(props.items.length - 1, at + step)));
 	createEffect(() => {
-		const row = rows[index()];
-		if (!row) return;
-		for (let node = row.parent; node; node = node.parent) {
-			if (node instanceof ScrollBoxRenderable) {
-				node.scrollChildIntoView(row);
-				break;
-			}
-		}
+		scrollIntoView(rows[index()]);
 	});
 	return (
 		<box
@@ -112,19 +106,33 @@ export function openPicker<T>(
 	);
 }
 
+export function PickerLink(props: {
+	context: CommandContext;
+	label: string;
+	onPress(): void;
+}) {
+	return (
+		<box
+			onMouseDown={(event) => {
+				event.preventDefault();
+				props.onPress();
+			}}
+		>
+			<text fg={props.context.theme.accent}>{` ${props.label} `}</text>
+		</box>
+	);
+}
+
 export function PickerButton<T>(props: {
 	context: CommandContext;
 	label: string;
 	picker: PickerOptions<T>;
 }) {
 	return (
-		<box
-			onMouseDown={(event) => {
-				event.preventDefault();
-				openPicker(props.context, props.picker);
-			}}
-		>
-			<text fg={props.context.theme.accent}>{` ${props.label} `}</text>
-		</box>
+		<PickerLink
+			context={props.context}
+			label={props.label}
+			onPress={() => openPicker(props.context, props.picker)}
+		/>
 	);
 }

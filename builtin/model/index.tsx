@@ -1,17 +1,17 @@
-import {
-	type BoxRenderable,
-	type InputRenderable,
-	type KeyEvent,
-	ScrollBoxRenderable,
-} from "@opentui/core";
+import type { BoxRenderable, InputRenderable, KeyEvent } from "@opentui/core";
 import { createEffect, createMemo, createSignal, For } from "solid-js";
 import { moduleModal } from "../../src/modal.tsx";
+import { sameModel } from "../../src/model.ts";
 import type { CommandContext, Extension } from "../../src/module.ts";
 import type { ModelInfo } from "../../src/pi-state.ts";
+import { PickerLink } from "../../src/picker.tsx";
+import { scrollIntoView } from "../../src/scroll.ts";
+
+type ModelTab = "Favorites" | "All";
 
 function ModelPicker(props: { context: CommandContext; close(): void }) {
 	const { pi, theme, actions, modelFavorites } = props.context;
-	const [tab, setTab] = createSignal<"Favorites" | "All">(
+	const [tab, setTab] = createSignal<ModelTab>(
 		pi.models.some(modelFavorites.has) ? "Favorites" : "All",
 	);
 	const [query, setQuery] = createSignal("");
@@ -30,10 +30,7 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 	setIndex(
 		Math.max(
 			0,
-			models().findIndex(
-				(model) =>
-					model.id === pi.model?.id && model.provider === pi.model.provider,
-			),
+			models().findIndex((model) => sameModel(model, pi.model)),
 		),
 	);
 	let input: InputRenderable;
@@ -54,17 +51,13 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 		change();
 		const next = models();
 		const found = selected
-			? next.findIndex(
-					(model) =>
-						model.id === selected.id && model.provider === selected.provider,
-				)
+			? next.findIndex((model) => sameModel(model, selected))
 			: -1;
 		setIndex(
 			found >= 0 ? found : Math.max(0, Math.min(before, next.length - 1)),
 		);
 	};
-	const changeTab = (next: "Favorites" | "All") =>
-		updateModels(() => setTab(next));
+	const changeTab = (next: ModelTab) => updateModels(() => setTab(next));
 	const toggle = (model: ModelInfo) =>
 		updateModels(() => modelFavorites.toggle(model));
 	const onKey = (event: KeyEvent, searching: boolean) => {
@@ -96,16 +89,8 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 	});
 	createEffect(() => {
 		const model = models()[index()];
-		queueMicrotask(() => {
-			const row = model && rows.get(model);
-			if (!row || row.isDestroyed) return;
-			for (let node = row.parent; node; node = node.parent) {
-				if (node instanceof ScrollBoxRenderable) {
-					node.scrollChildIntoView(row);
-					break;
-				}
-			}
-		});
+		// why: a row created by the current filter has no ScrollBox parent until the next render, so scrolling now would see the previous tree.
+		queueMicrotask(() => scrollIntoView(model && rows.get(model)));
 	});
 	return (
 		<box flexDirection="column" height={18}>
@@ -189,7 +174,7 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 								<text
 									fg={theme.text}
 									width={40}
-								>{`${model.id}${model.provider === pi.model?.provider && model.id === pi.model.id ? " *" : ""}${model.name === model.id ? "" : `  ${model.name}`}`}</text>
+								>{`${model.id}${sameModel(model, pi.model) ? " *" : ""}${model.name === model.id ? "" : `  ${model.name}`}`}</text>
 								<text fg={theme.muted}>{`  ${model.provider}`}</text>
 							</box>
 						)}
@@ -217,16 +202,11 @@ export default {
 		{
 			id: "current",
 			render: (context) => (
-				<box
-					onMouseDown={(event) => {
-						event.preventDefault();
-						openModelPicker(context);
-					}}
-				>
-					<text
-						fg={context.theme.accent}
-					>{` ${context.pi.model?.id ?? "no model"} `}</text>
-				</box>
+				<PickerLink
+					context={context}
+					label={context.pi.model?.id ?? "no model"}
+					onPress={() => openModelPicker(context)}
+				/>
 			),
 		},
 	],

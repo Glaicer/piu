@@ -36,13 +36,9 @@ export type Command = {
 
 export type BoundCommand = Omit<Command, "run"> & { run(args?: string): void };
 
-export type ModuleContext = {
+export type ModuleContext = CommandContext & {
 	readonly cwd: string;
 	readonly commands: readonly BoundCommand[];
-	readonly pi: PiState;
-	readonly modelFavorites: ModelFavorites;
-	readonly actions: PiActions & UiActions;
-	readonly theme: Theme;
 	readonly settings: ModuleSettings;
 	readonly channel: Channel;
 	readonly keybindings: Keybindings;

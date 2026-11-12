@@ -93,18 +93,18 @@ function App(props: {
 	const animate = createAnimate(renderer, props.config.animations);
 	const toasts = createToasts(animate, renderer.clock);
 	onCleanup(toasts.dispose);
-	const pi = createPiState(
-		(extraArgs) =>
+	const pi = createPiState({
+		launch: (extraArgs) =>
 			startBackend(
 				props.config.backend,
 				[...extraArgs, ...props.args],
 				props.cwd,
 			),
-		toasts.show,
-		new Set(props.channelTitles),
-		createModelSelection(props.home),
-		[...props.config.backend.args, ...props.cliArgs],
-	);
+		notify: toasts.show,
+		channelTitles: new Set(props.channelTitles),
+		selection: createModelSelection(props.home),
+		args: [...props.config.backend.args, ...props.cliArgs],
+	});
 	onCleanup(pi.dispose);
 	const modals = createModals(animate);
 	if (props.updateCheck) {
