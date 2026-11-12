@@ -1,9 +1,11 @@
 import { join } from "node:path";
 import { EditBufferRenderable, type MouseEvent } from "@opentui/core";
 import { useKeyboard, useRenderer } from "@opentui/solid";
-import { createEffect, onCleanup } from "solid-js";
+import { createEffect, createSignal, onCleanup, Show } from "solid-js";
 import { createAnimate } from "./animate.ts";
 import { startBackend } from "./backend.ts";
+import { prepareBackendLease } from "./backend-install.ts";
+import { createBackendUpdate } from "./backend-update.ts";
 import {
 	startUpdateCheck,
 	type UpdateCheckOptions,
@@ -14,6 +16,7 @@ import { bridgeDialogs } from "./dialogs.tsx";
 import { builtinDir, findExtensions, resolvePlacement } from "./extensions.ts";
 import { createPanelFocus } from "./focus.ts";
 import { piuHome } from "./home.ts";
+import type { InstallLease } from "./install-lock.ts";
 import { commandAction, matches } from "./keybindings.ts";
 import { SlotView } from "./layout.tsx";
 import { lifecycleCommands } from "./lifecycle-commands.ts";
@@ -42,10 +45,12 @@ export async function createApp(options: {
 	cwd?: string;
 	exit: (request: ExitRequest) => void;
 	updateCheck?: UpdateCheckOptions;
+	env?: NodeJS.ProcessEnv;
 }) {
 	const cwd = options.cwd ?? process.cwd();
 	const home = piuHome();
 	const config = loadConfig(join(home, "config.json"));
+	const env = { ...process.env, ...options.env };
 	const folders = findExtensions([builtinDir, join(home, "extensions")]);
 	const { panels, commands, channelTitles, piExtensions } =
 		await resolvePlacement(config, folders);
@@ -56,9 +61,18 @@ export async function createApp(options: {
 			);
 		}
 	}
+	let startupLease: InstallLease | undefined;
+	try {
+		startupLease = await prepareBackendLease(config.backend, { cwd, env });
+	} catch (error) {
+		throw new StartupError(
+			error instanceof Error ? error.message : String(error),
+		);
+	}
 	return () => (
 		<App
 			config={config}
+			startupLease={startupLease}
 			cliArgs={options.args}
 			args={[...piExtensions.flatMap((path) => ["-e", path]), ...options.args]}
 			exit={options.exit}
@@ -67,7 +81,7 @@ export async function createApp(options: {
 			panels={panels}
 			commands={commands}
 			updateCheck={options.updateCheck ?? { fetch }}
-			env={{ ...process.env }}
+			env={env}
 			home={home}
 		/>
 	);
@@ -85,41 +99,78 @@ function App(props: {
 	updateCheck: UpdateCheckOptions;
 	env: NodeJS.ProcessEnv;
 	home: string;
+	startupLease: InstallLease | undefined;
 }) {
 	const renderer = useRenderer();
 	const theme = createTheme(renderer, props.config.theme);
 	const animate = createAnimate(renderer, props.config.animations);
 	const toasts = createToasts(animate, renderer.clock);
 	onCleanup(toasts.dispose);
+	let nextLease = props.startupLease;
+	let disposed = false;
+	const startup = Promise.withResolvers<void>();
+	if (!nextLease) startup.resolve();
+	const leases = new Set<InstallLease>();
+	if (nextLease) leases.add(nextLease);
+	const releaseLease = (lease: InstallLease) => {
+		lease.close();
+		leases.delete(lease);
+	};
+	onCleanup(() => {
+		disposed = true;
+		startup.resolve();
+		for (const lease of leases) releaseLease(lease);
+	});
 	const pi = createPiState(
-		(extraArgs) =>
-			startBackend(
+		(extraArgs) => {
+			const backend = startBackend(
 				props.config.backend,
 				[...extraArgs, ...props.args],
 				props.cwd,
-			),
+			);
+			const lease = nextLease;
+			nextLease = undefined;
+			// why: the launcher can change after --version, so protect the actual RPC launch through its first response, not just the preceding probe.
+			if (lease)
+				void backend.request({ type: "get_state" }).then(
+					() => {
+						releaseLease(lease);
+						startup.resolve();
+					},
+					() => {
+						releaseLease(lease);
+						startup.resolve();
+					},
+				);
+			return backend;
+		},
 		toasts.show,
 		new Set(props.channelTitles),
 	);
 	onCleanup(pi.dispose);
 	const modals = createModals(animate);
-	if (props.updateCheck) {
-		onCleanup(
-			startUpdateCheck(
+	const updateCheck = props.updateCheck;
+	let stopUpdateCheck: (() => void) | undefined;
+	onCleanup(() => stopUpdateCheck?.());
+	if (updateCheck) {
+		// why: a slow Pi-Bolt RPC start can hold the probe lease past its wait; begin the startup check once the first launch has released it.
+		void startup.promise.then(() => {
+			if (disposed) return;
+			stopUpdateCheck = startUpdateCheck(
 				{
 					config: props.config.backend,
 					cwd: props.cwd,
 					home: props.home,
 					env: props.env,
-					fetch: props.updateCheck.fetch,
+					fetch: updateCheck.fetch,
 				},
 				{
 					notify: (message) => toasts.show(message, "info", UPDATE_NOTICE_MS),
 					showChangelog: (markdown, onSeen) =>
 						modals.open(changelogModal(markdown, onSeen)),
 				},
-			),
-		);
+			);
+		});
 	}
 	bridgeDialogs(pi, modals);
 	createEffect(() => {
@@ -127,9 +178,54 @@ function App(props: {
 	});
 	// why: a second command while the first is shutting down would start a second piu or Backend; the Backend and the terminal are released before the process ends, so the next piu never shares either.
 	let leaving = false;
+	let retrying = false;
+	async function retryBackend() {
+		if (retrying || leaving || pi.state.backendHealth.status !== "exited")
+			return;
+		retrying = true;
+		try {
+			const lease = await prepareBackendLease(props.config.backend, props);
+			if (disposed || leaving) {
+				lease?.close();
+				return;
+			}
+			if (lease) leases.add(lease);
+			nextLease = lease;
+			pi.actions.restartBackend();
+			if (nextLease) {
+				releaseLease(nextLease);
+				nextLease = undefined;
+			}
+		} catch (error) {
+			toasts.show(
+				error instanceof Error ? error.message : String(error),
+				"error",
+			);
+		} finally {
+			retrying = false;
+		}
+	}
+	const [updateProgress, setUpdateProgress] = createSignal<string>();
+	const updater = createBackendUpdate(
+		{
+			config: props.config.backend,
+			cwd: props.cwd,
+			home: props.home,
+			env: props.env,
+			fetch: props.updateCheck ? props.updateCheck.fetch : fetch,
+		},
+		{
+			progress: setUpdateProgress,
+			notify: (message, error) =>
+				toasts.show(message, error ? "error" : "info", UPDATE_NOTICE_MS),
+			restart: () => void leave(true),
+		},
+	);
+	onCleanup(updater.dispose);
 	async function leave(restart: boolean) {
 		if (leaving) return;
 		leaving = true;
+		updater.dispose();
 		const sessionFile = restart ? await pi.currentSessionFile() : null;
 		await pi.dispose();
 		renderer.destroy();
@@ -142,10 +238,12 @@ function App(props: {
 		pi: pi.state,
 		actions: {
 			...pi.actions,
+			restartBackend: () => void retryBackend(),
 			openModal: modals.open,
 			showToast: toasts.show,
 			quit: () => void leave(false),
 			restart: () => void leave(true),
+			updateBackend: updater.run,
 		},
 		theme,
 	};
@@ -199,6 +297,20 @@ function App(props: {
 			/>
 			<ModalLayer modals={modals} context={context} />
 			<ToastLayer toasts={toasts} theme={theme} />
+			<Show when={updateProgress()}>
+				<box
+					position="absolute"
+					right={2}
+					bottom={2}
+					width={60}
+					border
+					backgroundColor={theme.surface}
+					borderColor={theme.accent}
+					zIndex={201}
+				>
+					<text fg={theme.text}>{updateProgress()}</text>
+				</box>
+			</Show>
 		</box>
 	);
 }

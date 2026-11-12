@@ -6,6 +6,7 @@ import {
 	type ReleaseNote,
 	releaseSource,
 } from "./releases.ts";
+import { readUpdateReceipt } from "./update-receipt.ts";
 
 export type UpdateCheckOptions = { fetch: typeof fetch } | false;
 
@@ -50,7 +51,8 @@ export function startUpdateCheck(
 	const store = createVersionStore(options.home);
 
 	async function showChangelog(install: BackendInstall) {
-		const known = store.get(install.id);
+		const receipt = readUpdateReceipt(options.env, install);
+		const known = receipt?.from ?? store.get(install.id);
 		const current = install.version;
 		if (known === undefined || compareVersions(current, known) < 0) {
 			store.set(install.id, current);
@@ -64,7 +66,10 @@ export function startUpdateCheck(
 		if (signal.aborted) return;
 		hooks.showChangelog(
 			changelogMarkdown(source.name, known, current, source.pageUrl, notes),
-			() => store.set(install.id, current),
+			() => {
+				store.set(install.id, current);
+				receipt?.clear();
+			},
 		);
 	}
 
@@ -83,6 +88,6 @@ export function startUpdateCheck(
 		if (!install || signal.aborted) return;
 		void showChangelog(install).catch(() => {});
 		await announceUpdate(install).catch(() => {});
-	})();
+	})().catch(() => {});
 	return () => abort.abort();
 }

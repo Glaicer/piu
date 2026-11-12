@@ -63,7 +63,7 @@ export function waitForPid(pidFile: string, what: string) {
 
 export function spawnPiu(
 	fixture: ReturnType<typeof prepareFixture>,
-	options: { args?: string[]; cwd?: string } = {},
+	options: { args?: string[]; cwd?: string; env?: NodeJS.ProcessEnv } = {},
 ) {
 	let output = "";
 	const terminal = new Bun.Terminal({
@@ -74,10 +74,19 @@ export function spawnPiu(
 		},
 	});
 	const proc = Bun.spawn(
-		["bun", launcher, ...(options.args ?? ["--model", "faux/faux-1"])],
+		[
+			process.execPath,
+			launcher,
+			...(options.args ?? ["--model", "faux/faux-1"]),
+		],
 		{
 			cwd: options.cwd ?? fixture.dir,
-			env: { ...process.env, PIU_HOME: fixture.home, TERM: "xterm-256color" },
+			env: {
+				...process.env,
+				...options.env,
+				PIU_HOME: fixture.home,
+				TERM: "xterm-256color",
+			},
 			terminal,
 		},
 	);
@@ -93,11 +102,18 @@ export function spawnPiu(
 		type: (text: string) => terminal.write(text),
 		submit: (text: string) => terminal.write(`${text}\r`),
 		mark: () => output.length,
-		waitForText: (needle: string, from = 0) =>
-			eventually(
-				() => output.slice(from).replace(escapes, "").includes(needle),
-				`"${needle}" in the terminal output`,
-			),
+		waitForText: async (needle: string, from = 0) => {
+			try {
+				return await eventually(
+					() => output.slice(from).replace(escapes, "").includes(needle),
+					`"${needle}" in the terminal output`,
+				);
+			} catch (error) {
+				throw new Error(
+					`${error instanceof Error ? error.message : String(error)}\n${output.slice(from).replace(escapes, "").slice(-2500)}`,
+				);
+			}
+		},
 		starts(): PidEntry[] {
 			// why: Pi loads its extensions again on /new, /resume and /fork, so the same Backend logs "start" more than once.
 			const seen = new Set<number>();
