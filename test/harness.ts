@@ -33,6 +33,12 @@ export type FauxScript = {
 	branchBackCommand?: boolean;
 	extensionCommands?: string[];
 	contextWindow?: number;
+	sameIdProvider?: boolean;
+	denyOtherOnFile?: boolean;
+	namedModel?: boolean;
+	longModelName?: boolean;
+	manyModels?: boolean;
+	colonModel?: boolean;
 	failingHook?: boolean;
 	switchCommands?: boolean;
 	freshSessionCommand?: boolean;

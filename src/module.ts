@@ -5,6 +5,7 @@ import type { Animate } from "./animate.ts";
 import type { Channel } from "./channel.ts";
 import type { Keybindings } from "./keybindings.ts";
 import type { ModalRequest } from "./modal.tsx";
+import type { ModelFavorites } from "./model-favorites.ts";
 import type { PiActions, PiState } from "./pi-state.ts";
 import type { Theme } from "./theme.ts";
 import type { ToastKind } from "./toast.tsx";
@@ -22,6 +23,7 @@ export type UiActions = {
 
 export type CommandContext = {
 	readonly pi: PiState;
+	readonly modelFavorites: ModelFavorites;
 	readonly actions: PiActions & UiActions;
 	readonly theme: Theme;
 };
@@ -38,6 +40,7 @@ export type ModuleContext = {
 	readonly cwd: string;
 	readonly commands: readonly BoundCommand[];
 	readonly pi: PiState;
+	readonly modelFavorites: ModelFavorites;
 	readonly actions: PiActions & UiActions;
 	readonly theme: Theme;
 	readonly settings: ModuleSettings;
