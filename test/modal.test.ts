@@ -573,7 +573,7 @@ test("a scoped suffix does not override the saved level when --model has no suff
 	}
 }, 20000);
 
-test("a scoped suffix only counts for the model the Backend selects", async () => {
+test("any scoped suffix counts as explicit CLI reasoning", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
 	try {
 		writeFileSync(
@@ -594,11 +594,11 @@ test("a scoped suffix only counts for the model the Backend selects", async () =
 			config: modelConfig,
 		});
 		await piu.waitForFrame(
-			(f) => f.includes("faux-2") && f.includes("Reasoning: high"),
+			(f) => f.includes("faux-2") && f.includes("Reasoning: medium"),
 		);
 		await piu.mockInput.typeText("Hi");
 		piu.mockInput.pressEnter();
-		await piu.waitForFrame((f) => f.includes("Answered by faux-2 with high"));
+		await piu.waitForFrame((f) => f.includes("Answered by faux-2 with medium"));
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

@@ -684,7 +684,7 @@ export function createPiState(options: {
 				return;
 			}
 		}
-		const thinkingOverride = explicitThinking(args, state.model);
+		const thinkingOverride = explicitThinking(args);
 		const requestedLevel = !thinkingOverride
 			? saved.thinkingLevel
 			: !selectionOverride && isThinkingLevel(cliThinking)
