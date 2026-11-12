@@ -69,16 +69,20 @@ function Prompt(props: { context: ModuleContext }) {
 			}));
 		}
 		if (current?.kind !== "slash") return [];
-		const own = new Set(props.context.commands.map((c) => c.name));
+		const app = new Map(
+			props.context.commands.map((command) => [command.name, command] as const),
+		);
 		const commands = [
-			...props.context.commands,
-			...props.context.pi.commands.filter((c) => !own.has(c.name)),
+			...app.values(),
+			...props.context.pi.commands.filter((command) => !app.has(command.name)),
 		];
+		// why: get_commands reports no argument hint, so only an app command can be known to take none.
 		return narrow(commands, current.query, (command) => command.name).map(
 			(command) => ({
 				label: `/${command.name}`,
 				detail: command.description,
 				insert: `/${command.name} `,
+				command: app.get(command.name),
 			}),
 		);
 	});
@@ -118,6 +122,14 @@ function Prompt(props: { context: ModuleContext }) {
 		const current = trigger();
 		if (!field || !current) return;
 		const typed = `${current.kind === "slash" ? "/" : "@"}${current.query}`;
+		const command = entry.command;
+		if (command?.takesArguments === false && field.plainText === typed) {
+			field.setText("");
+			// why: history should recall the command the list completed, not the prefix that found it.
+			remember(`/${command.name}`);
+			command.run();
+			return;
+		}
 		const tail = /^\S*/.exec(field.plainText.slice(before().length))?.[0] ?? "";
 		for (const _ of new Intl.Segmenter().segment(tail)) field.deleteChar();
 		for (const _ of new Intl.Segmenter().segment(typed)) {
@@ -174,12 +186,16 @@ function Prompt(props: { context: ModuleContext }) {
 		show([...queued, field.plainText].filter(Boolean).join("\n\n"));
 	}
 
+	function remember(text: string) {
+		if (history.at(-1) !== text) history.push(text);
+		recalled = history.length;
+		draft = "";
+	}
+
 	function take() {
 		const value = field?.plainText ?? "";
 		if (!value.trim()) return;
-		if (history.at(-1) !== value) history.push(value);
-		recalled = history.length;
-		draft = "";
+		remember(value);
 		field?.setText("");
 		return value;
 	}

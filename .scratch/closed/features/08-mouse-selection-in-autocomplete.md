@@ -42,6 +42,7 @@ Each list row in `Prompt` gets `onMouseMove`, which sets `selected` to `firstSho
 Rejected: `onMouseOver`, as in `src/picker.tsx`: after every rendered frame OpenTUI synthesises an `over` event at the pointer (`recheckHoverState` in `chunk-bun-psdzwx7h.js`) but never a `move`. A pointer resting where the list opens would select its row instead of row 0, and rows that slide under a still pointer during arrow scrolling would pull the selection back to it.
 
 Decided with the user:
+
 - 08 goes in before 07. At this base, `accept` only inserts, so the criteria "runs when it takes no arguments" and "opens the Modal the way Enter does" are met through ticket 07's change to the shared `accept` path. Here a click is proven to give exactly what Enter gives. The note for 07 is recorded as `From 08:` in ticket 07.
 - Up after scrolling now moves the selection inside the window, and the window shifts only at the top edge. Today the selection stays on the bottom row and the window shifts. Down from the top behaves exactly as before.
 
@@ -76,11 +77,17 @@ onMouseDown={(event) => { event.preventDefault(); accept(entry); }}
 
 ```ts
 // test/autocomplete.test.ts
-function rowOf(frame: string, label: string): { x: number; y: number }
+function rowOf(frame: string, label: string): { x: number; y: number };
 // y = the frame row whose line contains ` ${label}` (the list row), x = indexOf(label) + 1
-function shownLabels(frame: string, pattern: RegExp): string[]
+function shownLabels(frame: string, pattern: RegExp): string[];
 // the labels of the visible list rows in order from top to bottom, e.g. pattern /\/zz\d\d(?= )/
-const many = { replies: [], extensionCommands: Array.from({ length: 12 }, (_, i) => `zz${String(i + 1).padStart(2, "0")}`) };
+const many = {
+	replies: [],
+	extensionCommands: Array.from(
+		{ length: 12 },
+		(_, i) => `zz${String(i + 1).padStart(2, "0")}`,
+	),
+};
 ```
 
 ### Steps

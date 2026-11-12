@@ -46,16 +46,19 @@ export const sessionCommands: readonly Command[] = [
 	{
 		name: "new",
 		description: "Start a new session",
+		takesArguments: false,
 		run: ({ actions }) => void actions.newSession(),
 	},
 	{
 		name: "resume",
 		description: "Resume another session",
+		takesArguments: false,
 		run: (context) => void resume(context),
 	},
 	{
 		name: "tree",
 		description: "Fork from an earlier prompt",
+		takesArguments: false,
 		run: (context) => void tree(context),
 	},
 	{
