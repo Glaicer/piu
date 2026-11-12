@@ -1,3 +1,5 @@
+import type { BoundCommand } from "../../src/module.ts";
+
 export type Trigger = {
 	readonly kind: "slash" | "file";
 	readonly query: string;
@@ -7,6 +9,7 @@ export type Entry = {
 	readonly label: string;
 	readonly detail?: string;
 	readonly insert: string;
+	readonly command?: BoundCommand;
 };
 
 export function findTrigger(before: string): Trigger | undefined {

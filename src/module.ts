@@ -32,6 +32,7 @@ export type CommandContext = {
 export type Command = {
 	readonly name: string;
 	readonly description?: string;
+	readonly takesArguments?: boolean;
 	run(context: CommandContext, args: string): void;
 };
 

@@ -214,6 +214,7 @@ export default {
 		{
 			name: "model",
 			description: "Switch the model",
+			takesArguments: false,
 			run: (context) => openModelPicker(context),
 		},
 	],

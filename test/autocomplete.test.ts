@@ -2,7 +2,13 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { inputArea, startPiu } from "./harness.ts";
+import { inputArea, panelText, startPiu } from "./harness.ts";
+
+const agentPanel = (frame: string) => panelText(frame, 10, 0);
+const typedInInput = (frame: string, text: string) =>
+	inputArea(frame)
+		.split("\n")
+		.some((line) => line.startsWith(text));
 
 const script = { replies: [], extensionCommands: ["greet"] };
 const promptTemplates = {
@@ -44,6 +50,98 @@ test("typing narrows the list and Enter inserts the chosen entry instead of send
 	);
 	expect(inserted).not.toContain("Never asked");
 	expect(inserted).not.toContain("Review the code");
+});
+
+test("Enter on a selected command that takes no arguments runs it", async () => {
+	await using piu = await startPiu({
+		script: { replies: ["Seen {messages} {lastUser}"] },
+	});
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+
+	await piu.mockInput.typeText("/mod");
+	await piu.waitForFrame((f) => f.includes("Switch the model"));
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) => f.includes("faux-2"));
+
+	piu.mockInput.pressEscape();
+	await piu.waitForFrame((f) => !f.includes("faux-2"));
+	await piu.mockInput.typeText("hi");
+	piu.mockInput.pressEnter();
+
+	await piu.waitForFrame((f) => f.includes('Seen 1 "hi"'));
+});
+
+test("a command run from the list is what Up recalls afterwards", async () => {
+	await using piu = await startPiu({ script: { replies: [] } });
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+
+	await piu.mockInput.typeText("/mod");
+	await piu.waitForFrame((f) => f.includes("Switch the model"));
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) => f.includes("faux-2"));
+	piu.mockInput.pressEscape();
+	await piu.waitForFrame((f) => !f.includes("faux-2"));
+
+	piu.mockInput.pressArrow("up");
+	await piu.waitForFrame((f) => typedInInput(f, "/model"));
+});
+
+test("a selected command that takes arguments is inserted for the user to complete", async () => {
+	await using piu = await startPiu({ script: { replies: [] } });
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+
+	await piu.mockInput.typeText("/comp");
+	await piu.waitForFrame((f) => f.includes("Compact the context"));
+	piu.mockInput.pressEnter();
+
+	await piu.waitForFrame((f) => typedInInput(f, "/compact "));
+
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) => f.includes("Nothing to compact"));
+});
+
+test("a selected Backend command is inserted for the user to complete", async () => {
+	await using piu = await startPiu({
+		script: { replies: [], extensionCommands: ["greet"] },
+	});
+
+	await piu.mockInput.typeText("/gre");
+	await piu.waitForFrame((f) => f.includes("Extension command greet"));
+	piu.mockInput.pressEnter();
+
+	await piu.waitForFrame((f) => typedInInput(f, "/greet "));
+});
+
+test("a selected /new starts a fresh session", async () => {
+	await using piu = await startPiu({
+		script: { replies: ["Seen {messages} {lastUser}"] },
+	});
+	await piu.mockInput.typeText("hello");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) => agentPanel(f).includes('Seen 1 "hello"'));
+
+	await piu.mockInput.typeText("/ne");
+	await piu.waitForFrame((f) => f.includes("Start a new session"));
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) => !agentPanel(f).includes('Seen 1 "hello"'));
+
+	await piu.mockInput.typeText("again");
+	piu.mockInput.pressEnter();
+
+	await piu.waitForFrame((f) => agentPanel(f).includes('Seen 1 "again"'));
+});
+
+test("a command with text after the cursor in the input is inserted instead of run", async () => {
+	await using piu = await startPiu({ script: { replies: [] } });
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+
+	await piu.mockInput.typeText("/model");
+	for (let i = 0; i < 2; i++) piu.mockInput.pressArrow("left");
+	await piu.waitForFrame((f) => f.includes("Switch the model"));
+	piu.mockInput.pressTab();
+
+	const frame = await piu.waitForFrame((f) => typedInInput(f, "/model "));
+	expect(frame).not.toContain("faux-2");
 });
 
 test("an app command runs locally and never reaches the model", async () => {
@@ -89,7 +187,7 @@ test("an app command hides a Backend command of the same name", async () => {
 	expect(frame).not.toContain("Extension command model");
 });
 
-test("Down moves the selection before Enter inserts", async () => {
+test("Down moves the selection before Enter runs it", async () => {
 	await using piu = await startPiu({ script: { replies: [] } });
 
 	await piu.mockInput.typeText("/");
@@ -97,11 +195,8 @@ test("Down moves the selection before Enter inserts", async () => {
 	piu.mockInput.pressArrow("down");
 	piu.mockInput.pressEnter();
 
-	await piu.waitForFrame((f) =>
-		inputArea(f)
-			.split("\n")
-			.some((line) => line.startsWith("/resume ")),
-	);
+	const frame = await piu.waitForFrame((f) => f.includes("No saved sessions"));
+	expect(inputArea(frame)).not.toContain("/resume");
 });
 
 test("Esc closes the list first and only then aborts the run", async () => {
@@ -211,18 +306,23 @@ test("@ completes in the middle of text after wide characters", async () => {
 	}
 });
 
-test("Tab inserts the chosen entry", async () => {
-	await using piu = await startPiu({ script: { replies: [] } });
+test("Tab on a selected command that takes no arguments runs it", async () => {
+	await using piu = await startPiu({
+		script: { replies: [] },
+		args: ["--model", "faux/faux-2"],
+	});
 
 	await piu.mockInput.typeText("/reas");
 	await piu.waitForFrame((f) => f.includes("Set the reasoning level"));
 	piu.mockInput.pressTab();
 
-	await piu.waitForFrame((f) =>
-		inputArea(f)
-			.split("\n")
-			.some((line) => line.startsWith("/reasoning ")),
+	const frame = await piu.waitForFrame((f) =>
+		f.split("\n").some((line) => line.includes("│ high ")),
 	);
+	expect(inputArea(frame)).not.toContain("/reas");
+
+	piu.mockInput.pressEscape();
+	await piu.waitForFrame((f) => !f.includes("high"));
 });
 
 test("a command typed in capitals runs the same app command", async () => {

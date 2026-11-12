@@ -34,6 +34,7 @@ export default {
 		{
 			name: "reasoning",
 			description: "Set the reasoning level",
+			takesArguments: false,
 			run: (context) => openPicker(context, levelPicker(context)),
 		},
 	],
