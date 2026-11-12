@@ -1,5 +1,9 @@
 import { join } from "node:path";
-import { EditBufferRenderable, type MouseEvent } from "@opentui/core";
+import {
+	type ClipboardService,
+	EditBufferRenderable,
+	type MouseEvent,
+} from "@opentui/core";
 import { useKeyboard, useRenderer } from "@opentui/solid";
 import { createEffect, createSignal, onCleanup, Show } from "solid-js";
 import { createAnimate } from "./animate.ts";
@@ -12,6 +16,7 @@ import {
 } from "./backend-updates.ts";
 import { changelogModal } from "./changelog.tsx";
 import { type Config, loadConfig } from "./config.ts";
+import { useCopyOnSelect } from "./copy-on-select.ts";
 import { bridgeDialogs } from "./dialogs.tsx";
 import { builtinDir, findExtensions, resolvePlacement } from "./extensions.ts";
 import { createPanelFocus } from "./focus.ts";
@@ -47,6 +52,7 @@ export async function createApp(options: {
 	cwd?: string;
 	exit: (request: ExitRequest) => void;
 	updateCheck?: UpdateCheckOptions;
+	clipboard?: ClipboardService;
 	env?: NodeJS.ProcessEnv;
 	notice?: (message: string) => void;
 }) {
@@ -88,6 +94,7 @@ export async function createApp(options: {
 			panels={panels}
 			commands={commands}
 			updateCheck={options.updateCheck ?? { fetch }}
+			clipboard={options.clipboard}
 			env={env}
 			home={home}
 		/>
@@ -104,6 +111,7 @@ function App(props: {
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	commands: readonly Command[];
 	updateCheck: UpdateCheckOptions;
+	clipboard: ClipboardService | undefined;
 	env: NodeJS.ProcessEnv;
 	home: string;
 	startupLease: InstallLease | undefined;
@@ -113,6 +121,9 @@ function App(props: {
 	const animate = createAnimate(renderer, props.config.animations);
 	const toasts = createToasts(renderer.clock);
 	onCleanup(toasts.dispose);
+	useCopyOnSelect(renderer, props.clipboard, (message) =>
+		toasts.show(message, "error"),
+	);
 	let nextLease = props.startupLease;
 	let disposed = false;
 	const startup = Promise.withResolvers<void>();

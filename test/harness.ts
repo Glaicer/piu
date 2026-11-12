@@ -9,7 +9,11 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { JsonObject } from "@earendil-works/pi-ai";
-import type { ThemeMode } from "@opentui/core";
+import type {
+	ClipboardService,
+	ClipboardWriteOptions,
+	ThemeMode,
+} from "@opentui/core";
 import type { ManualClock } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { createApp, type ExitRequest } from "../src/app.tsx";
@@ -192,6 +196,26 @@ export function prepareFixture(options: FixtureOptions) {
 	};
 }
 
+// why: the real clipboard is the developer's own and OSC 52 throws in the test renderer, so every app in a test gets this recorder.
+export function recordingClipboard(failure?: Error | "reports") {
+	const writes: { text: string; options: ClipboardWriteOptions }[] = [];
+	const service = {
+		async writeText(text: string, options: ClipboardWriteOptions) {
+			writes.push({ text, options });
+			if (failure instanceof Error) throw failure;
+			return {
+				host: { status: failure ? "unsupported" : "written" },
+				terminal: {
+					status: failure ? "local-failure" : "not-attempted",
+					capability: "unknown",
+				},
+			};
+		},
+		async dispose() {},
+	} as unknown as ClipboardService;
+	return { service, writes };
+}
+
 export async function startPiu(
 	options: FixtureOptions & {
 		args?: string[];
@@ -201,9 +225,11 @@ export async function startPiu(
 		kittyKeyboard?: boolean;
 		clock?: ManualClock;
 		terminalBackground?: ThemeMode;
+		clipboardError?: Error | "reports";
 	},
 ) {
 	const { dir, home, removeDir } = prepareFixture(options);
+	const clipboard = recordingClipboard(options.clipboardError);
 	const savedEnv = { HOME: process.env.HOME, PIU_HOME: process.env.PIU_HOME };
 	if (options.homeFromHomeDir) {
 		process.env.HOME = dir;
@@ -220,6 +246,7 @@ export async function startPiu(
 			exit: (request) => exits.push(request),
 			updateCheck: options.updateCheck ?? false,
 			env: options.appEnv,
+			clipboard: clipboard.service,
 		});
 	} catch (error) {
 		removeDir();
@@ -259,6 +286,7 @@ export async function startPiu(
 		...setup,
 		dir,
 		exits,
+		copied: clipboard.writes,
 		waitForFrame,
 		reportTerminalBackground: (mode: ThemeMode) =>
 			reportTerminalBackground(setup.renderer, mode),
