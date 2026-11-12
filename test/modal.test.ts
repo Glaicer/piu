@@ -139,6 +139,59 @@ test("the search query remains when switching model tabs", async () => {
 	);
 });
 
+test("keyboard tab switching keeps the search query", async () => {
+	await using piu = await start();
+	await clickText(piu, "faux-1");
+	await piu.waitForFrame((f) => f.includes("☆ faux-2"));
+	await clickText(piu, "☆ faux-2");
+	await piu.waitForFrame((f) => f.includes("★ faux-2"));
+	await piu.mockInput.typeText("faux-");
+	await piu.waitForFrame(
+		(f) => f.includes("Search: faux-") && f.includes("☆ faux-1"),
+	);
+	piu.mockInput.pressTab();
+	piu.mockInput.pressArrow("right");
+	await piu.waitForFrame(
+		(f) =>
+			f.includes("Search: faux-") &&
+			!f.includes("☆ faux-1") &&
+			f.includes("★ faux-2"),
+	);
+	piu.mockInput.pressArrow("left");
+	await piu.waitForFrame(
+		(f) =>
+			f.includes("Search: faux-") &&
+			f.includes("☆ faux-1") &&
+			f.includes("★ faux-2"),
+	);
+});
+
+test("clicking the search field after moving to the list returns typing to the search", async () => {
+	await using piu = await start();
+	await clickText(piu, "faux-1");
+	await piu.waitForFrame(
+		(f) => f.includes("Search models") && f.includes("faux-2"),
+	);
+	piu.mockInput.pressTab();
+	await clickText(piu, "Search models");
+	await piu.mockInput.typeText("faux-2");
+	const frame = await piu.waitForFrame((f) => f.includes("Search: faux-2"));
+	expect(count(frame, "faux-1")).toBe(1);
+});
+
+test("clicking the search label returns focus to the search field", async () => {
+	await using piu = await start();
+	await clickText(piu, "faux-1");
+	await piu.waitForFrame(
+		(f) => f.includes("Search models") && f.includes("faux-2"),
+	);
+	piu.mockInput.pressTab();
+	await clickText(piu, "Search:");
+	await piu.mockInput.typeText("faux-2");
+	const frame = await piu.waitForFrame((f) => f.includes("Search: faux-2"));
+	expect(count(frame, "faux-1")).toBe(1);
+});
+
 test("F favorites the highlighted model and restores it on reopening", async () => {
 	await using piu = await start();
 	await clickText(piu, "faux-1");
@@ -424,6 +477,37 @@ test("a thinking suffix in backend.args models takes precedence over the persona
 		await piu.mockInput.typeText("Hi");
 		piu.mockInput.pressEnter();
 		await piu.waitForFrame((f) => f.includes("Answered by faux-2 with low"));
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}, 20000);
+
+test("a backend.args suffix does not override the saved level when CLI chooses the model", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
+	try {
+		writeFileSync(
+			join(dir, "model-selection.json"),
+			JSON.stringify({
+				model: { provider: "faux", id: "faux-2" },
+				thinkingLevel: "high",
+			}),
+		);
+		await using piu = await startPiu({
+			dir,
+			args: ["--model", "faux/faux-3"],
+			extraBackendArgs: ["--models", "faux/faux-2:medium,faux/faux-3"],
+			script: {
+				replies: ["Answered by {model} with {reasoning}"],
+				altReasoningModel: true,
+			},
+			config: modelConfig,
+		});
+		await piu.waitForFrame(
+			(f) => f.includes("faux-3") && f.includes("Reasoning: high"),
+		);
+		await piu.mockInput.typeText("Hi");
+		piu.mockInput.pressEnter();
+		await piu.waitForFrame((f) => f.includes("Answered by faux-3 with high"));
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

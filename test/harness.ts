@@ -39,6 +39,7 @@ export type FauxScript = {
 	longModelName?: boolean;
 	manyModels?: boolean;
 	colonModel?: boolean;
+	altReasoningModel?: boolean;
 	failingHook?: boolean;
 	switchCommands?: boolean;
 	freshSessionCommand?: boolean;

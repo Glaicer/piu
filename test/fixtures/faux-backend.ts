@@ -36,6 +36,7 @@ export default function (pi: ExtensionAPI) {
 					}))
 				: []),
 			...(script.colonModel ? [{ id: "faux-2:free", reasoning: true }] : []),
+			...(script.altReasoningModel ? [{ id: "faux-3", reasoning: true }] : []),
 		],
 		tokensPerSecond: script.tokensPerSecond,
 		tokenSize: script.tokenSize

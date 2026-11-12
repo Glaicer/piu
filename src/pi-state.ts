@@ -132,6 +132,30 @@ export type PiActions = {
 const ignoreDeadBackend = () => {};
 const SESSION_FILE_TIMEOUT_MS = 2000;
 
+// why: a thinking suffix belongs to the model pattern it is written on, so only the last model option Pi applies may count as an explicit reasoning choice; an earlier suffix is overridden with its model.
+function lastModelSelection(args: readonly string[]) {
+	let last: string | undefined;
+	for (const [index, arg] of args.entries()) {
+		if (arg === "--model" || arg === "--models") last = args[index + 1];
+		else {
+			const option = ["--model", "--models"].find((name) =>
+				arg.startsWith(`${name}=`),
+			);
+			if (option) last = arg.slice(option.length + 1);
+		}
+	}
+	return last;
+}
+
+function hasThinkingSuffix(patterns: string | undefined) {
+	return (
+		patterns?.split(",").some((pattern) => {
+			const colon = pattern.lastIndexOf(":");
+			return colon >= 0 && isThinkingLevel(pattern.slice(colon + 1));
+		}) ?? false
+	);
+}
+
 export function createPiState(
 	launch: (extraArgs: string[]) => Backend,
 	notify: (message: string, kind: ToastKind) => void,
@@ -183,6 +207,7 @@ export function createPiState(
 
 	let backend!: Backend;
 	let detach = () => {};
+	let sessionEpoch = 0;
 	const runningTools = new Set<string>();
 	// why: the protocol never says which tool call raised a dialog, so a dialog belongs to the tool calls running when it arrived and closes once all of them have ended; one raised with no tool running lasts until the run ends.
 	const dialogOwners = new Map<string, ReadonlySet<string>>();
@@ -253,6 +278,7 @@ export function createPiState(
 	}
 
 	function attach(extraArgs: string[]) {
+		sessionEpoch += 1;
 		detach();
 		backend = launch(extraArgs);
 		const offRecords = backend.onRecord(applyRecord);
@@ -605,6 +631,8 @@ export function createPiState(
 			{ type: "new_session" | "switch_session" | "fork" }
 		>,
 	) {
+		// why: a session switch during startup restoration would otherwise resume its own model and stop being the choice that wins.
+		await ready;
 		clearExtensionUi();
 		const response = await backend.request(command).catch(ignoreDeadBackend);
 		if (!response) return;
@@ -620,6 +648,7 @@ export function createPiState(
 		) {
 			return;
 		}
+		sessionEpoch += 1;
 		clearRun();
 		await Promise.all([loadMessages(), loadCommands(), refreshSession()]);
 		return response;
@@ -655,20 +684,12 @@ export function createPiState(
 			cliThinking = arg.slice("--thinking=".length);
 	}
 	const thinkingOverride =
-		hasOption("--thinking") ||
-		args.some(
-			(arg, index) =>
-				(["--model", "--models"].includes(args[index - 1] ?? "") ||
-					arg.startsWith("--model=") ||
-					arg.startsWith("--models=")) &&
-				arg.split(",").some((pattern) => {
-					const colon = pattern.lastIndexOf(":");
-					return colon >= 0 && isThinkingLevel(pattern.slice(colon + 1));
-				}),
-		);
+		hasOption("--thinking") || hasThinkingSuffix(lastModelSelection(args));
 	const ready = (async () => {
 		if (!saved || explicitSession) return;
+		const epoch = sessionEpoch;
 		await refreshSession();
+		if (epoch !== sessionEpoch) return;
 		// why: Pi assigns a path to a new session before writing it; -c and --session-id can either resume a file or create a fresh session.
 		if (maybeSession && state.sessionFile && existsSync(state.sessionFile))
 			return;
@@ -680,6 +701,7 @@ export function createPiState(
 					modelId: saved.model.id,
 				})
 				.catch(ignoreDeadBackend);
+			if (epoch !== sessionEpoch) return;
 			if (!response?.success) {
 				if (response)
 					notify(`Could not restore model: ${response.error}`, "error");
@@ -695,6 +717,7 @@ export function createPiState(
 			await backend
 				.request({ type: "set_thinking_level", level: requestedLevel })
 				.catch(ignoreDeadBackend);
+		if (epoch !== sessionEpoch) return;
 		await refreshSession();
 	})();
 

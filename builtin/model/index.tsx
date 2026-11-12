@@ -125,7 +125,7 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 					)}
 				</For>
 			</box>
-			<box flexDirection="row">
+			<box flexDirection="row" onMouseDown={() => input.focus()}>
 				<text fg={theme.muted}> Search: </text>
 				<input
 					ref={(element: InputRenderable) => {
