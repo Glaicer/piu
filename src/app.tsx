@@ -188,7 +188,7 @@ function App(props: {
 			);
 		});
 	}
-	bridgeDialogs(pi, modals);
+	bridgeDialogs(pi, modals, () => renderer.height);
 	createEffect(() => {
 		if (pi.state.title !== null) renderer.setTerminalTitle(pi.state.title);
 	});

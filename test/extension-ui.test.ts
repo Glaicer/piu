@@ -73,6 +73,22 @@ test("clicking outside a select dialog gives the extension its cancelled value",
 	await piu.waitForFrame((f) => agentPanel(f).includes(gotValue("null")));
 });
 
+test("a select dialog with a long multi-line title keeps its options visible", async () => {
+	const command = `git add src/a.ts src/b.ts && git commit -m "${"word ".repeat(30)}end"`;
+	await using piu = await raise({
+		method: "select",
+		title: `Run external action?\n\n${command}`,
+		options: ["No", "Yes"],
+	});
+	const frame = await piu.waitForFrame(
+		(f) => f.includes("Run external action?") && f.includes('end"'),
+	);
+
+	const { x, y } = locate(frame, "Yes");
+	await piu.mockMouse.click(x, y);
+	await piu.waitForFrame((f) => agentPanel(f).includes(gotValue('"Yes"')));
+});
+
 function locate(frame: string, text: string) {
 	const rows = frame.split("\n");
 	const row = rows.findLastIndex((line) => line.includes(text));

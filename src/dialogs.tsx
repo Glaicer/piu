@@ -94,23 +94,27 @@ function Body(props: {
 }
 
 function height(dialog: ModalDialog) {
+	const title = lineCount(` ${dialog.title}`);
 	switch (dialog.method) {
 		case "select":
 			return (
-				1 + Math.min(dialog.options.length, MAX_VISIBLE_OPTIONS) + BORDER_ROWS
+				title +
+				Math.min(dialog.options.length, MAX_VISIBLE_OPTIONS) +
+				BORDER_ROWS
 			);
 		case "confirm":
-			return 1 + lineCount(dialog.message) + 2 + BORDER_ROWS;
+			return title + lineCount(dialog.message) + 2 + BORDER_ROWS;
 		case "input":
-			return 2 + BORDER_ROWS;
+			return title + 1 + BORDER_ROWS;
 		case "editor":
-			return 2 + EDITOR_ROWS + BORDER_ROWS;
+			return title + 1 + EDITOR_ROWS + BORDER_ROWS;
 	}
 }
 
 function dialogModal(
 	dialog: ModalDialog,
 	actions: Pick<PiActions, "answerDialog">,
+	screenRows: number,
 ): ModalRequest {
 	const answer = (given: DialogAnswer) =>
 		actions.answerDialog(dialog.id, given);
@@ -122,7 +126,7 @@ function dialogModal(
 					<Body context={context} dialog={dialog} answer={answer} />
 				),
 			},
-			{ width: WIDTH, height: height(dialog) },
+			{ width: WIDTH, height: Math.min(height(dialog), screenRows) },
 		),
 		onDismiss: () => answer({ cancelled: true }),
 	};
@@ -131,6 +135,7 @@ function dialogModal(
 export function bridgeDialogs(
 	pi: { state: PiState; actions: PiActions },
 	modals: Modals,
+	screenRows: () => number,
 ) {
 	const open = new Map<string, () => void>();
 	createEffect(() => {
@@ -145,7 +150,10 @@ export function bridgeDialogs(
 			}
 			for (const dialog of dialogs) {
 				if (open.has(dialog.id)) continue;
-				open.set(dialog.id, modals.open(dialogModal(dialog, pi.actions)));
+				open.set(
+					dialog.id,
+					modals.open(dialogModal(dialog, pi.actions, screenRows())),
+				);
 			}
 		});
 	});
