@@ -145,7 +145,7 @@ export function updateFixture(
 					"--prefix",
 					prefix,
 					...(family === "pi"
-						? ["--ignore-scripts"]
+						? ["--ignore-scripts", "--min-release-age=0"]
 						: ["--allow-scripts=pi-bolt"]),
 					`${name}@1.0.1`,
 				]
@@ -153,7 +153,9 @@ export function updateFixture(
 				? [
 						"add",
 						"-g",
-						...(family === "pi" ? ["--ignore-scripts"] : ["--trust"]),
+						...(family === "pi"
+							? ["--ignore-scripts", "--minimum-release-age=0"]
+							: ["--trust"]),
 						`${name}@1.0.1`,
 					]
 				: manager === "pnpm"
@@ -162,6 +164,7 @@ export function updateFixture(
 							"-g",
 							`--config.global-dir=${root}`,
 							`--config.global-bin-dir=${bin}`,
+							...(family === "pi" ? ["--config.minimum-release-age=0"] : []),
 							"--latest",
 							name,
 						]

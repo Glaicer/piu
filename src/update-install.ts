@@ -129,6 +129,8 @@ export async function planBackendUpdate(
 			`${origin.manager} is not available to update this installation`,
 		);
 	const spec = `${origin.packageName}@${version}`;
+	// why: Pi's own updater lifts a configured release-age gate because pi.dev announces a release as soon as it is published; Pi-Bolt's documented commands keep the gate. pnpm 12 ignores the camelCase `--config.minimumReleaseAge` that Pi passes, so the kebab-case key is used.
+	const releaseAge = (flag: string) => (install.family === "pi" ? [flag] : []);
 	if (origin.manager === "npm")
 		return make(command, [
 			"install",
@@ -138,6 +140,7 @@ export async function planBackendUpdate(
 			...(install.family === "pi"
 				? ["--ignore-scripts"]
 				: ["--allow-scripts=pi-bolt"]),
+			...releaseAge("--min-release-age=0"),
 			spec,
 		]);
 	if (origin.manager === "bun") {
@@ -166,6 +169,7 @@ export async function planBackendUpdate(
 			"add",
 			"-g",
 			...(install.family === "pi" ? ["--ignore-scripts"] : ["--trust"]),
+			...releaseAge("--minimum-release-age=0"),
 			spec,
 		]);
 	}
@@ -191,6 +195,7 @@ export async function planBackendUpdate(
 		"update",
 		"-g",
 		...flags,
+		...releaseAge("--config.minimum-release-age=0"),
 		"--latest",
 		origin.packageName,
 	]);
