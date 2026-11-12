@@ -206,26 +206,28 @@ function App(props: {
 		}
 	}
 	const [updateProgress, setUpdateProgress] = createSignal<string>();
-	const updater = createBackendUpdate(
-		{
-			config: props.config.backend,
-			cwd: props.cwd,
-			home: props.home,
-			env: props.env,
-			fetch: props.updateCheck ? props.updateCheck.fetch : fetch,
-		},
-		{
-			progress: setUpdateProgress,
-			notify: (message, error) =>
-				toasts.show(message, error ? "error" : "info", UPDATE_NOTICE_MS),
-			restart: () => void leave(true),
-		},
-	);
-	onCleanup(updater.dispose);
+	const updater = updateCheck
+		? createBackendUpdate(
+				{
+					config: props.config.backend,
+					cwd: props.cwd,
+					home: props.home,
+					env: props.env,
+					fetch: updateCheck.fetch,
+				},
+				{
+					progress: setUpdateProgress,
+					notify: (message, error) =>
+						toasts.show(message, error ? "error" : "info", UPDATE_NOTICE_MS),
+					restart: () => void leave(true),
+				},
+			)
+		: undefined;
+	onCleanup(() => updater?.dispose());
 	async function leave(restart: boolean) {
 		if (leaving) return;
 		leaving = true;
-		updater.dispose();
+		updater?.dispose();
 		const sessionFile = restart ? await pi.currentSessionFile() : null;
 		await pi.dispose();
 		renderer.destroy();
@@ -246,7 +248,9 @@ function App(props: {
 			showToast: toasts.show,
 			quit: () => void leave(false),
 			restart: () => void leave(true),
-			updateBackend: updater.run,
+			updateBackend: updater
+				? updater.run
+				: () => toasts.show("Release checks are switched off", "error"),
 		},
 		theme,
 	};

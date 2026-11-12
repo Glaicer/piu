@@ -502,3 +502,34 @@ test("a repeated /update reports the running check and leaves the interface resp
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test("/update without release sources reports that release checks are off instead of reaching the network", async () => {
+	const fixture = updateFixture("pi", "npm");
+	const realFetch = globalThis.fetch;
+	const requested: string[] = [];
+	globalThis.fetch = Object.assign(
+		async (input: string | URL | Request) => {
+			requested.push(String(input));
+			throw new Error("network");
+		},
+		{ preconnect: realFetch.preconnect },
+	);
+	try {
+		await using piu = await startPiu({
+			backendCommand: fixture.command,
+			appEnv: fixture.env,
+			script: { replies: [] },
+		});
+		await piu.waitForFrame((f) => f.includes("faux-1"));
+		await piu.mockInput.typeText("/update");
+		piu.mockInput.pressEnter();
+		await piu.waitForFrame((f) =>
+			f.includes("Release checks are switched off"),
+		);
+		expect(requested).toEqual([]);
+		expect(fixture.calls()).toHaveLength(0);
+	} finally {
+		globalThis.fetch = realFetch;
+		fixture.cleanup();
+	}
+});
