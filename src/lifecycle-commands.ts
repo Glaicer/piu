@@ -8,6 +8,11 @@ const quit = (name: string): Command => ({
 
 export const lifecycleCommands: readonly Command[] = [
 	{
+		name: "update",
+		description: "Update the configured Backend",
+		run: ({ actions }) => actions.updateBackend(),
+	},
+	{
 		name: "restart",
 		description: "Restart the Backend and piu, keeping this session",
 		run: ({ actions }) => actions.restart(),

@@ -19,6 +19,7 @@ export type UiActions = {
 	showToast(message: string, kind?: ToastKind): void;
 	quit(): void;
 	restart(): void;
+	updateBackend(): void;
 };
 
 export type CommandContext = {

@@ -106,6 +106,7 @@ export type FixtureOptions = {
 	promptTemplates?: Record<string, string>;
 	installedPiExtensions?: string[];
 	backendEnv?: Record<string, string>;
+	appEnv?: Record<string, string>;
 	backendCommand?: string;
 	updateCheck?: UpdateCheckOptions;
 	dir?: string;
@@ -218,6 +219,7 @@ export async function startPiu(
 			args: options.args ?? ["--model", "faux/faux-1"],
 			exit: (request) => exits.push(request),
 			updateCheck: options.updateCheck ?? false,
+			env: options.appEnv,
 		});
 	} catch (error) {
 		removeDir();
