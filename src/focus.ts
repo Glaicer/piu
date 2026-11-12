@@ -13,6 +13,7 @@ type PanelEntry = {
 	element(): Renderable | undefined;
 	shown(): boolean;
 	handlesKeys(): boolean;
+	jumpChat?(bottom: boolean): boolean;
 };
 
 export function contains(ancestor: Renderable, node: Renderable | null) {
@@ -104,6 +105,9 @@ export function createPanelFocus() {
 			onCleanup(() => holds.delete(active));
 		},
 		held: () => [...holds].some((active) => active()),
+		jumpChat(bottom: boolean) {
+			return panels.some((panel) => panel.shown() && panel.jumpChat?.(bottom));
+		},
 		// why: keys reach the focused element after the global listeners, so focusing the text field here delivers this very key to it.
 		returnToInput(event: KeyEvent, abort: boolean) {
 			const printable =

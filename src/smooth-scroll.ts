@@ -34,5 +34,11 @@ export function createSmoothScroll(animate: Animate) {
 		// why: the scrollbox takes its own wheel step after this handler runs, and only a zero delta makes that step a no-op while it still counts as having taken the event, so a parent Panel does not scroll too.
 		scroll.delta = 0;
 	};
-	return { wheel, cancel: () => stop() };
+	return {
+		wheel,
+		cancel: () => {
+			stop();
+			target = undefined;
+		},
+	};
 }
