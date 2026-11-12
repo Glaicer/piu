@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { join } from "node:path";
 import { inputArea, panelText, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -25,6 +26,86 @@ test("/new clears the agent Panel, and the next prompt starts a fresh conversati
 
 	await send(piu, "again");
 	await piu.waitForFrame((f) => agentPanel(f).includes('Seen 1 "again"'));
+});
+
+test("/new keeps the selected model and reasoning for the fresh conversation", async () => {
+	await using piu = await startPiu({
+		script: { replies: ["Answered by {model} with {reasoning} to {lastUser}"] },
+		config: { placement: { status: ["model.current", "reasoning.level"] } },
+	});
+	const initial = await piu.waitForFrame((f) => f.includes("faux-1"));
+	const model = locate(initial, "faux-1");
+	await piu.mockMouse.click(model.x, model.y);
+	const picker = await piu.waitForFrame((f) => f.includes("☆ faux-2"));
+	const choice = locate(picker, "faux-2");
+	await piu.mockMouse.click(choice.x, choice.y);
+	const selected = await piu.waitForFrame(
+		(f) =>
+			f.includes("faux-2") &&
+			f.includes("Reasoning:") &&
+			!f.includes("Search:"),
+	);
+	const reasoning = locate(selected, "Reasoning:");
+	await piu.mockMouse.click(reasoning.x, reasoning.y);
+	const levels = await piu.waitForFrame((f) => f.includes("high"));
+	const high = locate(levels, "high");
+	await piu.mockMouse.click(high.x, high.y);
+	await piu.waitForFrame((f) => f.includes("Reasoning: high"));
+
+	await send(piu, "before");
+	await piu.waitForFrame((f) =>
+		agentPanel(f).includes('Answered by faux-2 with high to "before"'),
+	);
+	await send(piu, "/new");
+	await piu.waitForFrame(
+		(f) => !agentPanel(f).includes('Answered by faux-2 with high to "before"'),
+	);
+	await send(piu, "after");
+	const frame = await piu.waitForFrame((f) =>
+		agentPanel(f).includes('to "after"'),
+	);
+	expect(agentPanel(frame)).toContain(
+		'Answered by faux-2 with high to "after"',
+	);
+});
+
+test("a prompt immediately after /new waits for the selected model and fresh session", async () => {
+	await using piu = await startPiu({
+		script: { replies: ["Answered by {model} with {messages} messages"] },
+		config: { placement: { status: ["model.current"] } },
+	});
+	const initial = await piu.waitForFrame((f) => f.includes("faux-1"));
+	const model = locate(initial, "faux-1");
+	await piu.mockMouse.click(model.x, model.y);
+	const picker = await piu.waitForFrame((f) => f.includes("☆ faux-2"));
+	const choice = locate(picker, "faux-2");
+	await piu.mockMouse.click(choice.x, choice.y);
+	await piu.waitForFrame((f) => f.includes("faux-2") && !f.includes("Search:"));
+
+	await send(piu, "/new");
+	await send(piu, "after");
+	const frame = await piu.waitForFrame((f) =>
+		agentPanel(f).includes("Answered by"),
+	);
+	expect(agentPanel(frame)).toContain("Answered by faux-2 with 1 messages");
+});
+
+test("a prompt sent during /new stays visible while the Backend processes it", async () => {
+	await using piu = await startPiu({
+		script: { replies: ["Reply to {lastUser}"] },
+		installedPiExtensions: [
+			join(import.meta.dir, "fixtures/pi-extensions/slow-input.ts"),
+		],
+	});
+	await send(piu, "before");
+	await piu.waitForFrame((f) => agentPanel(f).includes('Reply to "before"'));
+	await send(piu, "/new");
+	await send(piu, "after");
+	const frame = await piu.waitForFrame(
+		(f) => !agentPanel(f).includes('Reply to "before"'),
+	);
+	expect(agentPanel(frame)).toContain("> after");
+	await piu.waitForFrame((f) => agentPanel(f).includes('Reply to "after"'));
 });
 
 test("/compact shrinks the context, shows its service row, and leaves the chat matching Pi's messages", async () => {

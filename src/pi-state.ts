@@ -192,17 +192,18 @@ export function createPiState(options: {
 	let backend!: Backend;
 	let detach = () => {};
 	let sessionEpoch = 0;
+	let sessionTransition: Promise<void> = Promise.resolve();
 	const runningTools = new Set<string>();
 	// why: the protocol never says which tool call raised a dialog, so a dialog belongs to the tool calls running when it arrived and closes once all of them have ended; one raised with no tool running lasts until the run ends.
 	const dialogOwners = new Map<string, ReadonlySet<string>>();
 	// why: Pi answers a dialog with its default value once its timeout passes and never tells the client.
 	const dialogTimers = new Map<string, Timer>();
 
-	function clearRun() {
+	function clearRun(pendingThrough = Infinity) {
 		setState("streamingMessage", null);
 		setState("working", false);
 		setState("serviceRows", []);
-		clearPending(() => true);
+		clearPending(({ id }) => id <= pendingThrough);
 	}
 
 	let lastPendingId = 0;
@@ -614,9 +615,16 @@ export function createPiState(options: {
 			RpcCommand,
 			{ type: "new_session" | "switch_session" | "fork" }
 		>,
+		pendingThrough = Infinity,
 	) {
 		// why: a session switch during startup restoration would otherwise resume its own model and stop being the choice that wins.
 		await ready;
+		if (command.type === "new_session") await refreshSession();
+		const model = state.model && {
+			provider: state.model.provider,
+			id: state.model.id,
+		};
+		const thinkingLevel = state.thinkingLevel;
 		clearExtensionUi();
 		const response = await backend.request(command).catch(ignoreDeadBackend);
 		if (!response) return;
@@ -633,7 +641,20 @@ export function createPiState(options: {
 			return;
 		}
 		sessionEpoch += 1;
-		clearRun();
+		clearRun(pendingThrough);
+		// why: Pi rebuilds its runtime on a new session and reapplies the startup model and reasoning.
+		if (command.type === "new_session" && model) {
+			const restored = await refuseToToast({
+				type: "set_model",
+				provider: model.provider,
+				modelId: model.id,
+			});
+			if (restored)
+				await refuseToToast({
+					type: "set_thinking_level",
+					level: thinkingLevel,
+				});
+		}
 		await Promise.all([loadMessages(), loadCommands(), refreshSession()]);
 		return response;
 	}
@@ -716,7 +737,8 @@ export function createPiState(options: {
 		unconfirmed.add(entry.id);
 		setState("pending", state.pending.length, entry);
 		const drop = () => clearPending(({ id }) => id === entry.id);
-		const sent = ready
+		const transition = sessionTransition;
+		const sent = Promise.all([ready, transition])
 			.then(() =>
 				backend.request({
 					type: "prompt",
@@ -796,7 +818,11 @@ export function createPiState(options: {
 			if (success) saveSelection();
 		},
 		async newSession() {
-			await replaceSession({ type: "new_session" });
+			const pendingThrough = lastPendingId;
+			sessionTransition = sessionTransition.then(async () => {
+				await replaceSession({ type: "new_session" }, pendingThrough);
+			});
+			await sessionTransition;
 		},
 		async switchSession(sessionFile) {
 			await replaceSession({
