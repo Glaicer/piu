@@ -67,7 +67,7 @@ test("favorites and the selected model and reasoning survive a full process exit
 		}
 		{
 			await using piu = spawnPiu(fixture, { args: [] });
-			await piu.waitForText("faux-1");
+			await piu.waitForText("loading model...");
 			piu.submit("Hi");
 			await piu.waitForText("Answered by faux-2 with high");
 			piu.submit("/model");

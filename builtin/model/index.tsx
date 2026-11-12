@@ -204,7 +204,11 @@ export default {
 			render: (context) => (
 				<PickerLink
 					context={context}
-					label={context.pi.model?.id ?? "no model"}
+					label={
+						context.pi.modelRestoring
+							? "loading model..."
+							: (context.pi.model?.id ?? "no model")
+					}
 					onPress={() => openModelPicker(context)}
 				/>
 			),

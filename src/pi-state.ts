@@ -102,6 +102,7 @@ export type PiState = {
 	readonly sessionFile: string | null;
 	readonly commands: readonly BackendCommand[];
 	readonly model: ModelInfo | null;
+	readonly modelRestoring: boolean;
 	readonly models: readonly ModelInfo[];
 	readonly thinkingLevel: ThinkingLevel;
 	readonly thinkingLevels: readonly ThinkingLevel[];
@@ -138,6 +139,8 @@ export type PiActions = {
 
 const ignoreDeadBackend = () => {};
 const SESSION_FILE_TIMEOUT_MS = 2000;
+const MODEL_RESTORE_RETRY_MS = 250;
+const MODEL_RESTORE_TIMEOUT_MS = 10_000;
 
 export function createPiState(options: {
 	launch: (extraArgs: string[]) => Backend;
@@ -151,6 +154,7 @@ export function createPiState(options: {
 		sessionFile: string | null;
 		commands: BackendCommand[];
 		model: ModelInfo | null;
+		modelRestoring: boolean;
 		models: ModelInfo[];
 		thinkingLevel: ThinkingLevel;
 		thinkingLevels: ThinkingLevel[];
@@ -171,6 +175,7 @@ export function createPiState(options: {
 		sessionFile: null,
 		commands: [],
 		model: null,
+		modelRestoring: false,
 		models: [],
 		thinkingLevel: "off",
 		thinkingLevels: ["off"],
@@ -680,6 +685,7 @@ export function createPiState(options: {
 		notify(`Could not read model selection: ${loaded.error}`, "error");
 	const sessionOverride = explicitSession(args);
 	const maybeSessionFile = maybeSession(args);
+	if (saved && !sessionOverride) setState("modelRestoring", true);
 	const selectionOverride = modelOverride(args);
 	const cliThinking = optionValue(args, "--thinking");
 	const ready = (async () => {
@@ -691,13 +697,35 @@ export function createPiState(options: {
 		if (maybeSessionFile && state.sessionFile && existsSync(state.sessionFile))
 			return;
 		if (!selectionOverride) {
-			const response = await backend
-				.request({
-					type: "set_model",
-					provider: saved.model.provider,
-					modelId: saved.model.id,
-				})
-				.catch(ignoreDeadBackend);
+			const startModel = state.model;
+			const deadline = Date.now() + MODEL_RESTORE_TIMEOUT_MS;
+			// why: a Pi extension's provider can still be fetching its model list at startup, and `set_model` answers "Model not found" until it lands, so retry that one error until the deadline; stop if the user picked another model meanwhile.
+			const restore = () =>
+				backend
+					.request({
+						type: "set_model",
+						provider: saved.model.provider,
+						modelId: saved.model.id,
+					})
+					.catch(ignoreDeadBackend);
+			let response = await restore();
+			while (
+				response &&
+				!response.success &&
+				response.error.startsWith("Model not found") &&
+				Date.now() < deadline
+			) {
+				await new Promise((resolve) =>
+					setTimeout(resolve, MODEL_RESTORE_RETRY_MS),
+				);
+				if (
+					epoch !== sessionEpoch ||
+					state.model?.provider !== startModel?.provider ||
+					state.model?.id !== startModel?.id
+				)
+					return;
+				response = await restore();
+			}
 			if (epoch !== sessionEpoch) return;
 			if (!response?.success) {
 				if (response)
@@ -717,7 +745,7 @@ export function createPiState(options: {
 				.catch(ignoreDeadBackend);
 		if (epoch !== sessionEpoch) return;
 		await refreshSession();
-	})();
+	})().finally(() => setState("modelRestoring", false));
 
 	function saveSelection() {
 		if (!state.model) return;

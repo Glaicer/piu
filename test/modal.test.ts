@@ -15,6 +15,7 @@ type Piu = Awaited<ReturnType<typeof startPiu>>;
 
 const none: FauxScript = { replies: [] };
 const extensions = join(import.meta.dir, "fixtures/extensions");
+const piExtensions = join(import.meta.dir, "fixtures/pi-extensions");
 const modelConfig = {
 	placement: { status: ["model.current", "reasoning.level"] },
 };
@@ -893,13 +894,45 @@ test("an unavailable saved model reports an error without erasing the default", 
 			script: { replies: ["Answered by {model}"] },
 			config: modelConfig,
 		});
-		await piu.waitForFrame(
+		await piu.waitForFrame((f) => f.includes("loading model..."));
+		const frame = await piu.waitForFrame(
 			(f) => f.includes("Could not restore model") && f.includes("faux-1"),
+			14000,
 		);
+		expect(frame).not.toContain("loading model...");
 		await piu.mockInput.typeText("Hi");
 		piu.mockInput.pressEnter();
 		await piu.waitForFrame((f) => f.includes("Answered by faux-1"));
 		expect(readFileSync(file, "utf8")).toBe(saved);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}, 20000);
+
+test("a saved model whose provider lists its models late is still restored", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "piu-model-"));
+	const file = join(dir, "model-selection.json");
+	try {
+		writeFileSync(
+			file,
+			JSON.stringify({
+				model: { provider: "late", id: "late-1" },
+				thinkingLevel: "off",
+			}),
+		);
+		await using piu = await startPiu({
+			dir,
+			args: [],
+			script: none,
+			config: modelConfig,
+			installedPiExtensions: [join(piExtensions, "late-models.ts")],
+		});
+		await piu.waitForFrame((f) => f.includes("loading model..."));
+		const frame = await piu.waitForFrame(
+			(f) => f.includes("late-1") || f.includes("Could not restore model"),
+		);
+		expect(frame).not.toContain("Could not restore model");
+		expect(frame).not.toContain("loading model...");
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
