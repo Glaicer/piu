@@ -42,7 +42,12 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 						direction: "column",
 						size: "content",
 						children: [
-							{ kind: "panel", id: "status", direction: "row", size: 3 },
+							{
+								kind: "panel",
+								id: "status",
+								direction: "row",
+								size: "content",
+							},
 							{
 								kind: "panel",
 								id: "input",
@@ -64,10 +69,10 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 		],
 	},
 	placement: {
-		agent: ["chat.messages"],
+		agent: ["chat.messages", "model.current"],
 		pinned: ["background.processes"],
 		input: ["ask-user-question.card", "input.prompt", "input.dir"],
-		status: ["model.current", "reasoning.level", "status.line"],
+		status: ["status.line"],
 		side: [],
 	},
 	modules: {},

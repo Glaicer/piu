@@ -17,7 +17,10 @@ const none: FauxScript = { replies: [] };
 const extensions = join(import.meta.dir, "fixtures/extensions");
 const piExtensions = join(import.meta.dir, "fixtures/pi-extensions");
 const modelConfig = {
-	placement: { status: ["model.current", "reasoning.level"] },
+	placement: {
+		agent: ["chat.messages"],
+		status: ["model.current", "reasoning.level"],
+	},
 };
 
 function locate(frame: string, text: string) {

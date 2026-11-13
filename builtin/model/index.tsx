@@ -1,10 +1,11 @@
 import type { BoxRenderable, InputRenderable, KeyEvent } from "@opentui/core";
-import { createEffect, createMemo, createSignal, For } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { moduleModal } from "../../src/modal.tsx";
 import { sameModel } from "../../src/model.ts";
 import type { CommandContext, Extension } from "../../src/module.ts";
 import type { ModelInfo } from "../../src/pi-state.ts";
 import { PickerLink } from "../../src/picker.tsx";
+import { openReasoningPicker } from "../../src/reasoning.ts";
 import { scrollIntoView } from "../../src/scroll.ts";
 
 type ModelTab = "Favorites" | "All";
@@ -243,20 +244,39 @@ function openModelPicker(context: CommandContext) {
 	);
 }
 
+function modelLabel(context: CommandContext) {
+	if (context.pi.modelRestoring) return "loading model...";
+	const model = context.pi.model;
+	return model ? `${model.provider} · ${model.id}` : "no model";
+}
+
+function reasoningLabel(context: CommandContext) {
+	const level = context.pi.thinkingLevel;
+	return `:${level === "off" ? "no reasoning" : level}`;
+}
+
 export default {
 	modules: [
 		{
 			id: "current",
+			footer: true,
 			render: (context) => (
-				<PickerLink
-					context={context}
-					label={
-						context.pi.modelRestoring
-							? "loading model..."
-							: (context.pi.model?.id ?? "no model")
-					}
-					onPress={() => openModelPicker(context)}
-				/>
+				<box flexDirection="row" paddingX={1}>
+					<PickerLink
+						plain
+						context={context}
+						label={modelLabel(context)}
+						onPress={() => openModelPicker(context)}
+					/>
+					<Show when={!context.pi.modelRestoring && context.pi.model}>
+						<PickerLink
+							plain
+							context={context}
+							label={reasoningLabel(context)}
+							onPress={() => openReasoningPicker(context)}
+						/>
+					</Show>
+				</box>
 			),
 		},
 	],
@@ -266,6 +286,12 @@ export default {
 			description: "Switch the model",
 			takesArguments: false,
 			run: (context) => openModelPicker(context),
+		},
+		{
+			name: "reasoning",
+			description: "Set the reasoning level",
+			takesArguments: false,
+			run: (context) => openReasoningPicker(context),
 		},
 	],
 } satisfies Extension;

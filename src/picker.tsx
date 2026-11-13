@@ -112,16 +112,22 @@ export function PickerLink(props: {
 	context: CommandContext;
 	label: string;
 	onPress(): void;
+	plain?: boolean;
 }) {
 	return (
 		<box
-			backgroundColor={props.context.theme.surface}
+			backgroundColor={props.plain ? undefined : props.context.theme.surface}
 			onMouseDown={(event) => {
 				event.preventDefault();
 				props.onPress();
 			}}
 		>
-			<text fg={props.context.theme.secondary}>{` ${props.label} `}</text>
+			<text
+				fg={props.context.theme.secondary}
+				wrapMode={props.plain ? "none" : undefined}
+			>
+				{props.plain ? props.label : ` ${props.label} `}
+			</text>
 		</box>
 	);
 }

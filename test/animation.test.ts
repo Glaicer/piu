@@ -23,7 +23,10 @@ async function start(options: {
 		extensions: options.extensions,
 		config: {
 			animations: options.animations,
-			placement: { status: ["model.current", "reasoning.level"] },
+			placement: {
+				agent: ["chat.messages"],
+				status: ["model.current", "reasoning.level"],
+			},
 			...options.config,
 		},
 	});
@@ -113,7 +116,12 @@ for (const animations of [true, false]) {
 		await using app = await start({
 			animations,
 			extensions: join(import.meta.dir, "fixtures/extensions"),
-			config: { placement: { status: ["model.current", "probe.capture"] } },
+			config: {
+				placement: {
+					agent: ["chat.messages"],
+					status: ["model.current", "probe.capture"],
+				},
+			},
 		});
 		const close = hooks.probe.actions?.openModal({
 			slot: {
@@ -141,7 +149,12 @@ for (const animations of [true, false]) {
 		await using app = await start({
 			animations,
 			extensions: join(import.meta.dir, "fixtures/extensions"),
-			config: { placement: { status: ["model.current", "stacker.opener"] } },
+			config: {
+				placement: {
+					agent: ["chat.messages"],
+					status: ["model.current", "stacker.opener"],
+				},
+			},
 		});
 		await clickText(app.piu, "open outer");
 		await app.frame();

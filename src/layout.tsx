@@ -142,23 +142,20 @@ export function SlotView(props: SlotProps) {
 			if (event.defaultPrevented) return;
 		}
 	};
-	const modules = (
-		<For each={entries}>
-			{(entry) => (
-				<box visible={shown(entry)} minHeight={entry.placed.module.minHeight}>
-					<ModuleView
-						placed={entry.placed}
-						context={{
-							...shared,
-							reportPresence: entry.setPresence,
-							onKey: (handler) => entry.keyHandlers.push(handler),
-							holdFocusKeys: (active) => focus?.hold(active),
-						}}
-					/>
-				</box>
-			)}
-		</For>
+	const moduleView = (entry: (typeof entries)[number]) => (
+		<box visible={shown(entry)} minHeight={entry.placed.module.minHeight}>
+			<ModuleView
+				placed={entry.placed}
+				context={{
+					...shared,
+					reportPresence: entry.setPresence,
+					onKey: (handler) => entry.keyHandlers.push(handler),
+					holdFocusKeys: (active) => focus?.hold(active),
+				}}
+			/>
+		</box>
 	);
+	const modules = <For each={entries}>{(entry) => moduleView(entry)}</For>;
 	if (slot.size === "content") {
 		return (
 			<box
@@ -179,8 +176,18 @@ export function SlotView(props: SlotProps) {
 	const smoothScroll = createSmoothScroll(shared.animate);
 	onCleanup(smoothScroll.cancel);
 	const [awayFromBottom, setAwayFromBottom] = createSignal(false);
+	const [footerHeight, setFooterHeight] = createSignal(0);
+	// why: a footer Module shares the Panel border but stays outside the scrollbox, so it remains visible while the content scrolls.
+	const scrolled = entries.filter((entry) => !entry.placed.module.footer);
+	const footers = entries.filter((entry) => entry.placed.module.footer);
 	return (
-		<box {...sizing} visible={visible()}>
+		<box
+			{...sizing}
+			visible={visible()}
+			border
+			{...frame()}
+			flexDirection="column"
+		>
 			<scrollbox
 				ref={(node: ScrollBoxRenderable) => {
 					element = node;
@@ -193,9 +200,8 @@ export function SlotView(props: SlotProps) {
 					node.viewport.on("resize", update);
 				}}
 				width="100%"
-				height="100%"
-				border
-				{...frame()}
+				flexGrow={1}
+				flexShrink={1}
 				onKeyDown={routeKey}
 				onMouseScroll={smoothScroll.wheel}
 				stickyScroll={followsOutput()}
@@ -210,13 +216,22 @@ export function SlotView(props: SlotProps) {
 					},
 				}}
 			>
-				{modules}
+				<For each={scrolled}>{(entry) => moduleView(entry)}</For>
 			</scrollbox>
+			<box
+				flexDirection="column"
+				flexShrink={0}
+				onSizeChange={function (this: Renderable) {
+					queueMicrotask(() => setFooterHeight(this.height));
+				}}
+			>
+				<For each={footers}>{(entry) => moduleView(entry)}</For>
+			</box>
 			{followsOutput() && awayFromBottom() && (
 				<box
 					position="absolute"
 					right={2}
-					bottom={1}
+					bottom={footerHeight() + 1}
 					backgroundColor={shared.theme.surface}
 				>
 					<text fg={shared.theme.muted}>CTRL+End: jump to bottom</text>

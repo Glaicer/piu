@@ -206,8 +206,13 @@ test("a prompt template expands and reaches the model", async () => {
 		script: { replies: ["Got {lastUser}"] },
 		promptTemplates,
 	});
+	await piu.waitForFrame(
+		(f) => f.includes("faux-1") && f.includes("/ commands · @ files"),
+	);
 
 	await piu.mockInput.typeText("/review-code");
+	// why: the template may be in the slash list by now; Esc dismisses it so Enter sends the text to Pi.
+	piu.mockInput.pressEscape();
 	piu.mockInput.pressEnter();
 
 	await piu.waitForFrame((f) => f.includes('Got "Review the code now"'));
@@ -351,9 +356,7 @@ test("Tab on a selected command that takes no arguments runs it", async () => {
 		script: { replies: [] },
 		args: ["--model", "faux/faux-2"],
 	});
-	await piu.waitForFrame(
-		(f) => f.includes("faux-2") && f.includes("Reasoning: medium"),
-	);
+	await piu.waitForFrame((f) => f.includes("faux · faux-2:medium"));
 
 	await piu.mockInput.typeText("/reas");
 	await piu.waitForFrame((f) => f.includes("Set the reasoning level"));

@@ -1,22 +1,8 @@
-import type { CommandContext, Extension } from "../../src/module.ts";
-import type { ThinkingLevel } from "../../src/pi-state.ts";
-import {
-	openPicker,
-	PickerButton,
-	type PickerOptions,
-} from "../../src/picker.tsx";
+import type { Extension } from "../../src/module.ts";
+import { PickerButton } from "../../src/picker.tsx";
+import { reasoningPicker } from "../../src/reasoning.ts";
 
-const levelPicker = (
-	context: CommandContext,
-): PickerOptions<ThinkingLevel> => ({
-	id: "reasoning-picker",
-	width: 30,
-	items: () =>
-		context.pi.thinkingLevels.map((level) => ({ label: level, value: level })),
-	selected: () => context.pi.thinkingLevels.indexOf(context.pi.thinkingLevel),
-	onPick: (level) => void context.actions.setThinkingLevel(level),
-});
-
+// why: the /reasoning command lives in the model Extension so it stays available when this optional Module is not placed.
 export default {
 	modules: [
 		{
@@ -25,17 +11,9 @@ export default {
 				<PickerButton
 					context={context}
 					label={`Reasoning: ${context.pi.thinkingLevel}`}
-					picker={levelPicker(context)}
+					picker={reasoningPicker(context)}
 				/>
 			),
-		},
-	],
-	commands: [
-		{
-			name: "reasoning",
-			description: "Set the reasoning level",
-			takesArguments: false,
-			run: (context) => openPicker(context, levelPicker(context)),
 		},
 	],
 } satisfies Extension;

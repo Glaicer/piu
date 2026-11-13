@@ -31,7 +31,12 @@ test("/new clears the agent Panel, and the next prompt starts a fresh conversati
 test("/new keeps the selected model and reasoning for the fresh conversation", async () => {
 	await using piu = await startPiu({
 		script: { replies: ["Answered by {model} with {reasoning} to {lastUser}"] },
-		config: { placement: { status: ["model.current", "reasoning.level"] } },
+		config: {
+			placement: {
+				agent: ["chat.messages"],
+				status: ["model.current", "reasoning.level"],
+			},
+		},
 	});
 	const initial = await piu.waitForFrame((f) => f.includes("faux-1"));
 	const model = locate(initial, "faux-1");
@@ -72,7 +77,12 @@ test("/new keeps the selected model and reasoning for the fresh conversation", a
 test("a prompt immediately after /new waits for the selected model and fresh session", async () => {
 	await using piu = await startPiu({
 		script: { replies: ["Answered by {model} with {messages} messages"] },
-		config: { placement: { status: ["model.current"] } },
+		config: {
+			placement: {
+				agent: ["chat.messages"],
+				status: ["model.current"],
+			},
+		},
 	});
 	const initial = await piu.waitForFrame((f) => f.includes("faux-1"));
 	const model = locate(initial, "faux-1");

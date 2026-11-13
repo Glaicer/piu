@@ -90,7 +90,7 @@ test("the selected model stays above the input while the chat scrolls", async ()
 		panelText(frame, 10).includes("Reply 0"),
 	);
 	expect(top.split("\n")[modelRow]).toContain("faux-1");
-	expect(top.split("\n")[modelRow]).toContain("Reasoning:");
+	expect(top.split("\n")[modelRow]).toContain(":no reasoning");
 });
 
 test("the editor grows for extra lines and shrinks to four after sending", async () => {
