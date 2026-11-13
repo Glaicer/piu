@@ -14,13 +14,9 @@ for (const [alias, query] of [
 
 		await piu.mockInput.typeText(query);
 
+		// why: the list starts at the prompt's text column, so the first cell is whichever Panel border is underneath.
 		await piu.waitForFrame((f) =>
-			f
-				.split("\n")
-				.some(
-					(line) =>
-						/^[│┌] /.test(line) && line.slice(2).startsWith(`${alias} `),
-				),
+			f.split("\n").some((line) => line.slice(1).startsWith(` ${alias} `)),
 		);
 	});
 }

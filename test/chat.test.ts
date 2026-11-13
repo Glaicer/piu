@@ -249,9 +249,16 @@ test("the bottom hint follows mouse scrolling", async () => {
 	await using piu = await startPiu({
 		script: { replies: [numberedLines("Line", 120)] },
 	});
+	await piu.waitForFrame(
+		(frame) =>
+			frame.includes("faux-1") && frame.includes("/ commands · @ files"),
+	);
 	await piu.mockInput.typeText("Lines");
 	piu.mockInput.pressEnter();
-	await piu.waitForFrame((frame) => agentPanel(frame).includes("Line 119"));
+	await piu.waitForFrame(
+		(frame) =>
+			agentPanel(frame).includes("Line 119") && !frame.includes("Working"),
+	);
 	await piu.mockMouse.scroll(10, 5, "up");
 	await piu.waitForFrame((frame) =>
 		agentPanel(frame).includes("CTRL+End: jump to bottom"),

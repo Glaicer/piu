@@ -37,7 +37,7 @@ test("the idle composer shows command and file hints followed by its directory",
 			.map((line) => line.trim())
 			.filter(Boolean),
 	).toEqual(["/ commands · @ files", piu.dir]);
-	expect(inputArea(frame).split("\n")).toHaveLength(6);
+	expect(inputArea(frame).split("\n")).toHaveLength(5);
 });
 
 test("user messages have no added prompt marker and preserve a typed greater-than sign", async () => {

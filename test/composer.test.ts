@@ -21,6 +21,18 @@ function hasThumb(piu: Piu, frame: string) {
 		.some((line) => /[█▀▄]/.test([...line][field.screenX + field.width] ?? ""));
 }
 
+test("the cursor starts on the first line of the input Panel", async () => {
+	await using piu = await startPiu({ script: { replies: [] }, width: 80 });
+	const frame = await piu.waitForFrame(
+		(frame) =>
+			frame.includes("faux-1") && frame.includes("/ commands · @ files"),
+	);
+	const field = editor(piu);
+	expect(inputArea(frame).split("\n")[0]).toContain("/ commands · @ files");
+	expect(piu.renderer.getCursorState().y).toBe(field.screenY + 1);
+	expect(piu.renderer.getCursorState().x).toBe(field.screenX + 1);
+});
+
 test("the default editor has four rows, no input title, and the canvas background", async () => {
 	await using piu = await startPiu({ script: { replies: [] }, width: 80 });
 	await piu.mockInput.typeText("Unfilled composer");
@@ -198,7 +210,7 @@ test("autocomplete stays above a multiline editor when the terminal is resized",
 	const lastSuggestion = (frame: string) =>
 		frame
 			.split("\n")
-			.findLastIndex((line) => /^│ @greeter\/index\.tsx\s/.test(line));
+			.findLastIndex((line) => line.slice(1).startsWith(" @greeter/index.tsx"));
 	const frame = await piu.waitForFrame(
 		(frame) =>
 			frame.trimEnd().split("\n").length === 50 &&

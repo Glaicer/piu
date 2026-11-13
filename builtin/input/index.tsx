@@ -326,26 +326,21 @@ function Prompt(props: { context: ModuleContext }) {
 
 	return (
 		<box flexDirection="column">
-			<box flexDirection="row" justifyContent="space-between" flexShrink={0}>
-				<text
-					fg={
-						props.context.pi.working
-							? props.context.theme.accent
-							: props.context.theme.muted
-					}
-					flexShrink={0}
-				>
-					{props.context.pi.working ? `${spinner()}Working…` : " "}
-				</text>
-				<text
-					fg={props.context.theme.muted}
-					wrapMode="none"
-					truncate
-					marginRight={1}
-				>
-					{props.context.pi.working ? "Esc stop · Alt+Enter queue" : ""}
-				</text>
-			</box>
+			<Show when={props.context.pi.working}>
+				<box flexDirection="row" justifyContent="space-between" flexShrink={0}>
+					<text fg={props.context.theme.accent} flexShrink={0}>
+						{`${spinner()}Working…`}
+					</text>
+					<text
+						fg={props.context.theme.muted}
+						wrapMode="none"
+						truncate
+						marginRight={1}
+					>
+						Esc stop · Alt+Enter queue
+					</text>
+				</box>
+			</Show>
 			<box ref={setEditorRow} flexDirection="row" minHeight={MIN_LINES}>
 				<textarea
 					ref={(element: TextareaRenderable) => {
@@ -436,7 +431,7 @@ export default {
 	modules: [
 		{
 			id: "prompt",
-			minHeight: MIN_LINES + 1,
+			minHeight: MIN_LINES,
 			render: (context) => <Prompt context={context} />,
 		},
 		{

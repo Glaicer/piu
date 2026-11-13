@@ -556,7 +556,7 @@ test("the input Panel fits the card and restores the editor and directory after"
 	const idle = await piu.waitForFrame(
 		(f) => f.includes("faux-1") && inputArea(f).includes(piu.dir),
 	);
-	expect(cornerRows(idle)).toEqual([0, 19, 22]);
+	expect(cornerRows(idle)).toEqual([0, 20, 23]);
 	await send(piu, "go");
 	const asked = await piu.waitForFrame(showsCard);
 	expect(cornerRows(asked)).toEqual([0, 19, 22]);
@@ -567,7 +567,7 @@ test("the input Panel fits the card and restores the editor and directory after"
 		(f) =>
 			agentPanel(f).includes("Model got") && inputArea(f).includes(piu.dir),
 	);
-	expect(cornerRows(answered)).toEqual([0, 19, 22]);
+	expect(cornerRows(answered)).toEqual([0, 20, 23]);
 });
 
 test("ask_user_question stays out after a tool call and in the next run", async () => {
