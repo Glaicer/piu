@@ -99,8 +99,11 @@ export function ToolCard(props: {
 	};
 	const header = () => {
 		const call = props.call();
-		const argument = call ? keyArgument(call.arguments) : "";
-		return `${row.selected() ? "› " : ""}${reveal.open() ? "▾" : "▸"} ${call?.name ?? ""} ${argument}`.trimEnd();
+		return `${row.selected() ? "› " : ""}${reveal.open() ? "▾" : "▸"} ${call?.name ?? ""}`;
+	};
+	const argument = () => {
+		const call = props.call();
+		return call ? keyArgument(call.arguments) : "";
 	};
 	const body = () => {
 		const call = props.call();
@@ -110,12 +113,36 @@ export function ToolCard(props: {
 	};
 	const shown = () => reveal.visible(body() ?? "");
 	return (
-		<box flexDirection="column" border borderColor={color()}>
+		<box
+			flexDirection="column"
+			border={["left"]}
+			borderColor={row.selected() ? props.theme.accent : props.theme.border}
+			backgroundColor={
+				row.selected() ? props.theme.selection : props.theme.surface
+			}
+			paddingX={1}
+			marginTop={1}
+		>
 			<box ref={row.ref} flexDirection="row" onMouseDown={row.activate}>
-				<text fg={props.theme.text}>{header()}</text>
-				<text fg={color()}>{`  ${label()}${duration()}`}</text>
+				<text fg={props.theme.secondary} flexShrink={0}>
+					{header()}
+				</text>
+				<text
+					fg={props.theme.muted}
+					flexGrow={1}
+					flexShrink={1}
+					wrapMode="none"
+					truncate
+				>
+					{` ${argument()}`}
+				</text>
+				<text fg={color()} flexShrink={0}>{`  ${label()}${duration()}`}</text>
 			</box>
-			{shown() !== undefined && <text fg={props.theme.muted}>{shown()}</text>}
+			{shown() !== undefined && (
+				<text paddingTop={1} fg={props.theme.muted}>
+					{shown()}
+				</text>
+			)}
 		</box>
 	);
 }

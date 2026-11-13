@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { RGBA } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
-import { inputArea, panelText, startPiu } from "./harness.ts";
+import { focusedPanels, inputArea, panelText, startPiu } from "./harness.ts";
 
 const agentPanel = (frame: string) => panelText(frame, 10, 0);
 
@@ -37,10 +37,6 @@ function templateRows(frame: string) {
 		.map((line) => line.trimEnd());
 }
 
-function focusedPanels(frame: string) {
-	return [...frame.matchAll(/┌─ ([\w-]+) /g)].map((match) => match[1]);
-}
-
 function inputStartsWith(frame: string, prefix: string) {
 	return inputArea(frame)
 		.split("\n")
@@ -57,7 +53,7 @@ function backgroundAt(piu: Piu, column: number, row: number) {
 }
 
 const highlighted = (piu: Piu, column: number, row: number) =>
-	backgroundAt(piu, column, row)?.equals(RGBA.fromHex(darkTheme.border));
+	backgroundAt(piu, column, row)?.equals(RGBA.fromHex(darkTheme.selection));
 
 test("/ lists the Backend's prompt templates and extension commands next to the app's own", async () => {
 	await using piu = await startPiu({ script, promptTemplates });
@@ -355,6 +351,9 @@ test("Tab on a selected command that takes no arguments runs it", async () => {
 		script: { replies: [] },
 		args: ["--model", "faux/faux-2"],
 	});
+	await piu.waitForFrame(
+		(f) => f.includes("faux-2") && f.includes("Reasoning: medium"),
+	);
 
 	await piu.mockInput.typeText("/reas");
 	await piu.waitForFrame((f) => f.includes("Set the reasoning level"));
@@ -420,13 +419,13 @@ test("clicking a slash row inserts it, closes the list and keeps the focus in th
 		(f) =>
 			inputStartsWith(f, "/review-code ") && !f.includes("Review the code"),
 	);
-	expect(focusedPanels(inserted)).toEqual(["input"]);
+	expect(focusedPanels(piu, inserted)).toEqual(["input"]);
 
 	await piu.mockInput.typeText("now");
 	const typed = await piu.waitForFrame((f) =>
 		inputArea(f).includes("/review-code now"),
 	);
-	expect(focusedPanels(typed)).toEqual(["input"]);
+	expect(focusedPanels(piu, typed)).toEqual(["input"]);
 });
 
 test("clicking /model in the list runs it and gives the focus back to the input", async () => {
@@ -442,7 +441,7 @@ test("clicking /model in the list runs it and gives the focus back to the input"
 	await piu.waitForFrame(
 		(f) =>
 			!f.includes("faux-2") &&
-			focusedPanels(f).join() === "input" &&
+			focusedPanels(piu, f).join() === "input" &&
 			!inputArea(f).includes("/mod"),
 	);
 	await piu.mockInput.typeText("after");
@@ -477,7 +476,7 @@ test("an @ row is highlighted by hover and inserted by a click on its empty part
 				inputStartsWith(f, "see @src/lib/parse.ts ") &&
 				!f.includes("README.md"),
 		);
-		expect(focusedPanels(inserted)).toEqual(["input"]);
+		expect(focusedPanels(piu, inserted)).toEqual(["input"]);
 
 		await piu.mockInput.typeText("later");
 		await piu.waitForFrame((f) =>

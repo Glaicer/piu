@@ -42,13 +42,14 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 						direction: "column",
 						size: "content",
 						children: [
+							{ kind: "panel", id: "status", direction: "row", size: 3 },
 							{
 								kind: "panel",
 								id: "input",
 								direction: "column",
 								size: "content",
+								title: "",
 							},
-							{ kind: "panel", id: "status", direction: "row", size: 3 },
 						],
 					},
 				],
@@ -65,7 +66,7 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 	placement: {
 		agent: ["chat.messages"],
 		pinned: ["background.processes"],
-		input: ["ask-user-question.card", "input.prompt"],
+		input: ["ask-user-question.card", "input.prompt", "input.dir"],
 		status: ["model.current", "reasoning.level", "status.line"],
 		side: [],
 	},
@@ -167,7 +168,15 @@ function parseBackend(value: unknown): BackendConfig {
 	};
 }
 
-const slotKeys = ["kind", "id", "direction", "size", "minSize", "hideBelow"];
+const slotKeys = [
+	"kind",
+	"id",
+	"direction",
+	"size",
+	"minSize",
+	"hideBelow",
+	"title",
+];
 
 function parseSlot(value: unknown, path: string, panelIds: Set<string>): Slot {
 	const fields = object(value, path);
@@ -189,6 +198,9 @@ function parseSlot(value: unknown, path: string, panelIds: Set<string>): Slot {
 		size: parseSize(fields.size, `${path}.size`),
 		...optionalCells(fields, "minSize", path),
 		...optionalCells(fields, "hideBelow", path),
+		...(fields.title === undefined
+			? {}
+			: { title: string(fields.title, `${path}.title`) }),
 	};
 	if (kind === "panel") {
 		if (panelIds.has(base.id)) {

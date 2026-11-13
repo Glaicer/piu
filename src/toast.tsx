@@ -55,6 +55,8 @@ export function ToastLayer(props: { toasts: Toasts; theme: Theme }) {
 				{(toast) => (
 					<box
 						border
+						borderStyle="rounded"
+						paddingX={1}
 						borderColor={color(toast.kind)}
 						backgroundColor={props.theme.surface}
 					>

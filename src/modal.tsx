@@ -1,4 +1,4 @@
-import type { BoxRenderable } from "@opentui/core";
+import { type BoxRenderable, RGBA } from "@opentui/core";
 import { useKeyboard, usePaste, useRenderer } from "@opentui/solid";
 import { createSignal, For, onCleanup } from "solid-js";
 import { contains } from "./focus.ts";
@@ -127,6 +127,7 @@ function ModalView(props: {
 			zIndex={100 + props.index}
 			alignItems="center"
 			justifyContent="center"
+			backgroundColor={RGBA.fromInts(0, 0, 0, 100)}
 			onMouseDown={(event) => {
 				event.preventDefault();
 				props.modals.dismiss(props.entry);
@@ -146,6 +147,7 @@ function ModalView(props: {
 				}}
 			>
 				<SlotView
+					modal
 					slot={request.slot}
 					parentDirection="column"
 					panels={request.panels}

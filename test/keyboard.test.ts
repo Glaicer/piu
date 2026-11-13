@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { inputArea, startPiu } from "./harness.ts";
+import { focusedPanels, inputArea, panelText, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -27,7 +27,11 @@ test("with the agent Panel focused the arrow keys scroll it", async () => {
 
 	for (let i = 0; i < 70; i++) piu.mockInput.pressArrow("up");
 
-	const top = await piu.waitForFrame((f) => /Row 1\s/.test(f));
+	const top = await piu.waitForFrame((f) =>
+		panelText(f, 10)
+			.split("\n")
+			.some((line) => line.trimStart().startsWith("│ Go ")),
+	);
 	expect(top).not.toContain("Row 30");
 });
 
@@ -77,7 +81,7 @@ test("the Restart button on the Backend error card can be selected and pressed b
 
 	await piu.waitForFrame((f) => !f.includes("Restart"));
 	piu.mockInput.pressTab();
-	await piu.waitForFrame((f) => /┌─ input /.test(f));
+	await piu.waitForFrame((f) => focusedPanels(piu, f).includes("input"));
 	await send(piu, "Second");
 	await piu.waitForFrame((f) => f.includes("Context holds 3"));
 });
@@ -182,7 +186,7 @@ async function expectQueueRestoredByEsc(
 	const restored = await piu.waitForFrame((f) => inputArea(f).includes(queued));
 	await Bun.sleep(500);
 	await piu.renderOnce();
-	expect(piu.captureCharFrame()).not.toContain(`> ${queued}`);
+	expect(panelText(piu.captureCharFrame(), 10)).not.toContain(queued);
 	expect(restored).not.toContain("Model got");
 
 	piu.mockInput.pressEnter();

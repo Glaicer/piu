@@ -16,6 +16,7 @@ import type {
 } from "@opentui/core";
 import type { ManualClock } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
+import { stringWidth } from "bun";
 import { createApp, type ExitRequest } from "../src/app.tsx";
 import type { UpdateCheckOptions } from "../src/backend-updates.ts";
 import "./hooks.ts";
@@ -62,26 +63,71 @@ function withBackend(backend: object, config: unknown) {
 	return { animations: false, ...rest, backend: { ...backend, ...override } };
 }
 
+function cells(text: string, start: number, end: number) {
+	const characters = [...text];
+	if (stringWidth(text) === characters.length)
+		return characters.slice(start, end).join("");
+	let column = 0;
+	let result = "";
+	for (const { segment } of new Intl.Segmenter().segment(text)) {
+		const width = stringWidth(segment);
+		if (column >= start && column + width <= end) result += segment;
+		column += width;
+		if (column >= end) break;
+	}
+	return result;
+}
+
 export function panelText(frame: string, column: number, row = 0) {
 	const rows = frame.split("\n");
 	let top = row;
-	while (top > 0 && (rows[top] ?? "").lastIndexOf("┌", column) < 0) top--;
+	while (top > 0 && !/[┌╭]/.test((rows[top] ?? "").slice(0, column + 1))) top--;
 	const border = rows[top] ?? "";
-	const left = border.lastIndexOf("┌", column);
-	const right = border.indexOf("┐", column);
+	const left = Math.max(
+		border.lastIndexOf("┌", column),
+		border.lastIndexOf("╭", column),
+	);
+	const right = column + border.slice(column).search(/[┐╮]/);
 	const bottom = rows.findIndex(
-		(text, index) => index > top && [...text][left] === "└",
+		(text, index) => index > top && /[└╰]/.test(cells(text, left, left + 1)),
 	);
 	return rows
 		.slice(top + 1, bottom)
-		.map((text) => [...text].slice(left + 1, right - 1).join(""))
+		.map((text) => cells(text, left + 1, right - 1))
 		.join("\n");
 }
 
-// why: the chat repeats every prompt, so history is asserted on the input Panel alone, found as the Panel just above the 3-row status Panel at the bottom.
+// why: the chat repeats every prompt, so history is asserted on the last Panel in the main column, not the whole frame.
+export function inputTop(frame: string) {
+	return frame.split("\n").findLastIndex((line) => line.startsWith("┌"));
+}
+
 export function inputArea(frame: string) {
-	const lastRow = frame.trimEnd().split("\n").length - 1;
-	return panelText(frame, 10, lastRow - 4);
+	return panelText(frame, 10, inputTop(frame) + 1);
+}
+
+export function statusArea(frame: string) {
+	return panelText(frame, 10, inputTop(frame) - 1);
+}
+
+export function focusedPanels(
+	piu: Awaited<ReturnType<typeof startPiu>>,
+	frame: string,
+) {
+	const named = [...frame.matchAll(/┌─ ([\w-]+) /g)].map((match) => match[1]);
+	const top = inputTop(frame);
+	const width = (frame.split("\n")[top] ?? "").indexOf("┐") + 1;
+	for (
+		let node = piu.renderer.currentFocusedRenderable;
+		node;
+		node = node.parent
+	) {
+		if (node.screenX === 0 && node.screenY === top && node.width === width) {
+			if (!named.includes("input")) named.push("input");
+			break;
+		}
+	}
+	return named;
 }
 
 // why: a terminal tells the renderer its background with an OSC 11 reply on stdin, and the renderer works out light or dark from its brightness.

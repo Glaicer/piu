@@ -104,7 +104,7 @@ test("a prompt sent during /new stays visible while the Backend processes it", a
 	const frame = await piu.waitForFrame(
 		(f) => !agentPanel(f).includes('Reply to "before"'),
 	);
-	expect(agentPanel(frame)).toContain("> after");
+	expect(agentPanel(frame)).toContain("after  [sending]");
 	await piu.waitForFrame((f) => agentPanel(f).includes('Reply to "after"'));
 });
 
@@ -170,7 +170,7 @@ test("/resume lists the saved sessions, and picking one shows its conversation",
 			!agentPanel(f).includes("Beta") &&
 			!f.includes(" messages"),
 	);
-	expect(agentPanel(switched)).toContain("> Alpha question");
+	expect(agentPanel(switched)).toContain("│ Alpha question");
 });
 
 test("/tree shows a branched session, and picking an earlier prompt forks from it and puts that prompt back in the input", async () => {
@@ -205,7 +205,7 @@ test("/tree shows a branched session, and picking an earlier prompt forks from i
 			!agentPanel(f).includes("Left") &&
 			inputArea(f).includes("Right prompt"),
 	);
-	expect(agentPanel(forked)).toContain("> Trunk prompt");
+	expect(agentPanel(forked)).toContain("│ Trunk prompt");
 	expect(agentPanel(forked)).toContain("Trunk reply");
 });
 
@@ -248,9 +248,10 @@ test("/ autocomplete lists the four session commands", async () => {
 
 	await piu.mockInput.typeText("/");
 
+	// why: the list is drawn from the prompt's text column, so the leftmost cell is whichever Panel border sits under it.
 	await piu.waitForFrame((f) =>
 		["/new", "/resume", "/tree", "/compact"].every((name) =>
-			f.split("\n").some((line) => line.startsWith(`│ ${name} `)),
+			f.split("\n").some((line) => line.slice(1).startsWith(` ${name} `)),
 		),
 	);
 });

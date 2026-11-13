@@ -77,11 +77,16 @@ test("the provider remains visible for a model with a long name", async () => {
 	const frame = await piu.waitForFrame((f) =>
 		f.includes("A very long model name"),
 	);
-	const row =
+	const nameRow =
 		frame.split("\n").find((line) => line.includes("A very long model name")) ??
 		"";
-	expect(row).toContain("  faux");
-	expect(row).toContain("faux-2");
+	const idRow =
+		frame.split("\n").find((line) => line.includes("☆ faux-2")) ?? "";
+	expect(idRow).toContain("  faux");
+	expect(nameRow).not.toContain("faux-2");
+	expect(frame.split("\n").indexOf(nameRow)).toBe(
+		frame.split("\n").indexOf(idRow) + 1,
+	);
 });
 
 test("the model command opens the searchable model Modal", async () => {
@@ -693,7 +698,7 @@ test("a resumed session keeps its model and reasoning without changing the perso
 			await piu.mockInput.typeText("first");
 			piu.mockInput.pressEnter();
 			await piu.waitForFrame(
-				(f) => f.includes("> first") && f.includes("first"),
+				(f) => f.includes("│ first") && f.includes("first"),
 			);
 		}
 		writeFileSync(file, saved);

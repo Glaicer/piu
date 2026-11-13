@@ -54,6 +54,7 @@ export type ModuleContext = CommandContext & {
 export type Module = {
 	readonly id: string;
 	readonly title?: string;
+	readonly minHeight?: number;
 	readonly followsOutput?: boolean;
 	render(context: ModuleContext): JSX.Element;
 };

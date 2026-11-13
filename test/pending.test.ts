@@ -50,7 +50,7 @@ test("a steer sent while a command blocks the run shows at once as queued, then 
 
 	block.release();
 	const started = await piu.waitForFrame((f) =>
-		lines(f, "> turn left").some((line) => !line.includes("queued")),
+		lines(f, "│ turn left").some((line) => !line.includes("queued")),
 	);
 	expect(lines(started, "turn left")).toHaveLength(1);
 	await piu.waitForFrame((f) => f.includes('Steered with "turn left"'));
@@ -75,7 +75,7 @@ test("Alt+Enter shows the message as a queued follow-up, and the model gets it o
 		(f) =>
 			f.includes('Followed with "then summarize"') && !f.includes("queued"),
 	);
-	expect(lines(settled, "> then summarize")).toHaveLength(1);
+	expect(lines(settled, "│ then summarize")).toHaveLength(1);
 	expect(lines(settled, "Followed with")).toHaveLength(1);
 });
 
@@ -94,9 +94,9 @@ test("several queued messages stay separate and in the order they were sent, eve
 		(f) => lines(f, "queued").length === 3,
 	);
 	const queued = lines(waiting, "queued").map((line) => line.trim());
-	expect(queued[0]).toStartWith("> again");
-	expect(queued[1]).toStartWith("> second one");
-	expect(queued[2]).toStartWith("> again");
+	expect(queued[0]).toStartWith("again");
+	expect(queued[1]).toStartWith("second one");
+	expect(queued[2]).toStartWith("again");
 
 	block.release();
 	const settled = await piu.waitForFrame(
@@ -105,8 +105,8 @@ test("several queued messages stay separate and in the order they were sent, eve
 			!f.includes("queued") &&
 			f.includes("Working") === false,
 	);
-	expect(lines(settled, "> again")).toHaveLength(2);
-	expect(lines(settled, "> second one")).toHaveLength(1);
+	expect(lines(settled, "│ again")).toHaveLength(2);
+	expect(lines(settled, "│ second one")).toHaveLength(1);
 });
 
 test("Esc drops the queued message from the chat, puts its text back in the input, and the model never gets it", async () => {
@@ -141,7 +141,7 @@ test("a prompt template in a queued message ends as one expanded message with no
 
 	block.release();
 	const started = await piu.waitForFrame(
-		(f) => lines(f, "> Hello Ann, welcome").length === 1,
+		(f) => lines(f, "│ Hello Ann, welcome").length === 1,
 	);
 	expect(lines(started, "queued")).toHaveLength(0);
 	expect(lines(started, "/greet Ann")).toHaveLength(0);
@@ -173,7 +173,7 @@ test("a message the Backend refuses leaves the chat, shows the error and goes ba
 	const frame = await piu.waitForFrame(
 		(f) => f.includes("Cannot submit a prompt") && !f.includes("[sending]"),
 	);
-	expect(lines(frame, "> refused text")).toHaveLength(0);
+	expect(lines(frame, "refused text")).toHaveLength(0);
 
 	await piu.waitForFrame((f) => f.includes("Compacted context"));
 	piu.mockInput.pressEnter();
@@ -191,14 +191,14 @@ test("a slow Backend does not delay the message in the chat", async () => {
 	await send(piu, "hello there");
 
 	const waiting = await piu.waitForFrame(
-		(f) => lines(f, "> hello there").length === 1,
+		(f) => lines(f, "hello there").length === 1,
 		400,
 	);
 	expect(waiting).not.toContain("Reply to");
 	const done = await piu.waitForFrame((f) =>
 		f.includes('Reply to "hello there"'),
 	);
-	expect(lines(done, "> hello there")).toHaveLength(1);
+	expect(lines(done, "│ hello there")).toHaveLength(1);
 });
 
 test("queued messages leave the chat when the Backend dies, which shows its own error", async () => {

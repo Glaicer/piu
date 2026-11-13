@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { inputArea, panelText, startPiu } from "./harness.ts";
+import { focusedPanels, inputArea, panelText, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -129,7 +129,7 @@ test("Tab takes the focus away from the question card and a full cycle brings th
 	await piu.waitForFrame((f) => /┌─ agent /.test(f));
 	piu.mockInput.pressArrow("down");
 	piu.mockInput.pressTab();
-	await piu.waitForFrame((f) => /┌─ input /.test(f));
+	await piu.waitForFrame((f) => focusedPanels(piu, f).includes("input"));
 	piu.mockInput.pressArrow("down");
 	piu.mockInput.pressEnter();
 
@@ -196,7 +196,7 @@ const modelGot = (frame: string, text: string) =>
 		.join("\n")
 		.includes(`Model got ${text}`);
 
-const answersOf = (...lines: string[]) => lines.join("\n");
+const answersOf = (...lines: string[]) => lines.join("\n  ");
 
 async function click(
 	piu: Piu,
@@ -549,21 +549,25 @@ const cornerRows = (frame: string) =>
 		.split("\n")
 		.flatMap((line, index) => (line.startsWith("┌") ? [index] : []));
 
-test("the input Panel grows to fit the card and returns to the input's height after", async () => {
+test("the input Panel fits the card and restores the editor and directory after", async () => {
 	await using piu = await startPiu({
 		script: asking("Model got {toolResult}"),
 	});
-	const idle = await piu.waitForFrame((f) => f.includes("faux-1"));
-	expect(cornerRows(idle)).toEqual([0, 22, 27]);
+	const idle = await piu.waitForFrame(
+		(f) => f.includes("faux-1") && inputArea(f).includes(piu.dir),
+	);
+	expect(cornerRows(idle)).toEqual([0, 19, 22]);
 	await send(piu, "go");
 	const asked = await piu.waitForFrame(showsCard);
-	expect(cornerRows(asked)).toEqual([0, 19, 27]);
+	expect(cornerRows(asked)).toEqual([0, 19, 22]);
+	expect(inputArea(asked)).not.toContain(piu.dir);
 
 	piu.mockInput.pressEnter();
-	const answered = await piu.waitForFrame((f) =>
-		agentPanel(f).includes("Model got"),
+	const answered = await piu.waitForFrame(
+		(f) =>
+			agentPanel(f).includes("Model got") && inputArea(f).includes(piu.dir),
 	);
-	expect(cornerRows(answered)).toEqual([0, 22, 27]);
+	expect(cornerRows(answered)).toEqual([0, 19, 22]);
 });
 
 test("ask_user_question stays out after a tool call and in the next run", async () => {

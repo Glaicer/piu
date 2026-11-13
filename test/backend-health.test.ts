@@ -102,8 +102,8 @@ test("clicking Restart brings the Backend back with -c and the same session cont
 	piu.mockInput.pressEnter();
 
 	const frame = await piu.waitForFrame((f) => f.includes("Context holds 3"));
-	expect(frame).toContain("> First");
-	expect(frame).toContain("> Second");
+	expect(frame).toContain("│ First");
+	expect(frame).toContain("│ Second");
 	expect(frame.split("Context holds 1")).toHaveLength(2);
 });
 
@@ -131,7 +131,7 @@ test("starting with -c shows the conversation of the session being continued", a
 			f.includes("Remembered reply"),
 		);
 
-		expect(frame).toContain("> Remember me");
+		expect(frame).toContain("│ Remember me");
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}

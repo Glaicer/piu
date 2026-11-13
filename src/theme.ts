@@ -10,6 +10,9 @@ export const themeTokens = [
 	"warning",
 	"error",
 	"surface",
+	"background",
+	"selection",
+	"secondary",
 	"border",
 ] as const;
 
@@ -24,25 +27,31 @@ export type Theme = Readonly<Record<ThemeToken, string>>;
 export type ThemeOverrides = Readonly<Partial<Record<ThemeToken, string>>>;
 
 export const darkTheme: Theme = {
-	text: "#e6e6e6",
-	muted: "#8a8a8a",
-	accent: "#7aa2f7",
-	success: "#9ece6a",
-	warning: "#e0af68",
-	error: "#f7768e",
-	surface: "#1a1b26",
-	border: "#3b4261",
+	text: "#eee9e7",
+	muted: "#a09aa8",
+	accent: "#f2b8a0",
+	success: "#a3c9a8",
+	warning: "#e4c18c",
+	error: "#ee969f",
+	surface: "#1b1a21",
+	background: "#111115",
+	selection: "#35303f",
+	secondary: "#b8a5df",
+	border: "#35333e",
 };
 
 export const lightTheme: Theme = {
-	text: "#343b58",
-	muted: "#565f89",
-	accent: "#34548a",
-	success: "#385f0d",
-	warning: "#8f5e15",
-	error: "#8c4351",
-	surface: "#e1e2e7",
-	border: "#a8aecb",
+	text: "#302c35",
+	muted: "#6f6577",
+	accent: "#9d4b32",
+	success: "#3f704b",
+	warning: "#895d1c",
+	error: "#af3d51",
+	surface: "#eee9e7",
+	background: "#faf7f5",
+	selection: "#e0d6e8",
+	secondary: "#75539e",
+	border: "#d0c6d2",
 };
 
 const builtIn: Readonly<Record<ThemeMode, Theme>> = {

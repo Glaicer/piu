@@ -123,7 +123,7 @@ test("the wheel scrolls the Panel under the pointer, not the focused one", async
 						size: "rest",
 						children: [panel("left", "50%"), panel("right", "rest")],
 					},
-					panel("input", 4),
+					panel("input", 7),
 				],
 			},
 			placement: {
@@ -238,7 +238,7 @@ test("an exclusive Module hides its siblings until it stops claiming the Panel",
 	expect(released).toContain("Bye");
 });
 
-test("the default input area has a row Panel for status Modules below the input", async () => {
+test("the default input area has a row Panel for status Modules above the input", async () => {
 	await using piu = await startPiu({
 		script: none,
 		extensions,
@@ -253,7 +253,7 @@ test("the default input area has a row Panel for status Modules below the input"
 		(f) => f.includes("typed") && f.includes("Bye"),
 	);
 	expect(lineOf(frame, "Bye")).toBe(lineOf(frame, "Hello Ada"));
-	expect(lineOf(frame, "Bye")).toBeGreaterThan(lineOf(frame, "typed"));
+	expect(lineOf(frame, "Bye")).toBeLessThan(lineOf(frame, "typed"));
 });
 
 test("a Panel follows output only when a Module that follows output is visible in it", async () => {

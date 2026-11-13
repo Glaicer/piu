@@ -318,7 +318,7 @@ function App(props: {
 		<box
 			width="100%"
 			height="100%"
-			backgroundColor={theme.surface}
+			backgroundColor={theme.background}
 			onMouseDown={keepFocus}
 		>
 			<SlotView

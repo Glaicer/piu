@@ -93,11 +93,12 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 		queueMicrotask(() => scrollIntoView(model && rows.get(model)));
 	});
 	return (
-		<box flexDirection="column" height={18}>
-			<box flexDirection="row">
+		<box flexDirection="column" height={18} paddingX={1}>
+			<box flexDirection="row" marginBottom={1} flexShrink={0}>
 				<For each={["Favorites", "All"] as const}>
 					{(name) => (
 						<box
+							backgroundColor={name === tab() ? theme.selection : undefined}
 							onMouseDown={(event) => {
 								event.preventDefault();
 								changeTab(name);
@@ -110,7 +111,7 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 					)}
 				</For>
 			</box>
-			<box flexDirection="row" onMouseDown={() => input.focus()}>
+			<box flexDirection="row" flexShrink={0} onMouseDown={() => input.focus()}>
 				<text fg={theme.muted}> Search: </text>
 				<input
 					ref={(element: InputRenderable) => {
@@ -120,17 +121,27 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 					flexGrow={1}
 					placeholder="Search models"
 					textColor={theme.text}
+					focusedTextColor={theme.text}
+					backgroundColor={theme.surface}
+					focusedBackgroundColor={theme.surface}
+					placeholderColor={theme.muted}
 					onInput={(value: string) => {
 						updateModels(() => setQuery(value));
 					}}
 					onKeyDown={(event) => onKey(event, true)}
 				/>
 			</box>
-			<text fg={theme.muted}> Tab: search/list ←/→: tabs F: favorite</text>
 			<scrollbox
-				height={15}
+				marginTop={1}
+				height={12}
 				flexShrink={1}
 				contentOptions={{ flexDirection: "column" }}
+				scrollbarOptions={{
+					trackOptions: {
+						foregroundColor: theme.border,
+						backgroundColor: theme.surface,
+					},
+				}}
 			>
 				<box
 					ref={(element: BoxRenderable) => {
@@ -153,34 +164,68 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 								ref={(element: BoxRenderable) => {
 									rows.set(model, element);
 								}}
-								flexDirection="row"
-								backgroundColor={at() === index() ? theme.border : undefined}
+								flexDirection="column"
+								backgroundColor={at() === index() ? theme.selection : undefined}
 								onMouseOver={() => setIndex(at())}
 								onMouseDown={(event) => {
 									event.preventDefault();
 									pick(model);
 								}}
 							>
-								<text
-									fg={theme.accent}
-									onMouseDown={(event) => {
-										event.preventDefault();
-										event.stopPropagation();
-										toggle(model);
-									}}
-								>
-									{modelFavorites.has(model) ? " ★ " : " ☆ "}
-								</text>
-								<text
-									fg={theme.text}
-									width={40}
-								>{`${model.id}${sameModel(model, pi.model) ? " *" : ""}${model.name === model.id ? "" : `  ${model.name}`}`}</text>
-								<text fg={theme.muted}>{`  ${model.provider}`}</text>
+								<box flexDirection="row">
+									<text
+										fg={theme.accent}
+										flexShrink={0}
+										onMouseDown={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+											toggle(model);
+										}}
+									>
+										{modelFavorites.has(model) ? " ★ " : " ☆ "}
+									</text>
+									<text
+										fg={theme.text}
+										flexGrow={1}
+										flexShrink={1}
+										wrapMode="none"
+										truncate
+									>
+										{`${model.id}${sameModel(model, pi.model) ? " *" : ""}`}
+									</text>
+									<text
+										fg={theme.muted}
+										flexShrink={0}
+										maxWidth="35%"
+										wrapMode="none"
+										truncate
+									>{`  ${model.provider}`}</text>
+								</box>
+								{model.name !== model.id && (
+									<text
+										fg={theme.muted}
+										paddingLeft={3}
+										wrapMode="none"
+										truncate
+									>
+										{model.name}
+									</text>
+								)}
 							</box>
 						)}
 					</For>
 				</box>
 			</scrollbox>
+			<text
+				fg={theme.muted}
+				wrapMode="none"
+				truncate
+				marginTop={1}
+				flexShrink={0}
+			>
+				{" "}
+				Tab search/list · ←/→ tabs · F favorite · Esc close
+			</text>
 		</box>
 	);
 }
@@ -190,6 +235,7 @@ function openModelPicker(context: CommandContext) {
 		moduleModal(
 			{
 				id: "model-picker",
+				title: "Models",
 				render: () => <ModelPicker context={context} close={() => close()} />,
 			},
 			{ width: 60, height: 20 },

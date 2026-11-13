@@ -48,7 +48,9 @@ export function Picker<T>(props: {
 							rows[at()] = element;
 						}}
 						flexDirection="row"
-						backgroundColor={at() === index() ? props.theme.border : undefined}
+						backgroundColor={
+							at() === index() ? props.theme.selection : undefined
+						}
 						onMouseOver={() => setIndex(at())}
 						onMouseDown={(event) => {
 							event.preventDefault();
@@ -113,12 +115,13 @@ export function PickerLink(props: {
 }) {
 	return (
 		<box
+			backgroundColor={props.context.theme.surface}
 			onMouseDown={(event) => {
 				event.preventDefault();
 				props.onPress();
 			}}
 		>
-			<text fg={props.context.theme.accent}>{` ${props.label} `}</text>
+			<text fg={props.context.theme.secondary}>{` ${props.label} `}</text>
 		</box>
 	);
 }

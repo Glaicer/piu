@@ -9,12 +9,12 @@ async function userEcho(piu: Awaited<ReturnType<typeof startPiu>>) {
 	await piu.mockInput.typeText("Hi");
 	piu.mockInput.pressEnter();
 	await piu.waitForFrame(
-		(frame) => frame.includes("> Hi") && !frame.includes("[sending]"),
+		(frame) => frame.includes("ok") && !frame.includes("[sending]"),
 	);
 	return piu
 		.captureSpans()
 		.lines.flatMap((line) => line.spans)
-		.find((span) => span.text.includes("> Hi"));
+		.find((span) => span.text.trim() === "Hi");
 }
 
 test("a terminal reporting a dark background gets the dark tokens", async () => {
@@ -55,7 +55,7 @@ test("a terminal that changes its background mid-session switches the tokens", a
 			.lines.flatMap((line) => line.spans)
 			.some(
 				(span) =>
-					span.text.includes("> Hi") &&
+					span.text.trim() === "Hi" &&
 					span.fg.equals(RGBA.fromHex(lightTheme.accent)),
 			),
 	);

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { blocker } from "./blocker.ts";
-import { inputArea, panelText, startPiu } from "./harness.ts";
+import { inputArea, inputTop, panelText, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 type Script = Parameters<typeof startPiu>[0]["script"];
@@ -61,9 +61,8 @@ test("a command started in the background is pinned above the input with its job
 	expect(pinnedRows(frame)[0]).toMatch(/bg-1 +running +: alpha/);
 	const rows = frame.split("\n");
 	const header = rows.findIndex((line) => line.includes(HEADER));
-	const inputTop = rows.findIndex((line) => line.includes("┌─ input"));
 	expect(header).toBeGreaterThan(rows.findIndex((l) => l.includes("Launched")));
-	expect(header).toBeLessThan(inputTop);
+	expect(header).toBeLessThan(inputTop(frame));
 	expect(agentPanel(frame)).not.toContain(HEADER);
 	expect(agentPanel(frame)).toMatch(/▸ bash .*bg-1 running/);
 });
@@ -198,7 +197,7 @@ test("a new user message and its reply do not push the pinned job out", async ()
 
 	const frame = await piu.waitForFrame((f) => f.includes("Second answer"));
 	expect(pinnedRows(frame, "iota")).toHaveLength(1);
-	expect(agentPanel(frame)).toContain("> Next question");
+	expect(agentPanel(frame)).toContain("│ Next question");
 });
 
 function numbered(count: number) {

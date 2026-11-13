@@ -10,7 +10,7 @@ export function createSyntaxStyle(theme: Theme) {
 			"markup.strong": { bold: true },
 			"markup.italic": { italic: true },
 			"markup.strikethrough": { dim: true },
-			"markup.raw": { fg: theme.success },
+			"markup.raw": { fg: theme.secondary },
 			"markup.list": { fg: theme.accent },
 			"markup.quote": { fg: theme.muted, italic: true },
 			"markup.link": { fg: theme.accent, underline: true },

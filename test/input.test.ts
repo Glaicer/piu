@@ -85,23 +85,17 @@ test("pasting overflowing lines keeps the last line and cursor in the input", as
 	expect(rows[cursor.y - 1]).toContain("│");
 });
 
-test("overflow shows scroll position and arrows move through pasted lines", async () => {
+test("four pasted lines remain visible and arrow keys move within the draft", async () => {
 	await using piu = await startPiu({ script: { replies: ["Got {lastUser}"] } });
 	await piu.renderOnce();
 	await piu.mockInput.pasteBracketedText("first\nsecond\nthird\nfourth");
 	await piu.renderOnce();
-	expect(
-		piu
-			.captureCharFrame()
-			.split("\n")
-			.find((row) => row.includes("third")),
-	).toContain("↑");
+	for (const line of ["first", "second", "third", "fourth"])
+		expect(inputArea(piu.captureCharFrame())).toContain(line);
 	piu.mockInput.pressArrow("up");
 	piu.mockInput.pressArrow("up");
 	piu.mockInput.pressArrow("up");
 	await piu.renderOnce();
-	const top = piu.captureCharFrame();
-	expect(top.split("\n").find((row) => row.includes("second"))).toContain("↓");
 	piu.mockInput.pressArrow("down");
 	piu.mockInput.pressArrow("down");
 	await piu.mockInput.typeText("X");

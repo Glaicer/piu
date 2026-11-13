@@ -1,4 +1,10 @@
-import type { KeyEvent, TextareaRenderable } from "@opentui/core";
+import {
+	type BoxRenderable,
+	CliRenderEvents,
+	type KeyEvent,
+	ScrollBarRenderable,
+	type TextareaRenderable,
+} from "@opentui/core";
 import { Portal, useRenderer } from "@opentui/solid";
 import {
 	createEffect,
@@ -12,9 +18,12 @@ import {
 import { matches } from "../../src/keybindings.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
 import { type Entry, findTrigger, narrow } from "./autocomplete.ts";
+import { Directory } from "./dir.tsx";
 import { listFiles } from "./files.ts";
 
 const MAX_LIST_ROWS = 8;
+const MIN_LINES = 4;
+const MAX_LINES = 16;
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 const SPINNER_MS = 800;
 const SPINNER_FPS = 10;
@@ -29,6 +38,26 @@ function Prompt(props: { context: ModuleContext }) {
 	let recalled = 0;
 
 	const renderer = useRenderer();
+	let syncingScrollbar = false;
+	const scrollbar = new ScrollBarRenderable(renderer, {
+		orientation: "vertical",
+		width: 1,
+		height: "100%",
+		onChange: (position) => {
+			if (!field || field.isDestroyed || syncingScrollbar) return;
+			const viewport = field.editorView.getViewport();
+			field.editorView.setViewport(
+				viewport.offsetX,
+				position,
+				viewport.width,
+				viewport.height,
+				true,
+			);
+			field.requestRender();
+			sync();
+		},
+	});
+	scrollbar.focusable = false;
 	const [spinner, setSpinner] = createSignal("");
 	createEffect(() => {
 		if (!props.context.pi.working) return;
@@ -47,7 +76,45 @@ function Prompt(props: { context: ModuleContext }) {
 		});
 	});
 	const [before, setBefore] = createSignal("");
-	const [scroll, setScroll] = createSignal({ up: false, down: false });
+	const [lineCount, setLineCount] = createSignal(1);
+	const height = () => Math.max(MIN_LINES, Math.min(MAX_LINES, lineCount()));
+	const [anchor, setAnchor] = createSignal(
+		{ left: 0, top: 0, width: 0 },
+		{
+			equals: (a, b) =>
+				a.left === b.left && a.top === b.top && a.width === b.width,
+		},
+	);
+	const [editorRow, setEditorRow] = createSignal<BoxRenderable>();
+	createEffect(() => {
+		const row = editorRow();
+		if (!row) return;
+		row.height = height();
+		// why: every numeric height write resets flexShrink to 0 in OpenTUI 0.8.3, so restore it after each growth to keep short terminals usable.
+		row.flexShrink = 1;
+	});
+	createEffect(() => {
+		scrollbar.trackOptions = {
+			foregroundColor: props.context.theme.muted,
+			backgroundColor: "transparent",
+		};
+	});
+	// why: native layout updates the editor viewport after onSizeChange, so the scrollbar follows the completed frame rather than the previous viewport.
+	const syncViewport = () => {
+		if (!field || field.isDestroyed) return;
+		const viewport = field.editorView.getViewport();
+		const total = field.editorView.getTotalVirtualLineCount();
+		setLineCount(total);
+		setAnchor({ left: field.screenX, top: field.screenY, width: field.width });
+		// why: OpenTUI fires onChange while range setters clamp the thumb too; mirroring native state must not move the editor's caret.
+		syncingScrollbar = true;
+		scrollbar.scrollSize = total;
+		scrollbar.viewportSize = viewport.height;
+		scrollbar.scrollPosition = viewport.offsetY;
+		syncingScrollbar = false;
+	};
+	renderer.on(CliRenderEvents.FRAME, syncViewport);
+	onCleanup(() => renderer.off(CliRenderEvents.FRAME, syncViewport));
 	const [selected, setSelected] = createSignal(0);
 	const [windowStart, setWindowStart] = createSignal(0);
 	const [dismissed, setDismissed] = createSignal(false);
@@ -118,16 +185,6 @@ function Prompt(props: { context: ModuleContext }) {
 		if (field && field.plainText !== history[recalled])
 			recalled = history.length;
 		setBefore(field?.getTextRange(0, field.cursorOffset) ?? "");
-		queueMicrotask(() => {
-			if (!field || field.isDestroyed) return;
-			const viewport = field.editorView.getViewport();
-			setScroll({
-				up: viewport.offsetY > 0,
-				down:
-					viewport.offsetY + viewport.height <
-					field.editorView.getTotalVirtualLineCount(),
-			});
-		});
 	}
 
 	function accept(entry: Entry) {
@@ -269,18 +326,40 @@ function Prompt(props: { context: ModuleContext }) {
 
 	return (
 		<box flexDirection="column">
-			<text fg={props.context.theme.muted}>
-				{props.context.pi.working ? `${spinner()}Working…` : " "}
-			</text>
-			<box flexDirection="row">
+			<box flexDirection="row" justifyContent="space-between" flexShrink={0}>
+				<text
+					fg={
+						props.context.pi.working
+							? props.context.theme.accent
+							: props.context.theme.muted
+					}
+					flexShrink={0}
+				>
+					{props.context.pi.working ? `${spinner()}Working…` : " "}
+				</text>
+				<text
+					fg={props.context.theme.muted}
+					wrapMode="none"
+					truncate
+					marginRight={1}
+				>
+					{props.context.pi.working ? "Esc stop · Alt+Enter queue" : ""}
+				</text>
+			</box>
+			<box ref={setEditorRow} flexDirection="row" minHeight={MIN_LINES}>
 				<textarea
 					ref={(element: TextareaRenderable) => {
 						field = element;
 					}}
 					focused
-					height={2}
+					height="100%"
 					flexGrow={1}
 					textColor={props.context.theme.text}
+					focusedTextColor={props.context.theme.text}
+					backgroundColor="transparent"
+					focusedBackgroundColor="transparent"
+					placeholder="/ commands · @ files"
+					placeholderColor={props.context.theme.muted}
 					keyBindings={keyBindings}
 					onKeyDown={onKeyDown}
 					onContentChange={sync}
@@ -288,12 +367,13 @@ function Prompt(props: { context: ModuleContext }) {
 					onSizeChange={sync}
 					onMouseScroll={sync}
 				/>
-				<box width={1} flexDirection="column">
-					<text fg={props.context.theme.muted}>{scroll().up ? "↑" : " "}</text>
-					<text fg={props.context.theme.muted}>
-						{scroll().down ? "↓" : " "}
-					</text>
-				</box>
+				<box
+					width={1}
+					height="100%"
+					ref={(node) => {
+						node.add(scrollbar);
+					}}
+				/>
 			</box>
 			<Show when={open()}>
 				<Portal
@@ -304,9 +384,9 @@ function Prompt(props: { context: ModuleContext }) {
 				>
 					<box
 						position="absolute"
-						left={field?.screenX}
-						top={Math.max(0, (field?.screenY ?? 0) - shown().length)}
-						width={field?.width}
+						left={anchor().left}
+						top={Math.max(0, anchor().top - shown().length)}
+						width={anchor().width}
 						height={shown().length}
 						zIndex={50}
 						flexDirection="column"
@@ -319,7 +399,7 @@ function Prompt(props: { context: ModuleContext }) {
 									height={1}
 									backgroundColor={
 										firstShown() + at() === selected()
-											? props.context.theme.border
+											? props.context.theme.selection
 											: undefined
 									}
 									// why: OpenTUI sends `over` to whatever lands under a resting pointer after each frame, which would select a row the user never pointed at.
@@ -354,6 +434,15 @@ function Prompt(props: { context: ModuleContext }) {
 
 export default {
 	modules: [
-		{ id: "prompt", render: (context) => <Prompt context={context} /> },
+		{
+			id: "prompt",
+			minHeight: MIN_LINES + 1,
+			render: (context) => <Prompt context={context} />,
+		},
+		{
+			id: "dir",
+			minHeight: 1,
+			render: (context) => <Directory context={context} />,
+		},
 	],
 } satisfies Extension;

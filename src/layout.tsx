@@ -18,6 +18,7 @@ type SlotBase = {
 	size: Size;
 	minSize?: number;
 	hideBelow?: number;
+	title?: string;
 };
 export type Slot =
 	| (SlotBase & { kind: "container"; children: readonly Slot[] })
@@ -35,6 +36,7 @@ type SlotProps = {
 	slot: Slot;
 	parentDirection: Direction;
 	inContent?: boolean;
+	modal?: boolean;
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	context: SharedContext;
 };
@@ -70,6 +72,7 @@ export function SlotView(props: SlotProps) {
 							slot={child}
 							parentDirection={slot.direction}
 							inContent={slot.size === "content"}
+							modal={props.modal}
 							panels={props.panels}
 							context={props.context}
 						/>
@@ -117,9 +120,20 @@ export function SlotView(props: SlotProps) {
 		},
 	});
 	const focused = () => focus?.isFocused(slot.id) ?? false;
+	const focusColor = () =>
+		props.modal ? shared.theme.secondary : shared.theme.accent;
+	const title = () =>
+		focused()
+			? (slot.title ?? slot.id)
+			: props.modal
+				? entries[0]?.placed.module.title
+				: undefined;
 	const frame = () => ({
-		borderColor: focused() ? shared.theme.accent : shared.theme.border,
-		title: focused() ? ` ${slot.id} ` : undefined,
+		borderStyle: props.modal ? ("rounded" as const) : ("single" as const),
+		borderColor: focused() || props.modal ? focusColor() : shared.theme.border,
+		focusedBorderColor: focusColor(),
+		title: title() ? ` ${title()} ` : undefined,
+		titleColor: props.modal ? shared.theme.text : shared.theme.accent,
 	});
 	const routeKey = (event: KeyEvent) => {
 		for (const entry of entries) {
@@ -131,7 +145,7 @@ export function SlotView(props: SlotProps) {
 	const modules = (
 		<For each={entries}>
 			{(entry) => (
-				<box visible={shown(entry)}>
+				<box visible={shown(entry)} minHeight={entry.placed.module.minHeight}>
 					<ModuleView
 						placed={entry.placed}
 						context={{
@@ -187,6 +201,14 @@ export function SlotView(props: SlotProps) {
 				stickyScroll={followsOutput()}
 				stickyStart="bottom"
 				contentOptions={{ flexDirection: slot.direction }}
+				scrollbarOptions={{
+					trackOptions: {
+						foregroundColor: shared.theme.border,
+						backgroundColor: props.modal
+							? shared.theme.surface
+							: shared.theme.background,
+					},
+				}}
 			>
 				{modules}
 			</scrollbox>

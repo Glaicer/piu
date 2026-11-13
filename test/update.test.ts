@@ -331,7 +331,7 @@ test("/update is offered in slash autocomplete and does not queue a prompt while
 		const frame = await piu.waitForFrame((f) =>
 			f.includes('"follow-up" has 4'),
 		);
-		expect(frame).not.toContain("> /update");
+		expect(frame).not.toContain("│ /update");
 		expect(fixture.calls()).toHaveLength(0);
 	} finally {
 		fixture.cleanup();
@@ -463,7 +463,7 @@ test("/update reports an up-to-date Backend without sending it to the model", as
 		const frame = await piu.waitForFrame((f) =>
 			f.includes('"real-prompt" has 1'),
 		);
-		expect(frame).not.toContain("> /update");
+		expect(frame).not.toContain("│ /update");
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}

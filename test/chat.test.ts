@@ -275,7 +275,7 @@ test("a replaced layout keeps the chat following output in whichever Panel holds
 				size: "rest",
 				children: [
 					{ kind: "panel", id: "talk", direction: "column", size: "rest" },
-					{ kind: "panel", id: "typing", direction: "column", size: 3 },
+					{ kind: "panel", id: "typing", direction: "column", size: 7 },
 				],
 			},
 			placement: { talk: ["chat.messages"], typing: ["input.prompt"] },

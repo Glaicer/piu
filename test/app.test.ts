@@ -12,7 +12,7 @@ test("Enter sends the prompt and the agent Panel shows it with the full reply", 
 	const frame = await piu.waitForFrame((f) =>
 		f.includes("Hello from the faux model"),
 	);
-	expect(frame).toContain("> Say hello");
+	expect(frame).toContain("│ Say hello");
 });
 
 test("the reply grows across frames while it streams", async () => {
@@ -26,7 +26,7 @@ test("the reply grows across frames while it streams", async () => {
 
 	const seen = new Set<string>();
 	await piu.waitForFrame((frame) => {
-		const line = frame.split("\n").find((l) => l.includes("│one"));
+		const line = frame.split("\n").find((l) => /│\s+one/.test(l));
 		if (line) seen.add(line);
 		return frame.includes(reply);
 	});

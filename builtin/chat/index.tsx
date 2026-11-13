@@ -1,6 +1,6 @@
 import type { SyntaxStyle } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
-import { createMemo, For, Index, onCleanup } from "solid-js";
+import { createMemo, For, Index, onCleanup, Show } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
 import type { BackgroundJob } from "../../src/background.ts";
 import { moduleModal } from "../../src/modal.tsx";
@@ -55,7 +55,17 @@ function Messages(props: { context: ModuleContext }) {
 		}
 	});
 	return (
-		<>
+		<box paddingX={1}>
+			<Show when={pi.messages.length === 0 && pi.pending.length === 0}>
+				<box paddingX={2} paddingY={2}>
+					<text fg={theme.accent}>
+						<b>What would you like to build?</b>
+					</text>
+					<text fg={theme.muted}>
+						Ask a question, describe a change, or share an idea.
+					</text>
+				</box>
+			</Show>
 			<For each={pi.messages}>
 				{(message, index) => (
 					<>
@@ -84,7 +94,16 @@ function Messages(props: { context: ModuleContext }) {
 							</Index>
 						) : (
 							message.role === "user" && (
-								<text fg={theme.accent}>{`> ${messageText(message)}`}</text>
+								<box
+									border={["left"]}
+									borderColor={theme.accent}
+									backgroundColor={theme.surface}
+									paddingX={1}
+									paddingY={1}
+									marginTop={1}
+								>
+									<text fg={theme.accent}>{messageText(message)}</text>
+								</box>
 							)
 						)}
 					</>
@@ -95,7 +114,7 @@ function Messages(props: { context: ModuleContext }) {
 				{(entry) => (
 					<text
 						fg={theme.muted}
-					>{`> ${entry.text}  ${pendingLabel(entry)}`}</text>
+					>{`${entry.text}  ${pendingLabel(entry)}`}</text>
 				)}
 			</For>
 			<For each={pi.subagents}>
@@ -109,7 +128,7 @@ function Messages(props: { context: ModuleContext }) {
 				)}
 			</For>
 			<BackendCard context={props.context} selection={selection} />
-		</>
+		</box>
 	);
 }
 
@@ -167,12 +186,14 @@ function AssistantBlock(props: {
 					theme={props.theme}
 				/>
 			) : type() === "text" ? (
-				<Markdown
-					text={text()}
-					streaming={props.streaming}
-					syntaxStyle={props.syntaxStyle}
-					theme={props.theme}
-				/>
+				<box paddingX={1} marginTop={1}>
+					<Markdown
+						text={text()}
+						streaming={props.streaming}
+						syntaxStyle={props.syntaxStyle}
+						theme={props.theme}
+					/>
+				</box>
 			) : type() === "toolCall" ? (
 				<ToolCard
 					call={toolCall}

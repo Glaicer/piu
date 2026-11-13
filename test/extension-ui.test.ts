@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
-import { inputArea, panelText, startPiu } from "./harness.ts";
+import { inputArea, panelText, startPiu, statusArea } from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -205,12 +205,9 @@ test("notify shows a Toast that is gone after its timeout", async () => {
 	await piu.waitForFrame((f) => !f.includes("Build finished"), 6000);
 });
 
-const statusPanel = (frame: string) => {
-	const lastRow = frame.trimEnd().split("\n").length - 1;
-	return panelText(frame, 10, lastRow - 1);
-};
+const statusPanel = statusArea;
 
-test("setStatus text appears under the input and disappears when cleared", async () => {
+test("setStatus text appears above the input and disappears when cleared", async () => {
 	await using piu = await startPiu({
 		script: {
 			uiTool: true,

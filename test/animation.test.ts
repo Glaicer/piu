@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { ManualClock } from "@opentui/core/testing";
-import { type FauxScript, startPiu } from "./harness.ts";
+import { type FauxScript, focusedPanels, startPiu } from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
 const none: FauxScript = { replies: [] };
@@ -89,9 +89,7 @@ for (const animations of [true, false]) {
 		await app.frame();
 		app.piu.mockInput.pressEscape();
 		const closed = await app.frame();
-		expect([...closed.matchAll(/┌─ ([\w-]+) /g)].map((m) => m[1])).toEqual([
-			"input",
-		]);
+		expect(focusedPanels(app.piu, closed)).toEqual(["input"]);
 		await app.piu.mockInput.typeText("draft");
 		const frame = await app.frame();
 		expect(rowOf(frame, "faux-2")).toBe(-1);
@@ -104,9 +102,7 @@ for (const animations of [true, false]) {
 		await app.frame();
 		await clickText(app.piu, "faux-2");
 		const closed = await app.frame();
-		expect([...closed.matchAll(/┌─ ([\w-]+) /g)].map((m) => m[1])).toEqual([
-			"input",
-		]);
+		expect(focusedPanels(app.piu, closed)).toEqual(["input"]);
 		expect(closed).not.toContain("faux-1");
 		await app.piu.mockInput.typeText("draft");
 		const frame = await app.frame();
@@ -133,14 +129,12 @@ for (const animations of [true, false]) {
 			top: 2,
 		});
 		expect(close).toBeFunction();
-		const border = `┌${"─".repeat(18)}┐`;
+		const border = `╭${"─".repeat(18)}╮`;
 		expect((await app.frame()).split("\n")[2]?.slice(4, 24)).toBe(border);
 		close?.();
 		const closed = await app.frame();
 		expect(closed.split("\n")[2]?.slice(4, 24)).not.toBe(border);
-		expect([...closed.matchAll(/┌─ ([\w-]+) /g)].map((m) => m[1])).toEqual([
-			"input",
-		]);
+		expect(focusedPanels(app.piu, closed)).toEqual(["input"]);
 	});
 
 	test(`Esc immediately closes only the top Modal (animations ${animations})`, async () => {
@@ -156,7 +150,7 @@ for (const animations of [true, false]) {
 		expect(stacked).toContain("INNER");
 		expect(rowOf(stacked, "INNER")).toBe(3);
 		expect(columnOf(stacked, "INNER")).toBe(5);
-		expect(stacked.split("\n")[2]?.slice(4, 24)).toBe(`┌${"─".repeat(18)}┐`);
+		expect(stacked.split("\n")[2]?.slice(4, 24)).toBe(`╭${"─".repeat(18)}╮`);
 		app.piu.mockInput.pressEscape();
 		const frame = await app.frame();
 		expect(frame).not.toContain("INNER");
@@ -202,7 +196,7 @@ test("a Toast is fully visible immediately and disappears at its timeout with an
 	await using app = await raiseToast(true);
 	await app.piu.waitForFrame((f) => columnOf(f, "Build") >= 0);
 	const first = columnOf(await app.frame(), "Build finished");
-	expect(first).toBe(143);
+	expect(first).toBe(142);
 	expect(columnOf(await app.frame(2999), "Build finished")).toBe(first);
 	expect(columnOf(await app.frame(1), "Build finished")).toBe(-1);
 });
@@ -210,7 +204,7 @@ test("a Toast is fully visible immediately and disappears at its timeout with an
 test("with animations off a Toast is in place at once and gone when its timeout passes", async () => {
 	await using app = await raiseToast(false);
 	await app.piu.waitForFrame((f) => columnOf(f, "Build finished") >= 0);
-	expect(columnOf(await app.frame(), "Build finished")).toBe(143);
+	expect(columnOf(await app.frame(), "Build finished")).toBe(142);
 	expect(columnOf(await app.frame(2999), "Build finished")).toBeGreaterThan(0);
 	expect(columnOf(await app.frame(1), "Build finished")).toBe(-1);
 });

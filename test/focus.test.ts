@@ -1,18 +1,14 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { inputArea, startPiu } from "./harness.ts";
+import { focusedPanels, inputArea, startPiu } from "./harness.ts";
 
 const none = { replies: [] };
-
-function focusedPanels(frame: string) {
-	return [...frame.matchAll(/┌─ ([\w-]+) /g)].map((match) => match[1]);
-}
 
 async function focusedAfter(
 	piu: Awaited<ReturnType<typeof startPiu>>,
 	expected: string,
 ) {
-	await piu.waitForFrame((f) => focusedPanels(f).join() === expected);
+	await piu.waitForFrame((f) => focusedPanels(piu, f).join() === expected);
 }
 
 async function clickAndStay(
@@ -22,7 +18,7 @@ async function clickAndStay(
 ) {
 	await piu.mockMouse.click(x, y);
 	await piu.renderOnce();
-	expect(focusedPanels(piu.captureCharFrame())).toEqual(["input"]);
+	expect(focusedPanels(piu, piu.captureCharFrame())).toEqual(["input"]);
 }
 
 const extensions = join(import.meta.dir, "fixtures/extensions");
@@ -99,7 +95,7 @@ test("clicking inside a Panel leaves the focus in the input, and typing lands th
 	await piu.mockInput.typeText("abc");
 
 	const frame = await piu.waitForFrame((f) => inputArea(f).includes("abc"));
-	expect(focusedPanels(frame)).toEqual(["input"]);
+	expect(focusedPanels(piu, frame)).toEqual(["input"]);
 });
 
 test("clicking the status Panel leaves the focus in the input", async () => {
@@ -133,7 +129,7 @@ test("clicking the model Module still opens its picker, and the focus is back in
 	await piu.mockInput.typeText("abc");
 
 	const frame = await piu.waitForFrame((f) => inputArea(f).includes("abc"));
-	expect(focusedPanels(frame)).toEqual(["input"]);
+	expect(focusedPanels(piu, frame)).toEqual(["input"]);
 });
 
 test("clicking a tool card still expands it and leaves the focus in the input", async () => {
@@ -158,7 +154,7 @@ test("clicking a tool card still expands it and leaves the focus in the input", 
 	await piu.mockInput.typeText("abc");
 
 	const frame = await piu.waitForFrame((f) => inputArea(f).includes("abc"));
-	expect(focusedPanels(frame)).toEqual(["input"]);
+	expect(focusedPanels(piu, frame)).toEqual(["input"]);
 });
 
 test("clicking a Thinking label still opens it and leaves the focus in the input", async () => {
@@ -177,7 +173,7 @@ test("clicking a Thinking label still opens it and leaves the focus in the input
 	await piu.mockInput.typeText("abc");
 
 	const frame = await piu.waitForFrame((f) => inputArea(f).includes("abc"));
-	expect(focusedPanels(frame)).toEqual(["input"]);
+	expect(focusedPanels(piu, frame)).toEqual(["input"]);
 });
 
 test("with the focus moved to a Panel without a text field, a printable key goes to the input", async () => {
@@ -191,7 +187,7 @@ test("with the focus moved to a Panel without a text field, a printable key goes
 	const frame = await piu.waitForFrame((f) =>
 		inputArea(f).includes("hi there"),
 	);
-	expect(focusedPanels(frame)).toEqual(["input"]);
+	expect(focusedPanels(piu, frame)).toEqual(["input"]);
 });
 
 test("Esc aborts a run whichever Panel has the focus", async () => {

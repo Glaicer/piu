@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { panelText, startPiu } from "./harness.ts";
+import { panelText, startPiu, statusArea } from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -11,8 +11,7 @@ async function send(piu: Piu, text: string) {
 }
 
 const agentPanel = (frame: string) => panelText(frame, 10, 0);
-const statusPanel = (frame: string) =>
-	panelText(frame, 10, frame.trimEnd().split("\n").length - 1 - 1);
+const statusPanel = statusArea;
 
 test("a refused model switch shows Pi's error in a Toast and keeps the shown model", async () => {
 	await using piu = await startPiu({

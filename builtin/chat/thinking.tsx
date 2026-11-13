@@ -13,9 +13,9 @@ export function Thinking(props: {
 	const label = selectable(props.selection, reveal.toggle);
 	const body = () => reveal.visible(props.text);
 	return (
-		<box flexDirection="column">
+		<box flexDirection="column" paddingX={1} marginTop={1}>
 			<box ref={label.ref} alignSelf="flex-start" onMouseDown={label.activate}>
-				<text fg={props.theme.muted}>
+				<text fg={props.theme.secondary}>
 					{`${label.selected() ? "› " : ""}${reveal.open() ? "▾" : "▸"} Thinking`}
 				</text>
 			</box>
