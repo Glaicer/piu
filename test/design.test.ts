@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
-import { inputArea, panelText, startPiu } from "./harness.ts";
+import {
+	glyphs,
+	inputArea,
+	messageBar,
+	modalTitle,
+	panelText,
+	startPiu,
+} from "./harness.ts";
 
 test("the default side Panel is empty while the chat shows its welcome", async () => {
 	await using piu = await startPiu({ script: { replies: [] } });
@@ -54,7 +61,7 @@ test("user messages have no added prompt marker and preserve a typed greater-tha
 			.split("\n")
 			.find((line) => line.includes("A plain prompt"))
 			?.trim(),
-	).toBe("│ A plain prompt");
+	).toBe(messageBar("A plain prompt"));
 
 	await piu.mockInput.typeText("> A deliberate quote");
 	piu.mockInput.pressEnter();
@@ -66,7 +73,7 @@ test("user messages have no added prompt marker and preserve a typed greater-tha
 			.split("\n")
 			.find((line) => line.includes("A deliberate quote"))
 			?.trim(),
-	).toBe("│ > A deliberate quote");
+	).toBe(messageBar("> A deliberate quote"));
 });
 
 test("a compact tool row keeps its status visible next to a long command on a narrow terminal", async () => {
@@ -94,8 +101,8 @@ test("a compact tool row keeps its status visible next to a long command on a na
 	const rows = panelText(frame, 10).split("\n");
 	const row = rows.findIndex((line) => line.includes("▸ bash"));
 	expect(rows[row]).toMatch(/done\s+\d+(\.\d+)?m?s/);
-	expect(rows[row - 1]).not.toContain("┌");
-	expect(rows[row + 1]).not.toContain("└");
+	expect(rows[row - 1]).not.toContain(glyphs.topLeft);
+	expect(rows[row + 1]).not.toContain(glyphs.bottomLeft);
 });
 
 test("the model picker has a named rounded frame and a visible dismissal hint", async () => {
@@ -103,7 +110,7 @@ test("the model picker has a named rounded frame and a visible dismissal hint", 
 	await piu.waitForFrame((frame) => frame.includes("faux-1"));
 	piu.mockInput.pressKey("l", { ctrl: true });
 	const frame = await piu.waitForFrame((frame) => frame.includes("faux-2"));
-	expect(frame).toContain("╭─ Models ");
+	expect(frame).toContain(modalTitle("Models"));
 	expect(frame).toContain("Esc close");
 	const corner = piu
 		.captureSpans()

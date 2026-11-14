@@ -78,6 +78,39 @@ function cells(text: string, start: number, end: number) {
 	return result;
 }
 
+// why: tests find Panels, Modals and message bars by the glyphs that draw them, so a restyle changes this table and nothing else.
+export const glyphs = {
+	topLeft: "┌",
+	topRight: "┐",
+	bottomLeft: "└",
+	top: "─",
+	left: "│",
+	right: "│",
+	bar: "│",
+};
+
+const modalCorners = { topLeft: "╭", topRight: "╮" };
+
+export const besidePanels = `${glyphs.topRight}${glyphs.topLeft}`;
+
+const titlePrefix = `${glyphs.topLeft}${glyphs.top} `;
+
+export function panelTitle(name: string) {
+	return `${titlePrefix}${name} `;
+}
+
+export function modalTitle(name: string) {
+	return `${modalCorners.topLeft}${glyphs.top} ${name} `;
+}
+
+export function modalTopEdge(width: number) {
+	return `${modalCorners.topLeft}${glyphs.top.repeat(width - 2)}${modalCorners.topRight}`;
+}
+
+export function messageBar(text: string) {
+	return `${glyphs.bar} ${text}`;
+}
+
 export function panelText(frame: string, column: number, row = 0) {
 	const rows = frame.split("\n");
 	let top = row;
@@ -99,7 +132,9 @@ export function panelText(frame: string, column: number, row = 0) {
 
 // why: the chat repeats every prompt, so history is asserted on the last Panel in the main column, not the whole frame.
 export function inputTop(frame: string) {
-	return frame.split("\n").findLastIndex((line) => line.startsWith("┌"));
+	return frame
+		.split("\n")
+		.findLastIndex((line) => line.startsWith(glyphs.topLeft));
 }
 
 export function inputArea(frame: string) {
@@ -114,9 +149,11 @@ export function focusedPanels(
 	piu: Awaited<ReturnType<typeof startPiu>>,
 	frame: string,
 ) {
-	const named = [...frame.matchAll(/┌─ ([\w-]+) /g)].map((match) => match[1]);
+	const named = [
+		...frame.matchAll(new RegExp(`${titlePrefix}([\\w-]+) `, "g")),
+	].map((match) => match[1]);
 	const top = inputTop(frame);
-	const width = (frame.split("\n")[top] ?? "").indexOf("┐") + 1;
+	const width = (frame.split("\n")[top] ?? "").indexOf(glyphs.topRight) + 1;
 	for (
 		let node = piu.renderer.currentFocusedRenderable;
 		node;

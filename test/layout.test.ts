@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { startPiu } from "./harness.ts";
+import { besidePanels, glyphs, startPiu } from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
 const extensions = join(import.meta.dir, "fixtures/extensions");
@@ -11,7 +11,9 @@ function panel(id: string, size: unknown, extra: object = {}) {
 }
 
 function cornerColumns(line: string) {
-	return [...line].flatMap((char, index) => (char === "┌" ? [index] : []));
+	return [...line].flatMap((char, index) =>
+		char === glyphs.topLeft ? [index] : [],
+	);
 }
 
 function topBorder(frame: string) {
@@ -25,7 +27,9 @@ function lineOf(frame: string, text: string) {
 function cornerRows(frame: string, column: number) {
 	return frame
 		.split("\n")
-		.flatMap((line, index) => ([...line][column] === "┌" ? [index] : []));
+		.flatMap((line, index) =>
+			[...line][column] === glyphs.topLeft ? [index] : [],
+		);
 }
 
 test("fixed, percentage, rest and minSize sizes divide the screen as written", async () => {
@@ -78,15 +82,15 @@ test("fixed, percentage, rest and minSize sizes divide the screen as written", a
 test("the default second column is absent below 120 columns and returns on resize", async () => {
 	await using piu = await startPiu({ script: none, width: 119 });
 
-	const narrow = await piu.waitForFrame((f) => f.includes("┌"));
-	expect(topBorder(narrow)).not.toContain("┐┌");
+	const narrow = await piu.waitForFrame((f) => f.includes(glyphs.topLeft));
+	expect(topBorder(narrow)).not.toContain(besidePanels);
 	expect(topBorder(narrow).trimEnd()).toHaveLength(119);
 
 	piu.resize(120, 30);
-	await piu.waitForFrame((f) => topBorder(f).includes("┐┌"));
+	await piu.waitForFrame((f) => topBorder(f).includes(besidePanels));
 
 	piu.resize(119, 30);
-	await piu.waitForFrame((f) => !topBorder(f).includes("┐┌"));
+	await piu.waitForFrame((f) => !topBorder(f).includes(besidePanels));
 });
 
 test("a row Panel shows its Modules side by side", async () => {

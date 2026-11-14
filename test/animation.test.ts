@@ -1,7 +1,12 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { ManualClock } from "@opentui/core/testing";
-import { type FauxScript, focusedPanels, startPiu } from "./harness.ts";
+import {
+	type FauxScript,
+	focusedPanels,
+	modalTopEdge,
+	startPiu,
+} from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
 const none: FauxScript = { replies: [] };
@@ -137,7 +142,7 @@ for (const animations of [true, false]) {
 			top: 2,
 		});
 		expect(close).toBeFunction();
-		const border = `╭${"─".repeat(18)}╮`;
+		const border = modalTopEdge(20);
 		expect((await app.frame()).split("\n")[2]?.slice(4, 24)).toBe(border);
 		close?.();
 		const closed = await app.frame();
@@ -163,7 +168,7 @@ for (const animations of [true, false]) {
 		expect(stacked).toContain("INNER");
 		expect(rowOf(stacked, "INNER")).toBe(3);
 		expect(columnOf(stacked, "INNER")).toBe(5);
-		expect(stacked.split("\n")[2]?.slice(4, 24)).toBe(`╭${"─".repeat(18)}╮`);
+		expect(stacked.split("\n")[2]?.slice(4, 24)).toBe(modalTopEdge(20));
 		app.piu.mockInput.pressEscape();
 		const frame = await app.frame();
 		expect(frame).not.toContain("INNER");

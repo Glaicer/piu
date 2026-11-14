@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { inputArea, panelText, startPiu } from "./harness.ts";
+import { inputArea, messageBar, panelText, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -180,7 +180,7 @@ test("/resume lists the saved sessions, and picking one shows its conversation",
 			!agentPanel(f).includes("Beta") &&
 			!f.includes(" messages"),
 	);
-	expect(agentPanel(switched)).toContain("│ Alpha question");
+	expect(agentPanel(switched)).toContain(messageBar("Alpha question"));
 });
 
 test("/tree shows a branched session, and picking an earlier prompt forks from it and puts that prompt back in the input", async () => {
@@ -215,7 +215,7 @@ test("/tree shows a branched session, and picking an earlier prompt forks from i
 			!agentPanel(f).includes("Left") &&
 			inputArea(f).includes("Right prompt"),
 	);
-	expect(agentPanel(forked)).toContain("│ Trunk prompt");
+	expect(agentPanel(forked)).toContain(messageBar("Trunk prompt"));
 	expect(agentPanel(forked)).toContain("Trunk reply");
 });
 

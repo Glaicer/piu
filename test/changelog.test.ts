@@ -13,7 +13,7 @@ import {
 	type Family,
 	fakeInstall,
 } from "./backend-install.ts";
-import { startPiu } from "./harness.ts";
+import { messageBar, startPiu } from "./harness.ts";
 import {
 	json,
 	piBoltLatestUrl,
@@ -192,7 +192,9 @@ test("a continued session opens the Modal too, and shows its conversation behind
 
 		await piu.waitForFrame((f) => f.includes("Newest fix"));
 		piu.mockInput.pressEscape();
-		const frame = await piu.waitForFrame((f) => f.includes("│ Remember me"));
+		const frame = await piu.waitForFrame((f) =>
+			f.includes(messageBar("Remember me")),
+		);
 		expect(frame).not.toContain("Newest fix");
 	} finally {
 		env.cleanup();

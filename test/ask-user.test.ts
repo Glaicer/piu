@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { focusedPanels, inputArea, panelText, startPiu } from "./harness.ts";
+import {
+	focusedPanels,
+	glyphs,
+	inputArea,
+	panelText,
+	panelTitle,
+	startPiu,
+} from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -126,7 +133,7 @@ test("Tab takes the focus away from the question card and a full cycle brings th
 	await piu.waitForFrame(showsCard);
 
 	piu.mockInput.pressTab();
-	await piu.waitForFrame((f) => /┌─ agent /.test(f));
+	await piu.waitForFrame((f) => f.includes(panelTitle("agent")));
 	piu.mockInput.pressArrow("down");
 	piu.mockInput.pressTab();
 	await piu.waitForFrame((f) => focusedPanels(piu, f).includes("input"));
@@ -547,7 +554,7 @@ test("clicking Dismiss gives the model a declined result", async () => {
 const cornerRows = (frame: string) =>
 	frame
 		.split("\n")
-		.flatMap((line, index) => (line.startsWith("┌") ? [index] : []));
+		.flatMap((line, index) => (line.startsWith(glyphs.topLeft) ? [index] : []));
 
 test("the input Panel fits the card and restores the editor and directory after", async () => {
 	await using piu = await startPiu({

@@ -2,7 +2,13 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { RGBA, TextareaRenderable } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
-import { inputArea, panelText, startPiu } from "./harness.ts";
+import {
+	inputArea,
+	inputTop,
+	panelText,
+	panelTitle,
+	startPiu,
+} from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -40,13 +46,13 @@ test("the default editor has four rows, no input title, and the canvas backgroun
 		(frame) => frame.includes("Unfilled composer") && frame.includes("faux-1"),
 	);
 	expect(editor(piu).height).toBe(4);
-	expect(frame).not.toContain("─ input ");
+	expect(frame).not.toContain(panelTitle("input"));
 	const span = piu
 		.captureSpans()
 		.lines.flatMap((line) => line.spans)
 		.find((span) => span.text.includes("Unfilled composer"));
 	expect(span?.bg.equals(RGBA.fromHex(darkTheme.background))).toBe(true);
-	const top = frame.split("\n").findLastIndex((line) => line.startsWith("┌"));
+	const top = inputTop(frame);
 	expect(
 		piu
 			.captureSpans()

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { panelText, startPiu } from "./harness.ts";
+import { glyphs, panelText, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -69,6 +69,10 @@ test("clicking the reasoning suffix opens the reasoning picker", async () => {
 		frame.split("\n").indexOf(line),
 	);
 	await piu.waitForFrame((f) =>
-		f.split("\n").some((text) => /│ off\s+│/.test(text)),
+		f
+			.split("\n")
+			.some((text) =>
+				new RegExp(`${glyphs.left}\\s+off\\s+${glyphs.right}`).test(text),
+			),
 	);
 });

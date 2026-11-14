@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { panelText, startPiu } from "./harness.ts";
+import { panelText, panelTitle, startPiu } from "./harness.ts";
 import { subagentsControl } from "./subagents-control.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -137,7 +137,7 @@ test("a card can be selected and opened by keyboard, and Esc closes the view wit
 	control.say("max", "Reading the sources");
 
 	piu.mockInput.pressTab({ shift: true });
-	await piu.waitForFrame((f) => /┌─ agent /.test(f));
+	await piu.waitForFrame((f) => f.includes(panelTitle("agent")));
 	piu.mockInput.pressArrow("down");
 	await piu.waitForFrame((f) => f.includes("› ▸ agent_spawn"));
 	piu.mockInput.pressArrow("down");

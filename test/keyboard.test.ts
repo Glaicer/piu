@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { focusedPanels, inputArea, panelText, startPiu } from "./harness.ts";
+import {
+	focusedPanels,
+	inputArea,
+	messageBar,
+	panelText,
+	panelTitle,
+	startPiu,
+} from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -10,7 +17,7 @@ async function send(piu: Piu, text: string) {
 
 async function focusAgent(piu: Piu) {
 	piu.mockInput.pressTab({ shift: true });
-	await piu.waitForFrame((f) => /┌─ agent /.test(f));
+	await piu.waitForFrame((f) => f.includes(panelTitle("agent")));
 }
 
 test("with the agent Panel focused the arrow keys scroll it", async () => {
@@ -30,7 +37,7 @@ test("with the agent Panel focused the arrow keys scroll it", async () => {
 	const top = await piu.waitForFrame((f) =>
 		panelText(f, 10)
 			.split("\n")
-			.some((line) => line.trimStart().startsWith("│ Go ")),
+			.some((line) => line.trimStart().startsWith(messageBar("Go "))),
 	);
 	expect(top).not.toContain("Row 30");
 });

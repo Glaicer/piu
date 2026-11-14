@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { blocker } from "./blocker.ts";
-import { inputArea, inputTop, panelText, startPiu } from "./harness.ts";
+import {
+	inputArea,
+	inputTop,
+	messageBar,
+	panelText,
+	startPiu,
+} from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 type Script = Parameters<typeof startPiu>[0]["script"];
@@ -197,7 +203,7 @@ test("a new user message and its reply do not push the pinned job out", async ()
 
 	const frame = await piu.waitForFrame((f) => f.includes("Second answer"));
 	expect(pinnedRows(frame, "iota")).toHaveLength(1);
-	expect(agentPanel(frame)).toContain("│ Next question");
+	expect(agentPanel(frame)).toContain(messageBar("Next question"));
 });
 
 function numbered(count: number) {

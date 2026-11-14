@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type FauxScript, inputArea, startPiu } from "./harness.ts";
+import { type FauxScript, inputArea, messageBar, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -701,7 +701,7 @@ test("a resumed session keeps its model and reasoning without changing the perso
 			await piu.mockInput.typeText("first");
 			piu.mockInput.pressEnter();
 			await piu.waitForFrame(
-				(f) => f.includes("│ first") && f.includes("first"),
+				(f) => f.includes(messageBar("first")) && f.includes("first"),
 			);
 		}
 		writeFileSync(file, saved);

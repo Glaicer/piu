@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { startPiu } from "./harness.ts";
+import { besidePanels, glyphs, messageBar, startPiu } from "./harness.ts";
 
 test("Enter sends the prompt and the agent Panel shows it with the full reply", async () => {
 	await using piu = await startPiu({
@@ -12,7 +12,7 @@ test("Enter sends the prompt and the agent Panel shows it with the full reply", 
 	const frame = await piu.waitForFrame((f) =>
 		f.includes("Hello from the faux model"),
 	);
-	expect(frame).toContain("│ Say hello");
+	expect(frame).toContain(messageBar("Say hello"));
 });
 
 test("the reply grows across frames while it streams", async () => {
@@ -26,7 +26,9 @@ test("the reply grows across frames while it streams", async () => {
 
 	const seen = new Set<string>();
 	await piu.waitForFrame((frame) => {
-		const line = frame.split("\n").find((l) => /│\s+one/.test(l));
+		const line = frame
+			.split("\n")
+			.find((l) => new RegExp(`${glyphs.left}\\s+one`).test(l));
 		if (line) seen.add(line);
 		return frame.includes(reply);
 	});
@@ -48,9 +50,9 @@ test("arguments after piu reach the Backend", async () => {
 test("a wide terminal splits into a 66% first column and a 33% second column", async () => {
 	await using piu = await startPiu({ script: { replies: [] }, width: 150 });
 
-	const frame = await piu.waitForFrame((f) => f.includes("┐┌"));
+	const frame = await piu.waitForFrame((f) => f.includes(besidePanels));
 	const topBorder = frame.split("\n")[0] ?? "";
-	const secondColumnStart = topBorder.indexOf("┐┌") + 1;
+	const secondColumnStart = topBorder.indexOf(besidePanels) + 1;
 	const secondColumnWidth = topBorder.trimEnd().length - secondColumnStart;
 
 	expect(Math.abs(secondColumnStart - 99)).toBeLessThanOrEqual(2);
