@@ -390,6 +390,7 @@ function Prompt(props: { context: ModuleContext }) {
 						padding={1}
 						renderBefore={paintCard(() => ({
 							fill: props.context.theme.raised,
+							edge: props.context.theme.border,
 						}))}
 					>
 						<For each={shown()}>

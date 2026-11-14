@@ -81,13 +81,13 @@ function cells(text: string, start: number, end: number) {
 
 // why: tests find Panels, Modals and message bars by the glyphs that draw them, so a restyle changes this table and nothing else.
 export const glyphs = {
-	topLeft: "▗",
-	topRight: "▖",
-	bottomLeft: "▝",
-	top: "▄",
-	left: "▐",
-	right: "▌",
-	bar: "▎",
+	topLeft: "┌",
+	topRight: "┐",
+	bottomLeft: "└",
+	top: "─",
+	left: "│",
+	right: "│",
+	bar: "│",
 };
 
 // why: a Panel's left edge is followed by one blank column before its content.

@@ -3,7 +3,7 @@ import { useRenderer } from "@opentui/solid";
 import { createMemo, For, Index, onCleanup, Show } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
 import type { BackgroundJob } from "../../src/background.ts";
-import { barChars } from "../../src/card.ts";
+import { paintCard } from "../../src/card.ts";
 import { moduleModal } from "../../src/modal.tsx";
 import type { Extension, ModuleContext } from "../../src/module.ts";
 import type {
@@ -96,15 +96,15 @@ function Messages(props: { context: ModuleContext }) {
 						) : (
 							message.role === "user" && (
 								<box
-									border={["left"]}
-									customBorderChars={barChars}
-									borderColor={theme.accent}
-									backgroundColor={theme.raised}
-									paddingX={1}
+									renderBefore={paintCard(() => ({
+										fill: theme.surface,
+										edge: theme.accent,
+									}))}
+									paddingX={2}
 									paddingY={1}
 									marginTop={1}
 								>
-									<text fg={theme.accent}>{messageText(message)}</text>
+									<text fg={theme.text}>{messageText(message)}</text>
 								</box>
 							)
 						)}

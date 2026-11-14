@@ -60,7 +60,9 @@ test("user messages have no added prompt marker and preserve a typed greater-tha
 		panelText(first, 10)
 			.split("\n")
 			.find((line) => line.includes("A plain prompt"))
-			?.trim(),
+			?.trim()
+			.slice(0, -1)
+			.trimEnd(),
 	).toBe(messageBar("A plain prompt"));
 
 	await piu.mockInput.typeText("> A deliberate quote");
@@ -72,7 +74,9 @@ test("user messages have no added prompt marker and preserve a typed greater-tha
 		panelText(second, 10)
 			.split("\n")
 			.find((line) => line.includes("A deliberate quote"))
-			?.trim(),
+			?.trim()
+			.slice(0, -1)
+			.trimEnd(),
 	).toBe(messageBar("> A deliberate quote"));
 });
 

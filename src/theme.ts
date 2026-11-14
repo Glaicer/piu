@@ -28,33 +28,33 @@ export type Theme = Readonly<Record<ThemeToken, string>>;
 export type ThemeOverrides = Readonly<Partial<Record<ThemeToken, string>>>;
 
 export const darkTheme: Theme = {
-	text: "#eee9e7",
-	muted: "#a09aa8",
-	accent: "#f2b8a0",
+	text: "#e5e9f5",
+	muted: "#a3aec6",
+	accent: "#a9bfff",
 	success: "#a3c9a8",
 	warning: "#e4c18c",
 	error: "#ee969f",
-	surface: "#1b1a21",
-	raised: "#27252f",
-	background: "#111115",
-	selection: "#35303f",
-	secondary: "#b8a5df",
-	border: "#35333e",
+	surface: "#1c202b",
+	raised: "#252b39",
+	background: "#171a22",
+	selection: "#29334c",
+	secondary: "#a9bfff",
+	border: "#46516b",
 };
 
 export const lightTheme: Theme = {
-	text: "#302c35",
-	muted: "#6f6577",
-	accent: "#9d4b32",
+	text: "#242936",
+	muted: "#666d7d",
+	accent: "#3257b7",
 	success: "#3f704b",
 	warning: "#895d1c",
 	error: "#af3d51",
-	surface: "#eee9e7",
+	surface: "#fbfafc",
 	raised: "#ffffff",
-	background: "#faf7f5",
-	selection: "#e0d6e8",
-	secondary: "#75539e",
-	border: "#d0c6d2",
+	background: "#eeedf0",
+	selection: "#e8edf9",
+	secondary: "#3257b7",
+	border: "#c7cbd5",
 };
 
 const builtIn: Readonly<Record<ThemeMode, Theme>> = {

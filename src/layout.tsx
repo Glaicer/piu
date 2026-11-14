@@ -42,7 +42,7 @@ type SlotProps = {
 	context: SharedContext;
 };
 
-// why: the Card's edge takes one cell on every side, and a blank column after the left edge keeps text off the focus bar; a Modal floats, so it gets a row and a column more of air on each side.
+// why: the frame takes one cell on every side, and a blank column keeps text off its left edge; a Modal floats, so it gets a row and a column more of air on each side.
 const panelFrame = { padding: 1, paddingLeft: 2 };
 const modalFrame = {
 	paddingTop: 2,
@@ -144,7 +144,7 @@ export function SlotView(props: SlotProps) {
 		...(props.modal ? modalFrame : panelFrame),
 		renderBefore: paintCard(() => ({
 			fill: fill(),
-			edge: focused() ? shared.theme.accent : undefined,
+			edge: focused() ? shared.theme.accent : shared.theme.border,
 			title: title(),
 			titleColor: props.modal ? shared.theme.text : shared.theme.accent,
 		})),

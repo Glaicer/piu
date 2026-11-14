@@ -1,7 +1,6 @@
 import { createMemo } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
 import type { BackgroundJob } from "../../src/background.ts";
-import { barChars } from "../../src/card.ts";
 import type { PiMessage } from "../../src/pi-state.ts";
 import type { Theme } from "../../src/theme.ts";
 import { createReveal } from "./reveal.ts";
@@ -83,7 +82,7 @@ export function ToolCard(props: {
 	const color = () => {
 		const current = status();
 		if (current === "error" || current === "failed") return props.theme.error;
-		if (current === "done") return props.theme.success;
+		if (current === "done") return props.theme.muted;
 		return current === "running" || current === "killed"
 			? props.theme.warning
 			: props.theme.muted;
@@ -99,8 +98,7 @@ export function ToolCard(props: {
 		return id === undefined ? status() : `${id} ${status()}`;
 	};
 	const header = () => {
-		const call = props.call();
-		return `${row.selected() ? "› " : ""}${reveal.open() ? "▾" : "▸"} ${call?.name ?? ""}`;
+		return `${row.selected() ? "› " : ""}${reveal.open() ? "▾" : "▸"}`;
 	};
 	const argument = () => {
 		const call = props.call();
@@ -116,18 +114,17 @@ export function ToolCard(props: {
 	return (
 		<box
 			flexDirection="column"
-			border={["left"]}
-			customBorderChars={barChars}
-			borderColor={row.selected() ? props.theme.accent : props.theme.border}
-			backgroundColor={
-				row.selected() ? props.theme.selection : props.theme.raised
-			}
-			paddingX={1}
+			backgroundColor={row.selected() ? props.theme.selection : undefined}
+			paddingLeft={2}
+			paddingRight={1}
 			marginTop={1}
 		>
 			<box ref={row.ref} flexDirection="row" onMouseDown={row.activate}>
-				<text fg={props.theme.secondary} flexShrink={0}>
+				<text fg={props.theme.accent} flexShrink={0}>
 					{header()}
+				</text>
+				<text fg={props.theme.surface} bg={props.theme.text} flexShrink={0}>
+					{` ${props.call()?.name ?? ""} `}
 				</text>
 				<text
 					fg={props.theme.muted}

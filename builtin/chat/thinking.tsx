@@ -15,7 +15,7 @@ export function Thinking(props: {
 	return (
 		<box flexDirection="column" paddingX={1} marginTop={1}>
 			<box ref={label.ref} alignSelf="flex-start" onMouseDown={label.activate}>
-				<text fg={props.theme.secondary}>
+				<text fg={props.theme.muted}>
 					{`${label.selected() ? "› " : ""}${reveal.open() ? "▾" : "▸"} Thinking`}
 				</text>
 			</box>

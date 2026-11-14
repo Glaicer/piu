@@ -25,8 +25,8 @@ test("a terminal reporting a dark background gets the dark tokens", async () => 
 
 	const span = await userEcho(piu);
 
-	expect(span?.fg.equals(RGBA.fromHex(darkTheme.accent))).toBe(true);
-	expect(span?.bg.equals(RGBA.fromHex(darkTheme.raised))).toBe(true);
+	expect(span?.fg.equals(RGBA.fromHex(darkTheme.text))).toBe(true);
+	expect(span?.bg.equals(RGBA.fromHex(darkTheme.surface))).toBe(true);
 });
 
 test("a terminal reporting a light background gets the light tokens", async () => {
@@ -37,8 +37,8 @@ test("a terminal reporting a light background gets the light tokens", async () =
 
 	const span = await userEcho(piu);
 
-	expect(span?.fg.equals(RGBA.fromHex(lightTheme.accent))).toBe(true);
-	expect(span?.bg.equals(RGBA.fromHex(lightTheme.raised))).toBe(true);
+	expect(span?.fg.equals(RGBA.fromHex(lightTheme.text))).toBe(true);
+	expect(span?.bg.equals(RGBA.fromHex(lightTheme.surface))).toBe(true);
 });
 
 test("a terminal that changes its background mid-session switches the tokens", async () => {
@@ -56,7 +56,7 @@ test("a terminal that changes its background mid-session switches the tokens", a
 			.some(
 				(span) =>
 					span.text.trim() === "Hi" &&
-					span.fg.equals(RGBA.fromHex(lightTheme.accent)),
+					span.fg.equals(RGBA.fromHex(lightTheme.text)),
 			),
 	);
 });
@@ -66,7 +66,7 @@ test("a terminal that reports nothing gets the dark tokens", async () => {
 
 	const span = await userEcho(piu);
 
-	expect(span?.fg.equals(RGBA.fromHex(darkTheme.accent))).toBe(true);
+	expect(span?.fg.equals(RGBA.fromHex(darkTheme.text))).toBe(true);
 });
 
 for (const mode of ["dark", "light"] as const) {
@@ -77,9 +77,14 @@ for (const mode of ["dark", "light"] as const) {
 			config: { theme: { accent: "#ff00ff" } },
 		});
 
-		const span = await userEcho(piu);
-
-		expect(span?.fg.equals(RGBA.fromHex("#ff00ff"))).toBe(true);
+		await userEcho(piu);
+		expect(
+			piu
+				.captureSpans()
+				.lines.some((line) =>
+					line.spans.some((span) => span.fg.equals(RGBA.fromHex("#ff00ff"))),
+				),
+		).toBe(true);
 	});
 }
 
@@ -92,7 +97,7 @@ test("an override leaves the other tokens of the active theme alone", async () =
 
 	const span = await userEcho(piu);
 
-	expect(span?.bg.equals(RGBA.fromHex(lightTheme.raised))).toBe(true);
+	expect(span?.bg.equals(RGBA.fromHex(lightTheme.surface))).toBe(true);
 });
 
 test("a code keyword is drawn in the accent of the theme the terminal asked for", async () => {
