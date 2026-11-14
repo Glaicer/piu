@@ -1,5 +1,6 @@
 import type { BoxRenderable, InputRenderable, KeyEvent } from "@opentui/core";
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { modalFrameRows } from "../../src/layout.tsx";
 import { moduleModal } from "../../src/modal.tsx";
 import { sameModel } from "../../src/model.ts";
 import type { CommandContext, Extension } from "../../src/module.ts";
@@ -94,12 +95,13 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 		queueMicrotask(() => scrollIntoView(model && rows.get(model)));
 	});
 	return (
-		<box flexDirection="column" height={18} paddingX={1}>
+		<box flexDirection="column" height={18}>
 			<box flexDirection="row" marginBottom={1} flexShrink={0}>
 				<For each={["Favorites", "All"] as const}>
 					{(name) => (
 						<box
 							backgroundColor={name === tab() ? theme.selection : undefined}
+							marginRight={1}
 							onMouseDown={(event) => {
 								event.preventDefault();
 								changeTab(name);
@@ -107,7 +109,7 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 						>
 							<text
 								fg={name === tab() ? theme.accent : theme.muted}
-							>{` [${name}] `}</text>
+							>{` ${name} `}</text>
 						</box>
 					)}
 				</For>
@@ -203,14 +205,11 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 									>{`  ${model.provider}`}</text>
 								</box>
 								{model.name !== model.id && (
-									<text
-										fg={theme.muted}
-										paddingLeft={3}
-										wrapMode="none"
-										truncate
-									>
-										{model.name}
-									</text>
+									<box paddingLeft={3}>
+										<text fg={theme.muted} wrapMode="none" truncate>
+											{model.name}
+										</text>
+									</box>
 								)}
 							</box>
 						)}
@@ -239,7 +238,7 @@ function openModelPicker(context: CommandContext) {
 				title: "Models",
 				render: () => <ModelPicker context={context} close={() => close()} />,
 			},
-			{ width: 60, height: 20 },
+			{ width: 60, height: 18 + modalFrameRows },
 		),
 	);
 }

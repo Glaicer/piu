@@ -14,6 +14,7 @@ import {
 	startUpdateCheck,
 	type UpdateCheckOptions,
 } from "./backend-updates.ts";
+import { paintCard } from "./card.ts";
 import { changelogModal } from "./changelog.tsx";
 import { type Config, loadConfig } from "./config.ts";
 import { useCopyOnSelect } from "./copy-on-select.ts";
@@ -335,9 +336,12 @@ function App(props: {
 					right={2}
 					bottom={2}
 					width={60}
-					border
-					backgroundColor={theme.surface}
-					borderColor={theme.accent}
+					padding={1}
+					paddingX={2}
+					renderBefore={paintCard(() => ({
+						fill: theme.raised,
+						edge: theme.accent,
+					}))}
 					zIndex={201}
 				>
 					<text fg={theme.text}>{updateProgress()}</text>

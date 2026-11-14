@@ -15,6 +15,7 @@ import {
 	onCleanup,
 	Show,
 } from "solid-js";
+import { paintCard } from "../../src/card.ts";
 import { matches } from "../../src/keybindings.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
 import { type Entry, findTrigger, narrow } from "./autocomplete.ts";
@@ -377,15 +378,19 @@ function Prompt(props: { context: ModuleContext }) {
 						Object.assign(container, { position: "absolute", left: 0, top: 0 });
 					}}
 				>
+					{/* why: the list spans the input Panel's frame (two cells left of the field, scrollbar and edge right of it) and ends above the Panel's top edge. */}
 					<box
 						position="absolute"
-						left={anchor().left}
-						top={Math.max(0, anchor().top - shown().length)}
-						width={anchor().width}
-						height={shown().length}
+						left={anchor().left - 2}
+						top={Math.max(0, anchor().top - shown().length - 3)}
+						width={anchor().width + 4}
+						height={shown().length + 2}
 						zIndex={50}
 						flexDirection="column"
-						backgroundColor={props.context.theme.surface}
+						padding={1}
+						renderBefore={paintCard(() => ({
+							fill: props.context.theme.raised,
+						}))}
 					>
 						<For each={shown()}>
 							{(entry, at) => (

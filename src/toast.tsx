@@ -1,5 +1,6 @@
 import type { Clock } from "@opentui/core";
 import { createSignal, For } from "solid-js";
+import { paintCard } from "./card.ts";
 import type { Theme } from "./theme.ts";
 
 export type ToastKind = "info" | "warning" | "error";
@@ -54,11 +55,12 @@ export function ToastLayer(props: { toasts: Toasts; theme: Theme }) {
 			<For each={props.toasts.toasts()}>
 				{(toast) => (
 					<box
-						border
-						borderStyle="rounded"
-						paddingX={1}
-						borderColor={color(toast.kind)}
-						backgroundColor={props.theme.surface}
+						padding={1}
+						paddingX={2}
+						renderBefore={paintCard(() => ({
+							fill: props.theme.raised,
+							edge: color(toast.kind),
+						}))}
 					>
 						<text fg={props.theme.text}>{toast.message}</text>
 					</box>

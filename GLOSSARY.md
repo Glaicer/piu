@@ -39,7 +39,7 @@ A self-contained piece of interface that lives in a Panel and reads Pi's state o
 _Avoid_: Widget (that is Pi's word for an extension's text lines), plugin, component
 
 **Footer**:
-A Module pinned to the bottom of its Panel: it shares the Panel border but stays outside the scrolling content.
+A Module pinned to the bottom of its Panel: it shares the Panel's frame but stays outside the scrolling content.
 _Avoid_: Status bar, bottom bar
 
 **Extension**:

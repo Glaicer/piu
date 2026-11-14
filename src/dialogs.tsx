@@ -1,5 +1,6 @@
 import type { KeyEvent, TextareaRenderable } from "@opentui/core";
 import { createEffect, createSignal, untrack } from "solid-js";
+import { modalFrameColumns, modalFrameRows } from "./layout.tsx";
 import { type ModalRequest, type Modals, moduleModal } from "./modal.tsx";
 import type { ModuleContext } from "./module.ts";
 import type { Dialog, DialogAnswer, PiActions, PiState } from "./pi-state.ts";
@@ -8,7 +9,6 @@ import { Picker } from "./picker.tsx";
 type ModalDialog = Exclude<Dialog, { method: "channel" }>;
 
 const WIDTH = 60;
-const BORDER_ROWS = 2;
 const MAX_VISIBLE_OPTIONS = 12;
 const EDITOR_ROWS = 10;
 
@@ -20,7 +20,9 @@ function lineCount(text: string) {
 	return text
 		.split("\n")
 		.reduce(
-			(rows, line) => rows + Math.max(1, Math.ceil(line.length / (WIDTH - 2))),
+			(rows, line) =>
+				rows +
+				Math.max(1, Math.ceil(line.length / (WIDTH - modalFrameColumns))),
 			0,
 		);
 }
@@ -100,14 +102,14 @@ function height(dialog: ModalDialog) {
 			return (
 				title +
 				Math.min(dialog.options.length, MAX_VISIBLE_OPTIONS) +
-				BORDER_ROWS
+				modalFrameRows
 			);
 		case "confirm":
-			return title + lineCount(dialog.message) + 2 + BORDER_ROWS;
+			return title + lineCount(dialog.message) + 2 + modalFrameRows;
 		case "input":
-			return title + 1 + BORDER_ROWS;
+			return title + 1 + modalFrameRows;
 		case "editor":
-			return title + 1 + EDITOR_ROWS + BORDER_ROWS;
+			return title + 1 + EDITOR_ROWS + modalFrameRows;
 	}
 }
 

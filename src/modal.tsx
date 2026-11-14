@@ -138,7 +138,6 @@ function ModalView(props: {
 					props.entry.element = element;
 				}}
 				{...placed}
-				backgroundColor={props.context.theme.surface}
 				width={request.width}
 				height={request.height}
 				onMouseDown={(event) => {

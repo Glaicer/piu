@@ -80,31 +80,30 @@ function cells(text: string, start: number, end: number) {
 
 // why: tests find Panels, Modals and message bars by the glyphs that draw them, so a restyle changes this table and nothing else.
 export const glyphs = {
-	topLeft: "┌",
-	topRight: "┐",
-	bottomLeft: "└",
-	top: "─",
-	left: "│",
-	right: "│",
-	bar: "│",
+	topLeft: "▗",
+	topRight: "▖",
+	bottomLeft: "▝",
+	top: "▄",
+	left: "▐",
+	right: "▌",
+	bar: "▎",
 };
 
-const modalCorners = { topLeft: "╭", topRight: "╮" };
+// why: a Panel's left edge is followed by one blank column before its content.
+const frameLeft = 2;
 
 export const besidePanels = `${glyphs.topRight}${glyphs.topLeft}`;
 
-const titlePrefix = `${glyphs.topLeft}${glyphs.top} `;
+const titlePrefix = `${glyphs.topLeft} `;
 
 export function panelTitle(name: string) {
 	return `${titlePrefix}${name} `;
 }
 
-export function modalTitle(name: string) {
-	return `${modalCorners.topLeft}${glyphs.top} ${name} `;
-}
+export const modalTitle = panelTitle;
 
 export function modalTopEdge(width: number) {
-	return `${modalCorners.topLeft}${glyphs.top.repeat(width - 2)}${modalCorners.topRight}`;
+	return `${glyphs.topLeft}${glyphs.top.repeat(width - 2)}${glyphs.topRight}`;
 }
 
 export function messageBar(text: string) {
@@ -114,19 +113,21 @@ export function messageBar(text: string) {
 export function panelText(frame: string, column: number, row = 0) {
 	const rows = frame.split("\n");
 	let top = row;
-	while (top > 0 && !/[┌╭]/.test((rows[top] ?? "").slice(0, column + 1))) top--;
+	while (
+		top > 0 &&
+		!(rows[top] ?? "").slice(0, column + 1).includes(glyphs.topLeft)
+	)
+		top--;
 	const border = rows[top] ?? "";
-	const left = Math.max(
-		border.lastIndexOf("┌", column),
-		border.lastIndexOf("╭", column),
-	);
-	const right = column + border.slice(column).search(/[┐╮]/);
+	const left = border.lastIndexOf(glyphs.topLeft, column);
+	const right = border.indexOf(glyphs.topRight, column);
 	const bottom = rows.findIndex(
-		(text, index) => index > top && /[└╰]/.test(cells(text, left, left + 1)),
+		(text, index) =>
+			index > top && cells(text, left, left + 1) === glyphs.bottomLeft,
 	);
 	return rows
 		.slice(top + 1, bottom)
-		.map((text) => cells(text, left + 1, right - 1))
+		.map((text) => cells(text, left + frameLeft, right - 1))
 		.join("\n");
 }
 

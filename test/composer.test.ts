@@ -39,7 +39,7 @@ test("the cursor starts on the first line of the input Panel", async () => {
 	expect(piu.renderer.getCursorState().x).toBe(field.screenX + 1);
 });
 
-test("the default editor has four rows, no input title, and the canvas background", async () => {
+test("the default editor has four rows, no input title, and the Panel fill", async () => {
 	await using piu = await startPiu({ script: { replies: [] }, width: 80 });
 	await piu.mockInput.typeText("Unfilled composer");
 	const frame = await piu.waitForFrame(
@@ -51,7 +51,7 @@ test("the default editor has four rows, no input title, and the canvas backgroun
 		.captureSpans()
 		.lines.flatMap((line) => line.spans)
 		.find((span) => span.text.includes("Unfilled composer"));
-	expect(span?.bg.equals(RGBA.fromHex(darkTheme.background))).toBe(true);
+	expect(span?.bg.equals(RGBA.fromHex(darkTheme.surface))).toBe(true);
 	const top = inputTop(frame);
 	expect(
 		piu
@@ -221,9 +221,9 @@ test("autocomplete stays above a multiline editor when the terminal is resized",
 		(frame) =>
 			frame.trimEnd().split("\n").length === 50 &&
 			frame.includes("@greeter/index.tsx") &&
-			lastSuggestion(frame) === editor(piu).screenY - 1,
+			lastSuggestion(frame) === editor(piu).screenY - 3,
 	);
-	expect(lastSuggestion(frame)).toBe(editor(piu).screenY - 1);
+	expect(lastSuggestion(frame)).toBe(editor(piu).screenY - 3);
 });
 
 test("growing the editor preserves the caret at the end of the draft", async () => {

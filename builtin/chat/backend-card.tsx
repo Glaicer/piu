@@ -1,4 +1,5 @@
 import type { BackendHealth } from "../../src/backend.ts";
+import { barChars } from "../../src/card.ts";
 import type { ModuleContext } from "../../src/module.ts";
 import { type Selection, selectable } from "./selection.ts";
 
@@ -48,17 +49,26 @@ function ExitedCard(props: {
 			.slice(-STDERR_LINES)
 			.join("\n");
 	return (
-		<box flexDirection="column" border borderColor={theme.error}>
+		<box
+			flexDirection="column"
+			border={["left"]}
+			customBorderChars={barChars}
+			borderColor={theme.error}
+			backgroundColor={theme.raised}
+			padding={1}
+			marginTop={1}
+		>
 			<text fg={theme.error}>{describeExit(props.health)}</text>
 			{tail() && <text fg={theme.muted}>{tail()}</text>}
 			<box
 				ref={restart.ref}
-				border
+				marginTop={1}
 				alignSelf="flex-start"
+				backgroundColor={theme.selection}
 				onMouseDown={restart.activate}
 			>
 				<text fg={theme.accent}>
-					{restart.selected() ? "› Restart" : "Restart"}
+					{restart.selected() ? " › Restart " : " Restart "}
 				</text>
 			</box>
 		</box>

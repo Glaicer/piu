@@ -16,6 +16,7 @@ export function changelogModal(
 		...moduleModal(
 			{
 				id: "changelog",
+				title: "What's new",
 				render: (context) => {
 					let box: Renderable | undefined;
 					const syntaxStyle = createSyntaxStyle(context.theme);

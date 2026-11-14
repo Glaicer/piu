@@ -1,6 +1,7 @@
 import { createMemo } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
 import type { BackgroundJob } from "../../src/background.ts";
+import { barChars } from "../../src/card.ts";
 import type { PiMessage } from "../../src/pi-state.ts";
 import type { Theme } from "../../src/theme.ts";
 import { createReveal } from "./reveal.ts";
@@ -116,9 +117,10 @@ export function ToolCard(props: {
 		<box
 			flexDirection="column"
 			border={["left"]}
+			customBorderChars={barChars}
 			borderColor={row.selected() ? props.theme.accent : props.theme.border}
 			backgroundColor={
-				row.selected() ? props.theme.selection : props.theme.surface
+				row.selected() ? props.theme.selection : props.theme.raised
 			}
 			paddingX={1}
 			marginTop={1}

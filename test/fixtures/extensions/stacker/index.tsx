@@ -19,7 +19,7 @@ function inner() {
 			id: "inner",
 			render: (ctx) => <text fg={ctx.theme.text}>INNER</text>,
 		},
-		{ width: 20, height: 3, left: 4, top: 2 },
+		{ width: 20, height: 5, left: 4, top: 2 },
 	);
 }
 

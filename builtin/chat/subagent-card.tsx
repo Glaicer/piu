@@ -1,3 +1,4 @@
+import { barChars } from "../../src/card.ts";
 import type { Subagent } from "../../src/subagents.ts";
 import type { Theme } from "../../src/theme.ts";
 import { type Selection, selectable } from "./selection.ts";
@@ -21,8 +22,14 @@ export function SubagentCard(props: {
 		<box
 			ref={row.ref}
 			flexDirection="row"
-			border
+			border={["left"]}
+			customBorderChars={barChars}
 			borderColor={color()}
+			backgroundColor={
+				row.selected() ? props.theme.selection : props.theme.raised
+			}
+			paddingX={1}
+			marginTop={1}
 			onMouseDown={row.activate}
 		>
 			<text fg={props.theme.text}>

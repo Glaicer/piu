@@ -7,6 +7,7 @@ export function reasoningPicker(
 ): PickerOptions<ThinkingLevel> {
 	return {
 		id: "reasoning-picker",
+		title: "Reasoning",
 		width: 30,
 		items: () =>
 			context.pi.thinkingLevels.map((level) => ({

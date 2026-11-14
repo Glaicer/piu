@@ -105,16 +105,16 @@ test("a compact tool row keeps its status visible next to a long command on a na
 	expect(rows[row + 1]).not.toContain(glyphs.bottomLeft);
 });
 
-test("the model picker has a named rounded frame and a visible dismissal hint", async () => {
+test("the model picker is a raised Card with its name and a visible dismissal hint", async () => {
 	await using piu = await startPiu({ script: { replies: [] } });
 	await piu.waitForFrame((frame) => frame.includes("faux-1"));
 	piu.mockInput.pressKey("l", { ctrl: true });
 	const frame = await piu.waitForFrame((frame) => frame.includes("faux-2"));
 	expect(frame).toContain(modalTitle("Models"));
 	expect(frame).toContain("Esc close");
-	const corner = piu
+	const title = piu
 		.captureSpans()
 		.lines.flatMap((line) => line.spans)
-		.find((span) => span.text.includes("╭"));
-	expect(corner?.fg.equals(RGBA.fromHex(darkTheme.secondary))).toBe(true);
+		.find((span) => span.text.includes("Models"));
+	expect(title?.bg.equals(RGBA.fromHex(darkTheme.raised))).toBe(true);
 });

@@ -26,7 +26,7 @@ test("a terminal reporting a dark background gets the dark tokens", async () => 
 	const span = await userEcho(piu);
 
 	expect(span?.fg.equals(RGBA.fromHex(darkTheme.accent))).toBe(true);
-	expect(span?.bg.equals(RGBA.fromHex(darkTheme.surface))).toBe(true);
+	expect(span?.bg.equals(RGBA.fromHex(darkTheme.raised))).toBe(true);
 });
 
 test("a terminal reporting a light background gets the light tokens", async () => {
@@ -38,7 +38,7 @@ test("a terminal reporting a light background gets the light tokens", async () =
 	const span = await userEcho(piu);
 
 	expect(span?.fg.equals(RGBA.fromHex(lightTheme.accent))).toBe(true);
-	expect(span?.bg.equals(RGBA.fromHex(lightTheme.surface))).toBe(true);
+	expect(span?.bg.equals(RGBA.fromHex(lightTheme.raised))).toBe(true);
 });
 
 test("a terminal that changes its background mid-session switches the tokens", async () => {
@@ -92,7 +92,7 @@ test("an override leaves the other tokens of the active theme alone", async () =
 
 	const span = await userEcho(piu);
 
-	expect(span?.bg.equals(RGBA.fromHex(lightTheme.surface))).toBe(true);
+	expect(span?.bg.equals(RGBA.fromHex(lightTheme.raised))).toBe(true);
 });
 
 test("a code keyword is drawn in the accent of the theme the terminal asked for", async () => {

@@ -1,5 +1,6 @@
 import type { BoxRenderable } from "@opentui/core";
 import { createEffect, createSignal, For } from "solid-js";
+import { modalFrameRows } from "./layout.tsx";
 import { moduleModal } from "./modal.tsx";
 import type { CommandContext } from "./module.ts";
 import { scrollIntoView } from "./scroll.ts";
@@ -69,10 +70,10 @@ export function Picker<T>(props: {
 }
 
 const MAX_VISIBLE_ROWS = 16;
-const BORDER_ROWS = 2;
 
 export type PickerOptions<T> = {
 	id: string;
+	title?: string;
 	width: number;
 	items(): readonly PickerItem<T>[];
 	selected(): number;
@@ -88,6 +89,7 @@ export function openPicker<T>(
 		moduleModal(
 			{
 				id: picker.id,
+				title: picker.title,
 				render: () => (
 					<Picker
 						theme={theme}
@@ -102,7 +104,7 @@ export function openPicker<T>(
 			},
 			{
 				width: picker.width,
-				height: Math.min(items.length, MAX_VISIBLE_ROWS) + BORDER_ROWS,
+				height: Math.min(items.length, MAX_VISIBLE_ROWS) + modalFrameRows,
 			},
 		),
 	);

@@ -5,6 +5,7 @@ import {
 } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/solid";
 import { type Accessor, createSignal, For, onCleanup } from "solid-js";
+import { paintCard } from "./card.ts";
 import { channelFor } from "./channel.ts";
 import type { PanelFocus } from "./focus.ts";
 import type { ModuleContext, PlacedModule, Presence } from "./module.ts";
@@ -40,6 +41,18 @@ type SlotProps = {
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	context: SharedContext;
 };
+
+// why: the Card's edge takes one cell on every side, and a blank column after the left edge keeps text off the focus bar; a Modal floats, so it gets a row and a column more of air on each side.
+const panelFrame = { padding: 1, paddingLeft: 2 };
+const modalFrame = {
+	paddingTop: 2,
+	paddingBottom: 2,
+	paddingLeft: 3,
+	paddingRight: 2,
+};
+export const modalFrameRows = modalFrame.paddingTop + modalFrame.paddingBottom;
+export const modalFrameColumns =
+	modalFrame.paddingLeft + modalFrame.paddingRight;
 
 export function SlotView(props: SlotProps) {
 	const slot = props.slot;
@@ -120,21 +133,22 @@ export function SlotView(props: SlotProps) {
 		},
 	});
 	const focused = () => focus?.isFocused(slot.id) ?? false;
-	const focusColor = () =>
-		props.modal ? shared.theme.secondary : shared.theme.accent;
+	const fill = () => (props.modal ? shared.theme.raised : shared.theme.surface);
 	const title = () =>
 		focused()
 			? (slot.title ?? slot.id)
 			: props.modal
 				? entries[0]?.placed.module.title
 				: undefined;
-	const frame = () => ({
-		borderStyle: props.modal ? ("rounded" as const) : ("single" as const),
-		borderColor: focused() || props.modal ? focusColor() : shared.theme.border,
-		focusedBorderColor: focusColor(),
-		title: title() ? ` ${title()} ` : undefined,
-		titleColor: props.modal ? shared.theme.text : shared.theme.accent,
-	});
+	const frame = {
+		...(props.modal ? modalFrame : panelFrame),
+		renderBefore: paintCard(() => ({
+			fill: fill(),
+			edge: focused() ? shared.theme.accent : undefined,
+			title: title(),
+			titleColor: props.modal ? shared.theme.text : shared.theme.accent,
+		})),
+	};
 	const routeKey = (event: KeyEvent) => {
 		for (const entry of entries) {
 			if (!shown(entry)) continue;
@@ -165,8 +179,7 @@ export function SlotView(props: SlotProps) {
 				{...sizing}
 				{...limit()}
 				visible={visible() && entries.some(shown)}
-				border
-				{...frame()}
+				{...frame}
 				flexDirection={slot.direction}
 			>
 				{modules}
@@ -181,13 +194,7 @@ export function SlotView(props: SlotProps) {
 	const scrolled = entries.filter((entry) => !entry.placed.module.footer);
 	const footers = entries.filter((entry) => entry.placed.module.footer);
 	return (
-		<box
-			{...sizing}
-			visible={visible()}
-			border
-			{...frame()}
-			flexDirection="column"
-		>
+		<box {...sizing} visible={visible()} {...frame} flexDirection="column">
 			<scrollbox
 				ref={(node: ScrollBoxRenderable) => {
 					element = node;
@@ -210,9 +217,7 @@ export function SlotView(props: SlotProps) {
 				scrollbarOptions={{
 					trackOptions: {
 						foregroundColor: shared.theme.border,
-						backgroundColor: props.modal
-							? shared.theme.surface
-							: shared.theme.background,
+						backgroundColor: fill(),
 					},
 				}}
 			>
@@ -232,7 +237,7 @@ export function SlotView(props: SlotProps) {
 					position="absolute"
 					right={2}
 					bottom={footerHeight() + 1}
-					backgroundColor={shared.theme.surface}
+					backgroundColor={shared.theme.raised}
 				>
 					<text fg={shared.theme.muted}>CTRL+End: jump to bottom</text>
 				</box>
