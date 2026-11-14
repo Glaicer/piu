@@ -1,11 +1,41 @@
 import { expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
-import { glyphs, startPiu } from "./harness.ts";
+import { focusedPanels, glyphs, startPiu } from "./harness.ts";
 
 for (const [mode, surface, ink, accent] of [
 	["light", "#fbfafc", "#242936", "#3257b7"],
 	["dark", "#1c202b", "#e5e9f5", "#a9bfff"],
 ] as const) {
+	test(`Panel outlines stay one neutral color when focus changes on a ${mode} terminal`, async () => {
+		await using piu = await startPiu({
+			terminalBackground: mode,
+			script: { replies: [] },
+		});
+		await piu.waitForFrame(
+			(frame) =>
+				frame.includes("faux-1") && frame.includes("/ commands · @ files"),
+		);
+		const border = RGBA.fromHex(mode === "light" ? "#c7cbd5" : "#46516b");
+		const checkBorders = () => {
+			const outlines = piu
+				.captureSpans()
+				.lines.flatMap((line) =>
+					line.spans.filter(
+						(span) =>
+							span.text.includes(glyphs.top) || span.text.includes(glyphs.left),
+					),
+				);
+			expect(outlines.length).toBeGreaterThan(0);
+			expect(outlines.every((span) => span.fg.equals(border))).toBe(true);
+		};
+		checkBorders();
+		piu.mockInput.pressTab();
+		await piu.waitForFrame(
+			(frame) => focusedPanels(piu, frame).join() === "agent",
+		);
+		checkBorders();
+	});
+
 	test(`Blueprint frames and Signal tool labels on a ${mode} terminal`, async () => {
 		await using piu = await startPiu({
 			terminalBackground: mode,

@@ -41,6 +41,7 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 						id: "input-area",
 						direction: "column",
 						size: "content",
+						joinAbove: true,
 						children: [
 							{
 								kind: "panel",
@@ -181,6 +182,7 @@ const slotKeys = [
 	"minSize",
 	"hideBelow",
 	"title",
+	"joinAbove",
 ];
 
 function parseSlot(value: unknown, path: string, panelIds: Set<string>): Slot {
@@ -203,6 +205,9 @@ function parseSlot(value: unknown, path: string, panelIds: Set<string>): Slot {
 		size: parseSize(fields.size, `${path}.size`),
 		...optionalCells(fields, "minSize", path),
 		...optionalCells(fields, "hideBelow", path),
+		...(fields.joinAbove === undefined
+			? {}
+			: { joinAbove: boolean(fields.joinAbove, `${path}.joinAbove`) }),
 		...(fields.title === undefined
 			? {}
 			: { title: string(fields.title, `${path}.title`) }),

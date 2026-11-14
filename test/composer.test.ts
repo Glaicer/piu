@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { RGBA, TextareaRenderable } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
 import {
+	glyphs,
 	inputArea,
 	inputTop,
 	panelText,
@@ -11,6 +12,22 @@ import {
 } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
+
+for (const width of [80, 160]) {
+	test(`chat and input share one separator at ${width} columns`, async () => {
+		await using piu = await startPiu({ script: { replies: [] }, width });
+		const frame = await piu.waitForFrame(
+			(f) => f.includes("faux-1") && f.includes("/ commands · @ files"),
+		);
+		const top = inputTop(frame);
+		const modelRow = frame
+			.split("\n")
+			.findIndex((line) => line.includes("faux-1"));
+		expect(top).toBe(modelRow + 1);
+		expect(frame.split("\n")[top]?.startsWith(glyphs.joinLeft)).toBe(true);
+		expect(editor(piu).height).toBe(4);
+	});
+}
 
 function editor(piu: Piu) {
 	const field = piu.renderer.currentFocusedRenderable;
@@ -56,7 +73,7 @@ test("the default editor has four rows, no input title, and the Panel fill", asy
 	expect(
 		piu
 			.captureSpans()
-			.lines[top]?.spans[0]?.fg.equals(RGBA.fromHex(darkTheme.accent)),
+			.lines[top]?.spans[0]?.fg.equals(RGBA.fromHex(darkTheme.border)),
 	).toBe(true);
 });
 

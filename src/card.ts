@@ -10,6 +10,7 @@ export type CardColors = {
 	edge: string;
 	title?: string;
 	titleColor?: string;
+	joinedAt?: number;
 };
 
 // why: painting inside reserved padding keeps the frame from changing Yoga sizes or clipping the Panel's scrollbox and pinned footer.
@@ -20,7 +21,13 @@ export function paintCard(colors: () => CardColors) {
 	) {
 		const { screenX: x, screenY: y, width, height } = this;
 		if (width < 2 || height < 2) return;
-		const { fill: fillColor, edge: edgeColor, title, titleColor } = colors();
+		const {
+			fill: fillColor,
+			edge: edgeColor,
+			title,
+			titleColor,
+			joinedAt,
+		} = colors();
 		const fill = parseColor(fillColor);
 		const edge = parseColor(edgeColor);
 		const right = x + width - 1;
@@ -28,8 +35,8 @@ export function paintCard(colors: () => CardColors) {
 		buffer.fillRect(x + 1, y + 1, width - 2, height - 2, fill);
 		const cell = (cx: number, cy: number, char: string) =>
 			buffer.setCellWithAlphaBlending(cx, cy, char, edge, fill);
-		cell(x, y, "┌");
-		cell(right, y, "┐");
+		cell(x, y, joinedAt === y ? "├" : "┌");
+		cell(right, y, joinedAt === y ? "┤" : "┐");
 		cell(x, bottom, "└");
 		cell(right, bottom, "┘");
 		for (let cx = x + 1; cx < right; cx++) {

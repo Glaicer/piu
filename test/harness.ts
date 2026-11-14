@@ -88,6 +88,8 @@ export const glyphs = {
 	left: "│",
 	right: "│",
 	bar: "│",
+	joinLeft: "├",
+	joinRight: "┤",
 };
 
 // why: a Panel's left edge is followed by one blank column before its content.
@@ -113,18 +115,26 @@ export function messageBar(text: string) {
 
 export function panelText(frame: string, column: number, row = 0) {
 	const rows = frame.split("\n");
+	const isTop = (char: string | undefined) =>
+		char === glyphs.topLeft || char === glyphs.joinLeft;
 	let top = row;
-	while (
-		top > 0 &&
-		!(rows[top] ?? "").slice(0, column + 1).includes(glyphs.topLeft)
-	)
+	while (top > 0 && ![...(rows[top] ?? "").slice(0, column + 1)].some(isTop))
 		top--;
 	const border = rows[top] ?? "";
-	const left = border.lastIndexOf(glyphs.topLeft, column);
-	const right = border.indexOf(glyphs.topRight, column);
+	const left = Math.max(
+		border.lastIndexOf(glyphs.topLeft, column),
+		border.lastIndexOf(glyphs.joinLeft, column),
+	);
+	const right = border.indexOf(
+		border[left] === glyphs.joinLeft ? glyphs.joinRight : glyphs.topRight,
+		column,
+	);
 	const bottom = rows.findIndex(
 		(text, index) =>
-			index > top && cells(text, left, left + 1) === glyphs.bottomLeft,
+			index > top &&
+			[glyphs.bottomLeft, glyphs.joinLeft].includes(
+				cells(text, left, left + 1),
+			),
 	);
 	return rows
 		.slice(top + 1, bottom)
@@ -136,7 +146,10 @@ export function panelText(frame: string, column: number, row = 0) {
 export function inputTop(frame: string) {
 	return frame
 		.split("\n")
-		.findLastIndex((line) => line.startsWith(glyphs.topLeft));
+		.findLastIndex(
+			(line) =>
+				line.startsWith(glyphs.topLeft) || line.startsWith(glyphs.joinLeft),
+		);
 }
 
 export function inputArea(frame: string) {
@@ -152,10 +165,16 @@ export function focusedPanels(
 	frame: string,
 ) {
 	const named = [
-		...frame.matchAll(new RegExp(`${titlePrefix}([\\w-]+) `, "g")),
+		...frame.matchAll(
+			new RegExp(`[${glyphs.topLeft}${glyphs.joinLeft}] ([\\w-]+) `, "g"),
+		),
 	].map((match) => match[1]);
 	const top = inputTop(frame);
-	const width = (frame.split("\n")[top] ?? "").indexOf(glyphs.topRight) + 1;
+	const border = frame.split("\n")[top] ?? "";
+	const width =
+		border.indexOf(
+			border.startsWith(glyphs.joinLeft) ? glyphs.joinRight : glyphs.topRight,
+		) + 1;
 	for (
 		let node = piu.renderer.currentFocusedRenderable;
 		node;

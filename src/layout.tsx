@@ -20,6 +20,7 @@ type SlotBase = {
 	minSize?: number;
 	hideBelow?: number;
 	title?: string;
+	joinAbove?: boolean;
 };
 export type Slot =
 	| (SlotBase & { kind: "container"; children: readonly Slot[] })
@@ -38,6 +39,7 @@ type SlotProps = {
 	parentDirection: Direction;
 	inContent?: boolean;
 	modal?: boolean;
+	joinedAt?: () => number | undefined;
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	context: SharedContext;
 };
@@ -72,8 +74,16 @@ export function SlotView(props: SlotProps) {
 	};
 	const visible = () => terminal().width >= (slot.hideBelow ?? 0);
 	if (slot.kind === "container") {
+		let container: Renderable | undefined;
+		const joinedAt = () =>
+			slot.joinAbove && props.parentDirection === "column"
+				? container?.screenY
+				: props.joinedAt?.();
 		return (
 			<box
+				ref={(node: Renderable) => {
+					container = node;
+				}}
 				{...sizing}
 				{...limit()}
 				visible={visible()}
@@ -86,6 +96,7 @@ export function SlotView(props: SlotProps) {
 							parentDirection={slot.direction}
 							inContent={slot.size === "content"}
 							modal={props.modal}
+							joinedAt={joinedAt}
 							panels={props.panels}
 							context={props.context}
 						/>
@@ -114,6 +125,7 @@ export function SlotView(props: SlotProps) {
 	const followsOutput = () =>
 		entries.some((entry) => shown(entry) && entry.placed.module.followsOutput);
 	let element: Renderable | undefined;
+	let frameElement: Renderable | undefined;
 	focus?.register({
 		id: slot.id,
 		element: () => element,
@@ -144,9 +156,13 @@ export function SlotView(props: SlotProps) {
 		...(props.modal ? modalFrame : panelFrame),
 		renderBefore: paintCard(() => ({
 			fill: fill(),
-			edge: focused() ? shared.theme.accent : shared.theme.border,
+			edge: shared.theme.border,
 			title: title(),
 			titleColor: props.modal ? shared.theme.text : shared.theme.accent,
+			joinedAt:
+				slot.joinAbove && props.parentDirection === "column"
+					? frameElement?.screenY
+					: props.joinedAt?.(),
 		})),
 	};
 	const routeKey = (event: KeyEvent) => {
@@ -175,6 +191,7 @@ export function SlotView(props: SlotProps) {
 			<box
 				ref={(node: Renderable) => {
 					element = node;
+					frameElement = node;
 				}}
 				{...sizing}
 				{...limit()}
@@ -194,7 +211,15 @@ export function SlotView(props: SlotProps) {
 	const scrolled = entries.filter((entry) => !entry.placed.module.footer);
 	const footers = entries.filter((entry) => entry.placed.module.footer);
 	return (
-		<box {...sizing} visible={visible()} {...frame} flexDirection="column">
+		<box
+			ref={(node: Renderable) => {
+				frameElement = node;
+			}}
+			{...sizing}
+			visible={visible()}
+			{...frame}
+			flexDirection="column"
+		>
 			<scrollbox
 				ref={(node: ScrollBoxRenderable) => {
 					element = node;
@@ -300,5 +325,10 @@ function sizeStyle(slot: Slot, parentDirection: Direction, inContent: boolean) {
 			: slot.size === "content"
 				? { flexShrink: slot.kind === "panel" && inContent ? 1 : 0 }
 				: { flexShrink: 0, [length]: slot.size };
-	return { ...flex, [min]: slot.minSize };
+	return {
+		...flex,
+		[min]: slot.minSize,
+		// why: adjacent contours share one terminal row; only frame padding overlaps, never Module content.
+		marginTop: slot.joinAbove && parentDirection === "column" ? -1 : 0,
+	};
 }
