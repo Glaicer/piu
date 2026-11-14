@@ -925,9 +925,13 @@ function extensionName(path: string) {
 function toModelInfo(model: {
 	provider: string;
 	id: string;
-	name: string;
+	name?: string | null;
 }): ModelInfo {
-	return { provider: model.provider, id: model.id, name: model.name };
+	return {
+		provider: model.provider,
+		id: model.id,
+		name: model.name || model.id,
+	};
 }
 
 function compactionOutcome(

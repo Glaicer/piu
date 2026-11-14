@@ -194,7 +194,7 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 										wrapMode="none"
 										truncate
 									>
-										{`${model.id}${sameModel(model, pi.model) ? " *" : ""}`}
+										{`${model.name}${sameModel(model, pi.model) ? " *" : ""}`}
 									</text>
 									<text
 										fg={theme.muted}
@@ -204,13 +204,6 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 										truncate
 									>{`  ${model.provider}`}</text>
 								</box>
-								{model.name !== model.id && (
-									<box paddingLeft={3}>
-										<text fg={theme.muted} wrapMode="none" truncate>
-											{model.name}
-										</text>
-									</box>
-								)}
 							</box>
 						)}
 					</For>

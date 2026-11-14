@@ -41,6 +41,7 @@ export type FauxScript = {
 	sameIdProvider?: boolean;
 	denyOtherOnFile?: boolean;
 	namedModel?: boolean;
+	emptyModelName?: boolean;
 	longModelName?: boolean;
 	manyModels?: boolean;
 	colonModel?: boolean;

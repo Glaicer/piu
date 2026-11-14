@@ -59,12 +59,17 @@ test("the model Modal filters available models as the user types", async () => {
 	expect(count(filtered, "faux-1")).toBe(1);
 });
 
-test("the model picker shows and searches a model's display name", async () => {
+test("the model picker shows one line per model and searches names and ids", async () => {
 	await using piu = await start({ replies: [], namedModel: true });
 	await clickText(piu, "faux-1");
-	await piu.waitForFrame(
-		(f) => f.includes("Faux Reasoner") && f.includes("faux-2"),
-	);
+	const frame = await piu.waitForFrame((f) => f.includes("Faux Reasoner"));
+	const rows = frame.split("\n");
+	const first = rows.findIndex((line) => line.includes("☆ faux-1"));
+	expect(rows[first]).toContain("faux");
+	expect(rows[first + 1]).toContain("☆ Faux Reasoner");
+	expect(rows[first + 1]).toContain("  faux");
+	expect(frame).not.toContain("faux-2");
+
 	await piu.mockInput.typeText("REASONER");
 	await piu.waitForFrame(
 		(f) =>
@@ -72,24 +77,38 @@ test("the model picker shows and searches a model's display name", async () => {
 			f.includes("Faux Reasoner") &&
 			!f.includes("☆ faux-1"),
 	);
+	for (let i = 0; i < "REASONER".length; i++) piu.mockInput.pressBackspace();
+	await piu.mockInput.typeText("faux-2");
+	await piu.waitForFrame(
+		(f) => f.includes("Search: faux-2") && f.includes("☆ Faux Reasoner"),
+	);
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) => f.includes("faux-2") && !f.includes("Search:"));
+	await clickText(piu, "faux-2");
+	await piu.waitForFrame((f) => f.includes("☆ Faux Reasoner *"));
+});
+
+test("the model picker falls back to the id when the display name is empty", async () => {
+	await using piu = await start({ replies: [], emptyModelName: true });
+	await clickText(piu, "faux-1");
+	const frame = await piu.waitForFrame((f) => f.includes("☆ faux-2"));
+	const row = frame.split("\n").find((line) => line.includes("☆ faux-1"));
+	expect(row).toContain("faux-1 *");
+	expect(row).toContain("  faux");
 });
 
 test("the provider remains visible for a model with a long name", async () => {
 	await using piu = await start({ replies: [], longModelName: true });
 	await clickText(piu, "faux-1");
 	const frame = await piu.waitForFrame((f) =>
-		f.includes("A very long model name"),
+		f.includes("☆ A very long model"),
 	);
 	const nameRow =
-		frame.split("\n").find((line) => line.includes("A very long model name")) ??
+		frame.split("\n").find((line) => line.includes("☆ A very long model")) ??
 		"";
-	const idRow =
-		frame.split("\n").find((line) => line.includes("☆ faux-2")) ?? "";
-	expect(idRow).toContain("  faux");
-	expect(nameRow).not.toContain("faux-2");
-	expect(frame.split("\n").indexOf(nameRow)).toBe(
-		frame.split("\n").indexOf(idRow) + 1,
-	);
+	expect(nameRow).toContain("☆ A very long model");
+	expect(nameRow).toContain("  faux");
+	expect(frame).not.toContain("faux-2");
 });
 
 test("the model command opens the searchable model Modal", async () => {

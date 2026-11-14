@@ -19,7 +19,11 @@ export default function (pi: ExtensionAPI) {
 	const faux = fauxProvider({
 		provider: "faux",
 		models: [
-			{ id: "faux-1", contextWindow: script.contextWindow },
+			{
+				id: "faux-1",
+				name: script.emptyModelName ? "" : undefined,
+				contextWindow: script.contextWindow,
+			},
 			{
 				id: "faux-2",
 				name: script.longModelName
