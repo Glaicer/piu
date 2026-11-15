@@ -124,6 +124,7 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 					flexGrow={1}
 					placeholder="Search models"
 					textColor={theme.text}
+					cursorColor={theme.text}
 					focusedTextColor={theme.text}
 					backgroundColor={theme.surface}
 					focusedBackgroundColor={theme.surface}

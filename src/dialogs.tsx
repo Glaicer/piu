@@ -69,6 +69,7 @@ function Body(props: {
 					focused
 					placeholder={dialog.placeholder ?? ""}
 					textColor={context.theme.text}
+					cursorColor={context.theme.text}
 					onInput={setTyped}
 					onSubmit={() => answer({ value: typed() })}
 				/>
@@ -86,6 +87,7 @@ function Body(props: {
 						}}
 						focused
 						textColor={context.theme.text}
+						cursorColor={context.theme.text}
 						keyBindings={editorKeys}
 						onKeyDown={editorKeyDown}
 					/>

@@ -554,7 +554,11 @@ test("clicking Dismiss gives the model a declined result", async () => {
 const cornerRows = (frame: string) =>
 	frame
 		.split("\n")
-		.flatMap((line, index) => (line.startsWith(glyphs.topLeft) ? [index] : []));
+		.flatMap((line, index) =>
+			line.startsWith(glyphs.topLeft) || line.startsWith(glyphs.joinLeft)
+				? [index]
+				: [],
+		);
 
 test("the input Panel fits the card and restores the editor and directory after", async () => {
 	await using piu = await startPiu({

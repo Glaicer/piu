@@ -5,6 +5,37 @@ import { startPiu } from "./harness.ts";
 
 const none = { replies: [] };
 
+for (const mode of ["light", "dark"] as const) {
+	test(`the cursor follows the ${mode} theme in the prompt and model search`, async () => {
+		await using piu = await startPiu({
+			script: none,
+			terminalBackground: mode,
+		});
+		const initial = RGBA.fromHex(mode === "light" ? "#242936" : "#e5e9f5");
+		const changed = RGBA.fromHex(mode === "light" ? "#e5e9f5" : "#242936");
+		await piu.waitForFrame(
+			(frame) =>
+				frame.includes("faux-1") && frame.includes("/ commands · @ files"),
+		);
+		expect(piu.renderer.getCursorState().color.equals(initial)).toBe(true);
+		piu.mockInput.pressKey("l", { ctrl: true });
+		await piu.waitForFrame(
+			(frame) => frame.includes("Search:") && frame.includes("faux-2"),
+		);
+		expect(piu.renderer.getCursorState().color.equals(initial)).toBe(true);
+		piu.reportTerminalBackground(mode === "light" ? "dark" : "light");
+		await piu.waitForFrame(() =>
+			piu.renderer.getCursorState().color.equals(changed),
+		);
+		piu.mockInput.pressKey("ESCAPE");
+		await piu.waitForFrame(
+			(frame) =>
+				!frame.includes("Search:") && frame.includes("/ commands · @ files"),
+		);
+		expect(piu.renderer.getCursorState().color.equals(changed)).toBe(true);
+	});
+}
+
 async function userEcho(piu: Awaited<ReturnType<typeof startPiu>>) {
 	await piu.mockInput.typeText("Hi");
 	piu.mockInput.pressEnter();

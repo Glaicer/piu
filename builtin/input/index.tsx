@@ -351,10 +351,11 @@ function Prompt(props: { context: ModuleContext }) {
 					height="100%"
 					flexGrow={1}
 					textColor={props.context.theme.text}
+					cursorColor={props.context.theme.text}
 					focusedTextColor={props.context.theme.text}
 					backgroundColor="transparent"
 					focusedBackgroundColor="transparent"
-					placeholder="/ commands · @ files"
+					placeholder="  / commands · @ files"
 					placeholderColor={props.context.theme.muted}
 					keyBindings={keyBindings}
 					onKeyDown={onKeyDown}

@@ -281,6 +281,7 @@ export function Card(props: {
 												placeholder="Type your own answer"
 												flexGrow={1}
 												textColor={theme.text}
+												cursorColor={theme.text}
 												onInput={(value: string) => {
 													setRow(customRow());
 													update(at, { labels: [], custom: value.trim() });
