@@ -24,6 +24,13 @@ test("dragging over chat text copies exactly the dragged text", async () => {
 	expect(piu.copied[0]?.options.destination).toBe("best-available");
 });
 
+test("a successful copy says so in a Toast", async () => {
+	const { piu, row, column } = await chatWithReply();
+	await using _ = piu;
+	await piu.mockMouse.drag(column, row, column + 4, row);
+	await piu.waitForFrame((frame) => frame.includes("Copied to clipboard"));
+});
+
 test("a click or a zero-width drag copies nothing", async () => {
 	const { piu, row, column } = await chatWithReply();
 	await using _ = piu;

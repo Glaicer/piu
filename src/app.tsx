@@ -122,9 +122,7 @@ function App(props: {
 	const animate = createAnimate(renderer, props.config.animations);
 	const toasts = createToasts(renderer.clock);
 	onCleanup(toasts.dispose);
-	useCopyOnSelect(renderer, props.clipboard, (message) =>
-		toasts.show(message, "error"),
-	);
+	useCopyOnSelect(renderer, props.clipboard, toasts.show);
 	let nextLease = props.startupLease;
 	let disposed = false;
 	const startup = Promise.withResolvers<void>();

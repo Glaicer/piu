@@ -7,11 +7,12 @@ import {
 } from "@opentui/core";
 import { useSelectionHandler } from "@opentui/solid";
 import { onCleanup } from "solid-js";
+import type { ToastKind } from "./toast.tsx";
 
 export function useCopyOnSelect(
 	renderer: CliRenderer,
 	injected: ClipboardService | undefined,
-	fail: (message: string) => void,
+	notify: (message: string, kind: ToastKind) => void,
 ) {
 	const clipboard =
 		injected ??
@@ -29,10 +30,12 @@ export function useCopyOnSelect(
 				destination: "best-available",
 			});
 			if (host.status !== "written" && terminal.status !== "attempted") {
-				fail("Could not copy the selection");
+				notify("Could not copy the selection", "error");
+			} else {
+				notify("Copied to clipboard", "info");
 			}
 		} catch {
-			fail("Could not copy the selection");
+			notify("Could not copy the selection", "error");
 		}
 	});
 }
