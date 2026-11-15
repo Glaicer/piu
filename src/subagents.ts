@@ -1,3 +1,5 @@
+import type { JsonObject, JsonValue } from "@earendil-works/pi-ai";
+
 export const SUBAGENTS_STATUS_KEY = "opentui:subagents/roster";
 
 const LOG_KEY_PREFIX = "opentui:subagents/log/";
@@ -31,7 +33,7 @@ export type SubagentEntry = EntryBase &
 		| {
 				readonly kind: "tool";
 				readonly name: string;
-				readonly args: string;
+				readonly arguments: JsonObject;
 				readonly result?: string;
 				readonly failed?: boolean;
 		  }
@@ -39,11 +41,27 @@ export type SubagentEntry = EntryBase &
 
 const MAX_ENTRIES = 300;
 const MAX_TEXT_CHARS = 4000;
-const MAX_ARGS_CHARS = 200;
+const MAX_ARGS_CHARS = 500;
 const MAX_RESULT_CHARS = 1000;
 
 const clip = (text: string, limit: number) =>
 	text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+
+// why: the entry travels as status text, so a long argument (a file's whole content) is clipped; the card shows what is left.
+function clipArguments(args: unknown): JsonObject {
+	if (!args || typeof args !== "object" || Array.isArray(args)) return {};
+	return Object.fromEntries(
+		Object.entries(args).map(([name, value]) => {
+			const json = typeof value === "string" ? value : JSON.stringify(value);
+			return [
+				name,
+				json.length > MAX_ARGS_CHARS
+					? clip(json, MAX_ARGS_CHARS)
+					: (value as JsonValue),
+			];
+		}),
+	);
+}
 
 function blocksText(content: unknown): string {
 	if (typeof content === "string") return content;
@@ -58,10 +76,55 @@ function blocksText(content: unknown): string {
 		.join("\n");
 }
 
-// why: the installed @chthub/pi-subagents 0.5.0 keeps each child's conversation only in the child's own session file, which Pi writes one whole message at a time, so a log is rebuilt from that file; docs/session-format.md describes it.
-export function transcriptFromSession(text: string): SubagentEntry[] {
+function addAssistantBlocks(
+	entries: SubagentEntry[],
+	tools: Map<string, number>,
+	content: readonly unknown[],
+) {
+	for (const block of content as Record<string, unknown>[]) {
+		if (block?.type === "text" && typeof block.text === "string") {
+			entries.push({
+				n: entries.length,
+				kind: "text",
+				text: clip(block.text, MAX_TEXT_CHARS),
+			});
+		} else if (
+			block?.type === "thinking" &&
+			typeof block.thinking === "string"
+		) {
+			entries.push({
+				n: entries.length,
+				kind: "thinking",
+				text: clip(block.thinking, MAX_TEXT_CHARS),
+			});
+		} else if (block?.type === "toolCall") {
+			tools.set(String(block.id), entries.length);
+			entries.push({
+				n: entries.length,
+				kind: "tool",
+				name: String(block.name),
+				arguments: clipArguments(block.arguments),
+			});
+		}
+	}
+}
+
+export function assistantEntries(content: readonly unknown[]): SubagentEntry[] {
+	const entries: SubagentEntry[] = [];
+	addAssistantBlocks(entries, new Map(), content);
+	return entries;
+}
+
+export type Transcript = {
+	readonly entries: SubagentEntry[];
+	readonly assistantTimestamps: ReadonlySet<number>;
+};
+
+// why: the installed @chthub/pi-subagents 0.5.0 keeps each child's conversation only in the child's own session file, which Pi writes one whole message at a time, so a log is rebuilt from that file; docs/session-format.md describes it. The assistant timestamps tell a live snapshot (below) that its message has been saved.
+export function transcriptFromSession(text: string): Transcript {
 	const entries: SubagentEntry[] = [];
 	const tools = new Map<string, number>();
+	const assistantTimestamps = new Set<number>();
 	for (const line of text.split("\n")) {
 		let record: {
 			type?: unknown;
@@ -81,32 +144,10 @@ export function transcriptFromSession(text: string): SubagentEntry[] {
 				text: clip(blocksText(message.content), MAX_TEXT_CHARS),
 			});
 		} else if (message.role === "assistant" && Array.isArray(message.content)) {
-			for (const block of message.content) {
-				if (block?.type === "text" && typeof block.text === "string") {
-					entries.push({
-						n: entries.length,
-						kind: "text",
-						text: clip(block.text, MAX_TEXT_CHARS),
-					});
-				} else if (
-					block?.type === "thinking" &&
-					typeof block.thinking === "string"
-				) {
-					entries.push({
-						n: entries.length,
-						kind: "thinking",
-						text: clip(block.thinking, MAX_TEXT_CHARS),
-					});
-				} else if (block?.type === "toolCall") {
-					tools.set(String(block.id), entries.length);
-					entries.push({
-						n: entries.length,
-						kind: "tool",
-						name: String(block.name),
-						args: clip(JSON.stringify(block.arguments ?? {}), MAX_ARGS_CHARS),
-					});
-				}
+			if (typeof message.timestamp === "number") {
+				assistantTimestamps.add(message.timestamp);
 			}
+			addAssistantBlocks(entries, tools, message.content);
 		} else if (message.role === "toolResult") {
 			const at = tools.get(String(message.toolCallId));
 			const call = at === undefined ? undefined : entries[at];
@@ -119,7 +160,7 @@ export function transcriptFromSession(text: string): SubagentEntry[] {
 			}
 		}
 	}
-	return entries.slice(-MAX_ENTRIES);
+	return { entries: entries.slice(-MAX_ENTRIES), assistantTimestamps };
 }
 
 type RosterSnapshot = { readonly v: 1; readonly agents: readonly Subagent[] };
@@ -133,6 +174,15 @@ export const serializeRoster = (agents: readonly Subagent[]) =>
 
 export const serializeLog = (entries: readonly SubagentEntry[]) =>
 	JSON.stringify({ v: 1, entries } satisfies LogSnapshot);
+
+export type LiveMessage = {
+	readonly timestamp: number;
+	readonly entries: readonly SubagentEntry[];
+};
+
+// why: the message a child is still streaming exists nowhere on disk until Pi saves it, so the child's reporter (builtin/chat/subagent-live.ts) writes it here, keyed by the message's own timestamp, which is the same in the partial and the saved message.
+export const serializeLive = (message: LiveMessage) =>
+	JSON.stringify({ v: 1, ...message });
 
 function parseSnapshot(text: string | undefined): Record<string, unknown> {
 	if (!text) return {};
@@ -157,11 +207,34 @@ export function parseRoster(text: string | undefined): Subagent[] {
 
 const entryKinds = ["user", "text", "thinking", "tool"];
 
-export function parseLog(text: string | undefined): SubagentEntry[] {
-	const { entries } = parseSnapshot(text);
-	if (!Array.isArray(entries)) return [];
-	return entries.filter(
-		(entry): entry is SubagentEntry =>
-			typeof entry?.n === "number" && entryKinds.includes(entry.kind),
-	);
+const entriesOf = (entries: unknown) =>
+	Array.isArray(entries)
+		? entries.filter(
+				(entry): entry is SubagentEntry =>
+					typeof entry?.n === "number" && entryKinds.includes(entry.kind),
+			)
+		: [];
+
+export const parseLog = (text: string | undefined) =>
+	entriesOf(parseSnapshot(text).entries);
+
+export function parseLive(text: string | undefined): LiveMessage | undefined {
+	const { timestamp, entries } = parseSnapshot(text);
+	return typeof timestamp === "number"
+		? { timestamp, entries: entriesOf(entries) }
+		: undefined;
+}
+
+// why: the view keys its rows by `n`, so a live message continues the saved numbering and keeps the same numbers once it is saved.
+export function withLive(
+	transcript: Transcript,
+	live: LiveMessage | undefined,
+): SubagentEntry[] {
+	const { entries, assistantTimestamps } = transcript;
+	if (!live || assistantTimestamps.has(live.timestamp)) return entries;
+	const first = (entries.at(-1)?.n ?? -1) + 1;
+	return [
+		...entries,
+		...live.entries.map((entry, at) => ({ ...entry, n: first + at })),
+	];
 }

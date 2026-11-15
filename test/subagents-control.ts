@@ -1,6 +1,14 @@
-import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	appendFileSync,
+	mkdtempSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { assistantEntries, serializeLive } from "../src/subagents.ts";
 
 type Block =
 	| { type: "text"; text: string }
@@ -14,18 +22,44 @@ export function subagentsControl() {
 	writeFileSync(file, "");
 	const send = (command: object) =>
 		appendFileSync(file, `${JSON.stringify(command)}\n`);
+	const blocks = (content: (string | Block)[]) =>
+		content.map((block) =>
+			typeof block === "string" ? { type: "text", text: block } : block,
+		);
+	const launch = (agent: string) =>
+		JSON.parse(readFileSync(join(dir, `launch-${agent}.json`), "utf8")) as {
+			env: Record<string, string>;
+			extensions: string[];
+		};
 	return {
 		env: { PIU_STANDIN_SUBAGENTS: dir },
+		launch,
 		say: (agent: string, ...content: (string | Block)[]) =>
+			send({ agent, message: { role: "assistant", content: blocks(content) } }),
+		sayAt: (agent: string, timestamp: number, ...content: (string | Block)[]) =>
 			send({
 				agent,
-				message: {
-					role: "assistant",
-					content: content.map((block) =>
-						typeof block === "string" ? { type: "text", text: block } : block,
-					),
-				},
+				message: { role: "assistant", timestamp, content: blocks(content) },
 			}),
+		// why: plays the child's reporter (builtin/chat/subagent-live.ts): it writes the half-streamed message where the launch told the child to, the way the reporter does, through a temp file and a rename.
+		live: (
+			agent: string,
+			timestamp: number,
+			...content: (string | Block)[]
+		) => {
+			const target = join(
+				launch(agent).env.PIU_SUBAGENT_LIVE_DIR as string,
+				`${agent}.json`,
+			);
+			writeFileSync(
+				`${target}.tmp`,
+				serializeLive({
+					timestamp,
+					entries: assistantEntries(blocks(content)),
+				}),
+			);
+			renameSync(`${target}.tmp`, target);
+		},
 		toolResult: (agent: string, toolCallId: string, output: string) =>
 			send({
 				agent,

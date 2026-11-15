@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseLive } from "../src/subagents.ts";
 import { modalBounds, panelText, panelTitle, startPiu } from "./harness.ts";
 import { subagentsControl } from "./subagents-control.ts";
 
@@ -7,6 +10,7 @@ type Piu = Awaited<ReturnType<typeof startPiu>>;
 type Script = Parameters<typeof startPiu>[0]["script"];
 
 const standIn = join(import.meta.dir, "fixtures/pi-extensions/subagents.ts");
+const reporter = join(import.meta.dir, "../builtin/chat/subagent-live.ts");
 const agentPanel = (frame: string) => panelText(frame, 10);
 
 const spawn = (label: string, background = true, prompt = `Do: ${label}`) => ({
@@ -91,6 +95,12 @@ async function clickCard(piu: Piu, frame: string, id: string) {
 	await piu.mockMouse.click((rows[y] ?? "").indexOf(`agent @${id}`) + 1, y);
 }
 
+async function clickText(piu: Piu, frame: string, text: string) {
+	const rows = frame.split("\n");
+	const y = rows.findIndex((line) => line.includes(text));
+	await piu.mockMouse.click((rows[y] ?? "").indexOf(text), y);
+}
+
 const spawned = (f: string, ...ids: string[]) =>
 	ids.every((id) => cards(f).some((line) => line.includes(`@${id} `)));
 
@@ -109,12 +119,15 @@ test("clicking a card opens that subagent's messages and tool calls, and later o
 	await clickCard(piu, base, "max");
 
 	const open = await piu.waitForFrame(
-		(f) =>
-			f.includes("Reading the sources") && f.includes("export const auth = 1"),
+		(f) => f.includes("Reading the sources") && f.includes("▸ read"),
 	);
 	expect(open).toMatch(/> Do: Audit the auth code/);
 	expect(open).toMatch(/▸ read .*src\/auth\.ts.* done/);
 	expect(open).not.toContain("[sending]");
+	expect(open).not.toContain("export const auth = 1");
+
+	await clickText(piu, open, "▸ read");
+	await piu.waitForFrame((f) => f.includes("export const auth = 1"));
 
 	control.say("max", "Found a second problem");
 	await piu.waitForFrame((f) => f.includes("Found a second problem"));
@@ -342,4 +355,158 @@ test("a resident subagent that is idle for a long time shows working again when 
 
 	const frame = await piu.waitForFrame((f) => f.includes("Sent it"));
 	expect(cards(frame, "Resident job")[0]).toContain("running");
+});
+
+test("a child's launch carries the live reporter and the folder it writes to", async () => {
+	using control = subagentsControl();
+	await using piu = await start(control, {
+		replies: [spawn("Audit the auth code"), "Spawned it"],
+	});
+	await send(piu, "Go");
+	await piu.waitForFrame((f) => spawned(f, "max") && f.includes("Spawned it"));
+
+	const launch = control.launch("max");
+
+	expect(launch.extensions).toEqual([reporter]);
+	expect(existsSync(launch.env.PIU_SUBAGENT_LIVE_DIR as string)).toBe(true);
+});
+
+test("an open view shows the message the child is still streaming, before the child's session has it", async () => {
+	using control = subagentsControl();
+	await using piu = await start(control, {
+		replies: [spawn("Audit the auth code"), "Spawned it"],
+	});
+	await send(piu, "Go");
+	const base = await piu.waitForFrame(
+		(f) => spawned(f, "max") && f.includes("Spawned it"),
+	);
+	await clickCard(piu, base, "max");
+
+	control.live("max", 1000, "Half a sent");
+	await piu.waitForFrame((f) => f.includes("Half a sent"));
+	control.live("max", 1000, "Half a sentence, then a tool", readCall("c1"));
+
+	const frame = await piu.waitForFrame((f) => /▸ read .*src\/auth\.ts/.test(f));
+	expect(frame).toContain("Half a sentence, then a tool");
+});
+
+test("a message saved to the child's session replaces its live snapshot and shows once", async () => {
+	using control = subagentsControl();
+	await using piu = await start(control, {
+		replies: [spawn("Audit the auth code"), "Spawned it"],
+	});
+	await send(piu, "Go");
+	const base = await piu.waitForFrame(
+		(f) => spawned(f, "max") && f.includes("Spawned it"),
+	);
+	await clickCard(piu, base, "max");
+	control.live("max", 1000, "Partial draft");
+	await piu.waitForFrame((f) => f.includes("Partial draft"));
+
+	control.sayAt("max", 1000, "Final answer");
+	control.say("max", "Next message");
+
+	const frame = await piu.waitForFrame((f) => f.includes("Next message"));
+	expect(frame).not.toContain("Partial draft");
+	expect(frame.split("Final answer")).toHaveLength(2);
+});
+
+test("a live snapshot of a newer message shows after the saved ones", async () => {
+	using control = subagentsControl();
+	await using piu = await start(control, {
+		replies: [spawn("Audit the auth code"), "Spawned it"],
+	});
+	await send(piu, "Go");
+	const base = await piu.waitForFrame(
+		(f) => spawned(f, "max") && f.includes("Spawned it"),
+	);
+	await clickCard(piu, base, "max");
+	control.sayAt("max", 1000, "First done");
+	control.live("max", 2000, "Second in progress");
+
+	const frame = await piu.waitForFrame(
+		(f) => f.includes("First done") && f.includes("Second in progress"),
+	);
+	expect(frame.indexOf("First done")).toBeLessThan(
+		frame.indexOf("Second in progress"),
+	);
+});
+
+test("the reporter writes the reply a real Pi is still streaming, and the whole reply when it ends", async () => {
+	const live = mkdtempSync(join(tmpdir(), "piu-live-"));
+	try {
+		const reply = Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ");
+		await using piu = await startPiu({
+			script: { replies: [reply], tokensPerSecond: 20, tokenSize: 1 },
+			extraBackendArgs: ["-e", reporter],
+			backendEnv: {
+				PI_SUBAGENT_AGENT_ID: "max",
+				PIU_SUBAGENT_LIVE_DIR: live,
+			},
+		});
+		const snapshot = () => {
+			try {
+				return parseLive(readFileSync(join(live, "max.json"), "utf8"));
+			} catch {
+				return undefined;
+			}
+		};
+		const textOf = () =>
+			snapshot()
+				?.entries.map((entry) => ("text" in entry ? entry.text : ""))
+				.join("") ?? "";
+
+		await send(piu, "Go");
+		await piu.waitForFrame(() => textOf().includes("word1"));
+		const partial = textOf();
+		expect(reply.startsWith(partial)).toBe(true);
+		expect(partial.length).toBeLessThan(reply.length);
+
+		await piu.waitForFrame(() => textOf() === reply);
+		expect(typeof snapshot()?.timestamp).toBe("number");
+	} finally {
+		rmSync(live, { recursive: true, force: true });
+	}
+});
+
+test("the view folds thinking and tool results like the main chat, and a click or the keyboard opens them", async () => {
+	using control = subagentsControl();
+	await using piu = await start(control, {
+		replies: [spawn("Audit the auth code"), "Spawned it"],
+	});
+	await send(piu, "Go");
+	const base = await piu.waitForFrame(
+		(f) => spawned(f, "max") && f.includes("Spawned it"),
+	);
+	control.say(
+		"max",
+		{ type: "thinking", thinking: "Weighing the options" },
+		"Here is my answer",
+		readCall("c1"),
+	);
+	control.toolResult("max", "c1", "export const auth = 1");
+	await clickCard(piu, base, "max");
+
+	const folded = await piu.waitForFrame(
+		(f) => f.includes("Here is my answer") && f.includes("▸ read"),
+	);
+	expect(folded).toContain("▸ Thinking");
+	expect(folded).not.toContain("Weighing the options");
+	expect(folded).not.toContain("export const auth = 1");
+
+	await clickText(piu, folded, "▸ Thinking");
+	const thought = await piu.waitForFrame((f) =>
+		f.includes("Weighing the options"),
+	);
+	expect(thought).toContain("▾ Thinking");
+
+	piu.mockInput.pressArrow("down");
+	await piu.waitForFrame((f) => f.includes("› ▾ Thinking"));
+	piu.mockInput.pressArrow("down");
+	await piu.waitForFrame((f) => f.includes("› ▸ read"));
+	piu.mockInput.pressEnter();
+	const open = await piu.waitForFrame((f) =>
+		f.includes("export const auth = 1"),
+	);
+	expect(open).toContain("› ▾ read");
 });

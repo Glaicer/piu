@@ -1,17 +1,21 @@
-import { readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import {
+	parseLive,
 	SUBAGENTS_STATUS_KEY,
 	type Subagent,
-	type SubagentEntry,
 	serializeLog,
 	serializeRoster,
 	subagentLogKey,
 	subagentStatuses,
 	transcriptFromSession,
+	withLive,
 } from "../../src/subagents.ts";
 
 const POLL_MS = 250;
@@ -19,6 +23,9 @@ const GRACE_MS = 3000;
 // why: the roster entry type and fields are copied from @chthub/pi-subagents 0.5.0 (roster-state.ts, roster.ts); re-read them when that package is upgraded.
 const ROSTER_TYPE = "pi-subagents-roster";
 const SUBAGENT_TOOL = /^agent_(spawn|send|stop)$/;
+// why: @chthub/pi-subagents 0.5.0 (child-launch.ts) emits this just before each child launch and revival with a fresh { env, extensions }; the event is copied from its README, so re-read it when the package is upgraded.
+const CHILD_LAUNCH_EVENT = "pi-subagents:child-launch:v1";
+const REPORTER = fileURLToPath(new URL("./subagent-live.ts", import.meta.url));
 
 type RosterEntry = {
 	agentId?: unknown;
@@ -41,7 +48,8 @@ function latestRoster(ctx: ExtensionContext): RosterEntry[] {
 
 export default function (pi: ExtensionAPI) {
 	const published = new Map<string, string | undefined>();
-	const sizes = new Map<string, number>();
+	const sizes = new Map<string, string>();
+	let liveDir: string | undefined;
 	let ctx: ExtensionContext | undefined;
 	let timer: ReturnType<typeof setInterval> | undefined;
 	let graceUntil = 0;
@@ -62,22 +70,36 @@ export default function (pi: ExtensionAPI) {
 		timer = undefined;
 	}
 
-	function readLog(id: string, path: string) {
-		let size: number;
+	const stamp = (path: string | undefined) => {
 		try {
-			size = statSync(path).size;
+			const { size, mtimeMs } = statSync(path as string);
+			return `${size}:${mtimeMs}`;
 		} catch {
-			return;
+			return "-";
 		}
-		if (sizes.get(id) === size) return;
-		sizes.set(id, size);
-		let entries: SubagentEntry[];
+	};
+
+	const readText = (path: string | undefined) => {
 		try {
-			entries = transcriptFromSession(readFileSync(path, "utf8"));
+			return readFileSync(path as string, "utf8");
 		} catch {
-			return;
+			return undefined;
 		}
-		publish(subagentLogKey(id), serializeLog(entries));
+	};
+
+	// why: Pi saves a child's message only when it ends, so the half-streamed one comes from the child's reporter (subagent-live.ts) in liveDir and is dropped once the session holds the message with the same timestamp. The session file does not exist before the first message ends.
+	function readLog(id: string, path: string | undefined) {
+		const livePath = liveDir && join(liveDir, `${id}.json`);
+		const signature = `${stamp(path)}|${stamp(livePath)}`;
+		if (sizes.get(id) === signature) return;
+		sizes.set(id, signature);
+		const session = readText(path);
+		const live = parseLive(readText(livePath));
+		if (session === undefined && !live) return;
+		publish(
+			subagentLogKey(id),
+			serializeLog(withLive(transcriptFromSession(session ?? ""), live)),
+		);
 	}
 
 	function refresh() {
@@ -98,9 +120,10 @@ export default function (pi: ExtensionAPI) {
 					label: entry.label,
 					status: entry.status as Subagent["status"],
 				});
-				if (typeof entry.sessionPath === "string") {
-					readLog(entry.agentId, entry.sessionPath);
-				}
+				readLog(
+					entry.agentId,
+					typeof entry.sessionPath === "string" ? entry.sessionPath : undefined,
+				);
 			}
 		} catch {
 			stop();
@@ -123,6 +146,19 @@ export default function (pi: ExtensionAPI) {
 		timer.unref?.();
 	}
 
+	const unsubscribe = pi.events.on(CHILD_LAUNCH_EVENT, (data) => {
+		// why: Pi swallows a listener's exception and the package aborts a launch whose `error` is set; a broken viewer must never stop a subagent, so a failure here leaves the launch as it was.
+		try {
+			const launch = data as {
+				env: Record<string, string>;
+				extensions: string[];
+			};
+			liveDir ??= mkdtempSync(join(tmpdir(), "piu-subagents-live-"));
+			launch.env.PIU_SUBAGENT_LIVE_DIR = liveDir;
+			launch.extensions.push(REPORTER);
+		} catch {}
+	});
+
 	pi.on("tool_call", (event, context) => {
 		if (SUBAGENT_TOOL.test(event.toolName)) arm(context);
 	});
@@ -133,7 +169,10 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", () => {
+		unsubscribe();
 		stop();
+		if (liveDir) rmSync(liveDir, { recursive: true, force: true });
+		liveDir = undefined;
 		for (const key of published.keys()) publish(key, undefined);
 		published.clear();
 		sizes.clear();

@@ -8,7 +8,7 @@ import {
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-// why: stand-in for the installed @chthub/pi-subagents 0.5.0; docs/agents/testing.md lists the behaviour it copies. Children are not processes: the test (test/subagents-control.ts) writes commands to <PIU_STANDIN_SUBAGENTS>/control.jsonl and this file turns them into what the real package leaves behind: roster entries in the parent session and a child session file.
+// why: stand-in for the installed @chthub/pi-subagents 0.5.0; docs/agents/testing.md lists the behaviour it copies. Children are not processes: the test (test/subagents-control.ts) writes commands to <PIU_STANDIN_SUBAGENTS>/control.jsonl and this file turns them into what the real package leaves behind: roster entries in the parent session and a child session file. Before each spawn it emits the child-launch event the way child-launch.ts does (synchronous, a set `error` or a malformed launch aborts the spawn) and records the launch in <PIU_STANDIN_SUBAGENTS>/launch-<agentId>.json, so a test can see what a listener added.
 const DIR = process.env.PIU_STANDIN_SUBAGENTS ?? "";
 const ROSTER_TYPE = "pi-subagents-roster";
 const NAMES = ["max", "zoe", "kai", "ivy", "rex"];
@@ -29,6 +29,22 @@ type Command =
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const text = (value: string) => [{ type: "text" as const, text: value }];
+
+function prepareLaunch(pi: ExtensionAPI, agentId: string) {
+	const launch: { env: Record<string, string>; extensions: string[] } = {
+		env: {},
+		extensions: [],
+	};
+	pi.events.emit("pi-subagents:child-launch:v1", launch);
+	if ("error" in launch)
+		throw new Error("child launch rejected by integration");
+	const valid =
+		Object.values(launch.env).every((value) => typeof value === "string") &&
+		Array.isArray(launch.extensions) &&
+		launch.extensions.every((path) => typeof path === "string" && path.trim());
+	if (!valid) throw new TypeError("malformed child launch");
+	writeFileSync(join(DIR, `launch-${agentId}.json`), JSON.stringify(launch));
+}
 
 export default function (pi: ExtensionAPI) {
 	const roster = new Map<string, Entry>();
@@ -129,6 +145,7 @@ export default function (pi: ExtensionAPI) {
 				run_in_background?: boolean;
 			};
 			const agentId = NAMES[counter++ % NAMES.length] as string;
+			prepareLaunch(pi, agentId);
 			const agent: Entry = {
 				agentId,
 				label,
