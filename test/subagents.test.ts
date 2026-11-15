@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { panelText, panelTitle, startPiu } from "./harness.ts";
+import { modalBounds, panelText, panelTitle, startPiu } from "./harness.ts";
 import { subagentsControl } from "./subagents-control.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -125,6 +125,33 @@ test("clicking a card opens that subagent's messages and tool calls, and later o
 	);
 	expect(cards(closed)[0]).toContain("running");
 	expect(closed).not.toContain("[sending]");
+});
+
+test("the subagent view fills the middle three quarters of the terminal and follows a resize", async () => {
+	using control = subagentsControl();
+	await using piu = await start(control, {
+		replies: [spawn("Audit the auth code"), "Spawned it"],
+	});
+	await send(piu, "Go");
+	const base = await piu.waitForFrame(
+		(f) => spawned(f, "max") && f.includes("Spawned it"),
+	);
+	control.say("max", "Reading the sources");
+
+	await clickCard(piu, base, "max");
+	await piu.waitForFrame((f) => f.includes("Reading the sources"));
+	expect(modalBounds(piu)).toEqual({
+		left: 20,
+		top: 4,
+		width: 120,
+		height: 22,
+	});
+
+	piu.resize(100, 40);
+	await piu.waitForFrame(
+		(f) => modalBounds(piu)?.width === 75 && f.includes("Reading the sources"),
+	);
+	expect(modalBounds(piu)).toEqual({ left: 13, top: 5, width: 75, height: 30 });
 });
 
 test("a card can be selected and opened by keyboard, and Esc closes the view without touching the subagent", async () => {
@@ -258,9 +285,11 @@ test("without a subagent source the chat shows no card", async () => {
 
 test("the view follows new output at the bottom, and keeps its place when the reader has scrolled up", async () => {
 	using control = subagentsControl();
-	await using piu = await start(control, {
-		replies: [spawn("Job"), "Spawned it"],
-	});
+	await using piu = await start(
+		control,
+		{ replies: [spawn("Job"), "Spawned it"] },
+		{ width: 220 },
+	);
 	await send(piu, "Go");
 	const base = await piu.waitForFrame(
 		(f) => spawned(f, "max") && f.includes("Spawned it"),

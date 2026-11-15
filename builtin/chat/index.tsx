@@ -1,5 +1,4 @@
 import type { SyntaxStyle } from "@opentui/core";
-import { useRenderer } from "@opentui/solid";
 import { createMemo, For, Index, onCleanup, Show } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
 import type { BackgroundJob } from "../../src/background.ts";
@@ -39,12 +38,11 @@ function Messages(props: { context: ModuleContext }) {
 			(message): message is ToolResultMessage =>
 				message.role === "toolResult" && message.toolCallId === id,
 		);
-	const renderer = useRenderer();
 	const openSubagent = (id: string) =>
 		props.context.actions.openModal(
 			moduleModal(subagentModule(id), {
-				width: Math.min(100, renderer.width - 4),
-				height: renderer.height - 4,
+				width: "75%",
+				height: "75%",
 			}),
 		);
 	const selection = createSelection();

@@ -4,22 +4,22 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Критерии приёмки
 
-- [ ] Окно субагента занимает 75% ширины и 75% высоты терминала (с округлением вниз, но не меньше разумного минимума) и стоит по центру. При изменении размера терминала окно пересчитывается.
-- [ ] Пока окно открыто, видимая часть Layout за ним затемнена. После закрытия Layout выглядит как до открытия.
-- [ ] Затемнение — опция Modal, а не код окна субагента: другие Modal без этой опции рисуются как раньше.
-- [ ] Клик вне окна закрывает его, как у любого Modal; клик внутри окна не закрывает. Фокус после закрытия возвращается по обычным правилам.
-- [ ] Содержимое окна (поток сообщений субагента, прокрутка) не меняется.
-- [ ] Затемнение работает в светлой и тёмной теме и не ломает цвета самого окна.
+- [x] Окно субагента занимает 75% ширины и 75% высоты терминала (с округлением вниз, но не меньше разумного минимума; фактически округляет Yoga и минимума нет, см. Comments) и стоит по центру. При изменении размера терминала окно пересчитывается.
+- [x] Пока окно открыто, видимая часть Layout за ним затемнена. После закрытия Layout выглядит как до открытия.
+- [x] Затемнение — опция Modal, а не код окна субагента: другие Modal без этой опции рисуются как раньше. (Снято, см. Comments.)
+- [x] Клик вне окна закрывает его, как у любого Modal; клик внутри окна не закрывает. Фокус после закрытия возвращается по обычным правилам.
+- [x] Содержимое окна (поток сообщений субагента, прокрутка) не меняется.
+- [x] Затемнение работает в светлой и тёмной теме и не ломает цвета самого окна.
 
 ### Проверки
 
-- [ ] Проверка через `startPiu` открывает окно субагента и подтверждает его размер и положение по кадру для двух размеров терминала.
-- [ ] Проверка подтверждает, что Modal без опции затемнения рисуется как раньше.
-- [ ] Существующие проверки окна субагента продолжают проходить.
+- [x] Проверка через `startPiu` открывает окно субагента и подтверждает его размер и положение по кадру для двух размеров терминала.
+- [x] Проверка подтверждает, что Modal без опции затемнения рисуется как раньше. (Снято, см. Comments.)
+- [x] Существующие проверки окна субагента продолжают проходить.
 
 ## Notes
 
@@ -48,6 +48,7 @@ The subagent view opens with percentage sizes, `moduleModal(subagentModule(id), 
 Rejected: cell sizes from `renderer.width * 0.75` / `Math.floor`: `ModalRequest` holds plain numbers read once, so the window would not follow a resize without making `ModalRequest` reactive.
 
 Decisions agreed with the user, to record under `## Comments` when closing:
+
 - No dimming option on Modal: dimming already exists for every Modal (criteria 2 and 6 hold already); criterion 3 and its check are dropped because "other Modals as before" means "dimmed".
 - Rounding follows Yoga (nearest cell, e.g. 121×41 gives 91×31), not "down"; the difference is at most one cell.
 - No minimum size: 75% of a terminal always fits it.
@@ -91,3 +92,12 @@ Seam: `startPiu` (`test/harness.ts`), measuring the Modal by its fill. Model tes
 - `modalBounds` must be a bounding box (min/max of raised cells), not the first contiguous run: a scrollbar or other painted cell inside the Modal would otherwise cut it short. Keep the test's log short so no scrollbar shows; if the measured width is 119 with a scrollbar column in the right edge, stop and report.
 - Dimmed Layout cells never equal `raised`, and `modalBounds` only works in the dark Theme (the test's default); don't add `terminalBackground`.
 - Mutation check for step 1: replace `"75%"` with `100` in `openSubagent` and watch the new test go red on the width, then restore.
+
+## Comments
+
+- No dimming option on Modal: dimming already exists for every Modal (`src/modal.tsx` backdrop), so criteria 2 and 6 hold with no new code. Criterion 3 and its check ("a Modal without the option is drawn as before") were dropped by agreement: every Modal is dimmed, there is no option.
+- Size follows Yoga's rounding (nearest cell), not "down": 160×30 gives 120×22 at (20,4), 100×40 gives 75×30 at (13,5). No minimum size: 75% always fits.
+- Deviation: the test "the view follows new output at the bottom…" now starts a 220-column terminal. The subagent view now covers the Agent card's status column at 160 columns, and that test waited for `idle` on the card.
+- `pnpm check` stops at `biome check` on formatting in files this ticket did not touch (`test/input-dir.test.ts`, `test/modal.test.ts`). Five tests fail the same way on `HEAD` without this ticket (`design`, `session` ×2, `polish`, `ask-user`); the steer test in the full run is a timing flake.
+- Verified: replacing `"75%"` with `100` turns the new test red on width and left (100 instead of 120, 30 instead of 20). `test/subagents.test.ts` ran 10 times in a row: 9 clean, and once an unrelated test that never opens the view (`a resident subagent that is idle…`, a 3.5 s sleep under the 5 s limit) timed out; it then passed 12 of 12 alone.
+- Not covered by a test: the dimming and the light Theme (both come from the existing Modal backdrop, measured at planning time), and the click outside or inside the view.

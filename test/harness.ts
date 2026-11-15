@@ -125,6 +125,29 @@ export function onModalFill(
 	return false;
 }
 
+// why: finds the Modal by its dark-Theme fill; the dimmed Layout never has this colour.
+export function modalBounds(piu: Awaited<ReturnType<typeof startPiu>>) {
+	const raised = RGBA.fromHex(darkTheme.raised);
+	let left = Number.POSITIVE_INFINITY;
+	let right = -1;
+	let top = Number.POSITIVE_INFINITY;
+	let bottom = -1;
+	piu.captureSpans().lines.forEach((line, y) => {
+		let column = 0;
+		for (const span of line.spans) {
+			if (span.bg.equals(raised)) {
+				left = Math.min(left, column);
+				right = Math.max(right, column + span.width - 1);
+				top = Math.min(top, y);
+				bottom = Math.max(bottom, y);
+			}
+			column += span.width;
+		}
+	});
+	if (right < 0) return undefined;
+	return { left, top, width: right - left + 1, height: bottom - top + 1 };
+}
+
 export function messageBar(text: string) {
 	return `${glyphs.bar} ${text}`;
 }
