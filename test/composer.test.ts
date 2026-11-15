@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { RGBA, TextareaRenderable } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
 import {
@@ -205,13 +205,13 @@ test("a short terminal keeps the draft cursor and directory visible when the edi
 	const frame = await piu.waitForFrame(
 		(frame) =>
 			inputArea(frame).includes("Short 20") &&
-			inputArea(frame).includes(piu.dir),
+			inputArea(frame).includes(basename(piu.dir)),
 	);
 	const field = editor(piu);
 	expect(field.height).toBeGreaterThanOrEqual(4);
 	expect(field.height).toBeLessThan(16);
 	expect(
-		frame.split("\n").findIndex((line) => line.includes(piu.dir)),
+		frame.split("\n").findIndex((line) => line.includes(basename(piu.dir))),
 	).toBeGreaterThanOrEqual(field.screenY + field.height);
 	expect(piu.renderer.getCursorState().visible).toBe(true);
 });

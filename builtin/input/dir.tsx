@@ -1,4 +1,5 @@
 import { type ChildProcess, execFile } from "node:child_process";
+import { basename } from "node:path";
 import { CliRenderEvents, type TextRenderable } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
 import { stringWidth } from "bun";
@@ -76,7 +77,7 @@ export function Directory(props: { context: ModuleContext }) {
 					element = node;
 				}}
 			>
-				{label(cwd, branch(), width())}
+				{label(basename(cwd) || cwd, branch(), width())}
 			</text>
 		</box>
 	);

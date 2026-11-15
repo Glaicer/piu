@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { stringWidth } from "bun";
 import { inputArea, startPiu } from "./harness.ts";
 
@@ -37,9 +37,9 @@ test("the directory Module is the last input line and omits the branch outside G
 		width: 100,
 	});
 	const frame = await piu.waitForFrame((frame) =>
-		inputArea(frame).includes(project.cwd),
+		inputArea(frame).includes(basename(project.cwd)),
 	);
-	expect(directoryLine(frame)).toBe(project.cwd);
+	expect(directoryLine(frame)).toBe(basename(project.cwd));
 	expect(inputArea(frame)).toContain("/ commands · @ files");
 });
 
@@ -54,7 +54,7 @@ test("the directory line shows the current branch even before the first commit",
 	const frame = await piu.waitForFrame((frame) =>
 		inputArea(frame).includes(":feature/composer"),
 	);
-	expect(directoryLine(frame)).toBe(`${project.cwd}:feature/composer`);
+	expect(directoryLine(frame)).toBe(`${basename(project.cwd)}:feature/composer`);
 });
 
 test("the directory line refreshes after switching branches", async () => {
@@ -70,7 +70,7 @@ test("the directory line refreshes after switching branches", async () => {
 	const frame = await piu.waitForFrame((frame) =>
 		inputArea(frame).includes(":after"),
 	);
-	expect(directoryLine(frame)).toBe(`${project.cwd}:after`);
+	expect(directoryLine(frame)).toBe(`${basename(project.cwd)}:after`);
 });
 
 test("long directory and branch names retain their endings on one line", async () => {
@@ -121,6 +121,6 @@ test("the directory Module can be placed without the prompt", async () => {
 			placement: { where: ["input.dir"] },
 		},
 	});
-	const frame = await piu.waitForFrame((frame) => frame.includes(project.cwd));
+	const frame = await piu.waitForFrame((frame) => frame.includes(basename(project.cwd)));
 	expect(frame).not.toContain("/ commands · @ files");
 });
