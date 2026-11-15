@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** wontfix
 
 ## Критерии приёмки
 
@@ -34,3 +34,7 @@
 
 - [ ] Добавить `"command.model": "ctrl+x m"` и `"command.reasoning": "ctrl+x t"` в личный Config (`~/.piu/config.json`).
 - [ ] Удалить `selector-chords.ts` из agent dir и его строку `-extensions/selector-chords.ts` из Pi settings.
+
+## Comments
+
+- Не реализуем: вместо двухклавишных сочетаний будет другая система управления комбинациями клавиш.

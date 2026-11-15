@@ -4,7 +4,7 @@
 
 Почти вся логика `modes` работает через RPC и так: правка системного промпта в `before_agent_start`, `setActiveTools`, `setModel`, `setThinkingLevel`, выбор через Dialog, статус. Не работает только шорткат: `registerShortcut` в RPC не доходит. Поэтому Pi extension переносится почти как есть, а piu добавляет клавишу и показ режима.
 
-**Blocked by:** None (can start immediately).
+**Blocked by:** 33 (действия Extensions, несколько сочетаний и последовательности в keybindings).
 
 **Status:** ready-for-agent
 
@@ -28,7 +28,7 @@
 
 - Прочитать `docs/agents/pi-extensions.md` до начала: дубли имён tools на Pi-Bolt — ошибка запуска, и `setActiveTools()` может перебить чужой `before_agent_start`.
 - Extension загружает свои `commands` и Pi extension, только если один из его Modules стоит в Placement: индикатор решает и это.
-- Keybindings сейчас вызывают только Commands piu (`command.<name>`), а `/mode` — команда Pi extension. Как Alt+M доходит до Pi extension и не столкнутся ли `/mode` piu и Pi в `/`, решить в плане тикета.
+- Alt+M — действие Extension `modes` со своим сочетанием по умолчанию (тикет 33), а не `command.<name>`: `/mode` — команда Pi extension. Как действие доходит до Pi extension и не столкнутся ли `/mode` piu и Pi в `/`, решить в плане тикета.
 - Исходник для справки: `modes.ts` и `modes/plan.md` в agent dir (`modes.ts` выключен в Pi settings).
 
 ## После приёмки (вручную)
