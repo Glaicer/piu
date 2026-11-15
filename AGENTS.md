@@ -23,7 +23,7 @@ Before writing or changing a Pi extension (`builtin/*/pi-extension.ts`), its tes
 
 ### Issue tracker
 
-Issues and specs live as local markdown files under `.scratch/<feature>/`. Before committing a finished ticket, close it: tick its checkboxes, set `Status: done`, and record every deviation from the ticket under `## Comments`. A leftover that a later ticket owns also goes into that ticket as a `From NN:` comment, or its agent never sees it. See `docs/agents/issue-tracker.md`.
+Issues and specs live as local markdown files under `.scratch/<feature>/`. Number new tickets globally across features and bugs: use the next number after the highest existing ticket number, including closed tickets. Leave historical numbers and references intact. Before committing a finished ticket, close it: tick its checkboxes, set `Status: done`, and record every deviation from the ticket under `## Comments`. A leftover that a later ticket owns also goes into that ticket as a `From NN:` comment, or its agent never sees it. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
