@@ -7,7 +7,7 @@ import {
 
 export type CardColors = {
 	fill: string;
-	edge: string;
+	edge?: string;
 	title?: string;
 	titleColor?: string;
 	joinedAt?: number;
@@ -29,6 +29,19 @@ export function paintCard(colors: () => CardColors) {
 			joinedAt,
 		} = colors();
 		const fill = parseColor(fillColor);
+		if (edgeColor === undefined) {
+			buffer.fillRect(x, y, width, height, fill);
+			if (title && titleColor)
+				buffer.drawTextFit(
+					` ${title} `,
+					x + 2,
+					y + 1,
+					width - 3,
+					parseColor(titleColor),
+					fill,
+				);
+			return;
+		}
 		const edge = parseColor(edgeColor);
 		const right = x + width - 1;
 		const bottom = y + height - 1;

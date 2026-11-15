@@ -6,6 +6,7 @@ import {
 	inputArea,
 	messageBar,
 	modalTitle,
+	onModalFill,
 	panelText,
 	startPiu,
 } from "./harness.ts";
@@ -116,6 +117,14 @@ test("the model picker is a raised Card with its name and a visible dismissal hi
 	const frame = await piu.waitForFrame((frame) => frame.includes("faux-2"));
 	expect(frame).toContain(modalTitle("Models"));
 	expect(frame).toContain("Esc close");
+	const rows = frame.split("\n");
+	const top = rows.findIndex((line) => line.includes(modalTitle("Models")));
+	const left = (rows[top] ?? "").indexOf(modalTitle("Models")) - 2;
+	expect(onModalFill(piu, left, top)).toBe(true);
+	expect(onModalFill(piu, left, top - 1)).toBe(true);
+	expect(rows[top - 1]?.slice(left, left + 20).trim()).toBe("");
+	expect(rows[top]?.[left]).toBe(" ");
+	expect(rows[top + 1]?.[left]).toBe(" ");
 	const title = piu
 		.captureSpans()
 		.lines.flatMap((line) => line.spans)

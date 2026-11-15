@@ -176,7 +176,7 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 									pick(model);
 								}}
 							>
-								<box flexDirection="row">
+								<box flexDirection="row" paddingRight={1}>
 									<text
 										fg={theme.accent}
 										flexShrink={0}

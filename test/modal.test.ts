@@ -9,6 +9,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { RGBA } from "@opentui/core";
+import { darkTheme } from "../src/theme.ts";
 import { type FauxScript, inputArea, messageBar, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -355,6 +357,22 @@ test("filtering keeps the highlighted model when it still matches", async () => 
 	piu.mockInput.pressEnter();
 	await piu.waitForFrame((f) => f.includes("faux-2") && !f.includes("faux-1"));
 });
+
+test("a gap separates the provider from the model list's scrollbar", async () => {
+	await using piu = await start({ replies: [], manyModels: true });
+	await clickText(piu, "faux-1");
+	await piu.waitForFrame((f) => f.includes("extra-00"));
+	const selected = RGBA.fromHex(darkTheme.selection);
+	const highlights = piu
+		.captureSpans()
+		.lines.map((line) =>
+			line.spans
+				.filter((span) => span.bg.equals(selected))
+				.map((span) => span.text)
+				.join(""),
+		);
+	expect(highlights.find((text) => text.includes("faux-1"))).toEndWith("faux ");
+}, 20000);
 
 test("keyboard navigation scrolls the model list to the highlighted row", async () => {
 	await using piu = await start({ replies: [], manyModels: true });

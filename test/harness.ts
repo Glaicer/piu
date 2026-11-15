@@ -9,16 +9,18 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { JsonObject } from "@earendil-works/pi-ai";
-import type {
-	ClipboardService,
-	ClipboardWriteOptions,
-	ThemeMode,
+import {
+	type ClipboardService,
+	type ClipboardWriteOptions,
+	RGBA,
+	type ThemeMode,
 } from "@opentui/core";
 import type { ManualClock } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { stringWidth } from "bun";
 import { createApp, type ExitRequest } from "../src/app.tsx";
 import type { UpdateCheckOptions } from "../src/backend-updates.ts";
+import { darkTheme } from "../src/theme.ts";
 import "./hooks.ts";
 
 const piBin = join(import.meta.dir, "../node_modules/.bin/pi");
@@ -103,10 +105,24 @@ export function panelTitle(name: string) {
 	return `${titlePrefix}${name} `;
 }
 
-export const modalTitle = panelTitle;
+export function modalTitle(name: string) {
+	return ` ${name} `;
+}
 
-export function modalTopEdge(width: number) {
-	return `${glyphs.topLeft}${glyphs.top.repeat(width - 2)}${glyphs.topRight}`;
+// why: a Modal has no contour, so tests find it by its fill, which no other surface uses.
+export function onModalFill(
+	piu: Awaited<ReturnType<typeof startPiu>>,
+	x: number,
+	y: number,
+) {
+	const line = piu.captureSpans().lines[y];
+	let column = 0;
+	for (const span of line?.spans ?? []) {
+		if (x < column + span.width)
+			return span.bg.equals(RGBA.fromHex(darkTheme.raised));
+		column += span.width;
+	}
+	return false;
 }
 
 export function messageBar(text: string) {

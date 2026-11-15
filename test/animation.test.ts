@@ -4,7 +4,7 @@ import { ManualClock } from "@opentui/core/testing";
 import {
 	type FauxScript,
 	focusedPanels,
-	modalTopEdge,
+	onModalFill,
 	startPiu,
 } from "./harness.ts";
 import { hooks } from "./hooks.ts";
@@ -142,11 +142,13 @@ for (const animations of [true, false]) {
 			top: 2,
 		});
 		expect(close).toBeFunction();
-		const border = modalTopEdge(20);
-		expect((await app.frame()).split("\n")[2]?.slice(4, 24)).toBe(border);
+		await app.frame();
+		expect(onModalFill(app.piu, 4, 2)).toBe(true);
+		expect(onModalFill(app.piu, 23, 4)).toBe(true);
+		expect(onModalFill(app.piu, 24, 4)).toBe(false);
 		close?.();
 		const closed = await app.frame();
-		expect(closed.split("\n")[2]?.slice(4, 24)).not.toBe(border);
+		expect(onModalFill(app.piu, 4, 2)).toBe(false);
 		expect(focusedPanels(app.piu, closed)).toEqual(["input"]);
 	});
 
@@ -166,9 +168,9 @@ for (const animations of [true, false]) {
 		await clickText(app.piu, "open inner");
 		const stacked = await app.frame();
 		expect(stacked).toContain("INNER");
-		expect(rowOf(stacked, "INNER")).toBe(4);
+		expect(rowOf(stacked, "INNER")).toBe(5);
 		expect(columnOf(stacked, "INNER")).toBe(7);
-		expect(stacked.split("\n")[2]?.slice(4, 24)).toBe(modalTopEdge(20));
+		expect(onModalFill(app.piu, 4, 2)).toBe(true);
 		app.piu.mockInput.pressEscape();
 		const frame = await app.frame();
 		expect(frame).not.toContain("INNER");
