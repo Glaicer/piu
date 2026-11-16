@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
 import { RGBA, TextAttributes } from "@opentui/core";
 import { darkTheme, lightTheme, type Theme } from "../src/theme.ts";
-import { startPiu } from "./harness.ts";
+import {
+	bottomLine,
+	bottomPanel,
+	modalBounds,
+	onModalFill,
+	panelBoxes,
+	startPiu,
+} from "./harness.ts";
 
 const none = { replies: [] };
 
@@ -293,6 +300,75 @@ test("a light terminal gets a white screen with black text and a red signal", as
 	expect(fgIs(spanAt(spans, "-"), "#e10600")).toBe(true);
 	expect(bgIs(spanAt(spans, "function"), "#f5f5f5")).toBe(true);
 	expect(bgIs(spanAt(spans, "inline"), "#f1f3f8")).toBe(true);
+});
+
+test("a dark terminal gets a graphite screen with light text, a red signal and a dark grey bottom line", async () => {
+	await using piu = await startPiu({
+		script: { replies: [swissReply] },
+		terminalBackground: "dark",
+	});
+
+	const spans = await swissSpans(piu, darkTheme);
+
+	const words = spanAt(spans, "words");
+	expect(fgIs(words, "#ececec") && bgIs(words, "#121212")).toBe(true);
+	expect(fgIs(spanAt(spans, "-"), "#ff453a")).toBe(true);
+	const strong = spanAt(spans, "strong");
+	expect(fgIs(strong, "#ececec") && bold(strong)).toBe(true);
+	const inline = spanAt(spans, "inline");
+	expect(fgIs(inline, "#6ea8ff") && bgIs(inline, "#1b2333")).toBe(true);
+	expect(bgIs(spanAt(spans, "function"), "#1a1a1a")).toBe(true);
+	expect(fgIs(spanAt(spans, "42"), "#ffa04d")).toBe(true);
+	expect(fgIs(spanAt(spans, '"x"'), "#5fd38d")).toBe(true);
+	expect(fgIs(spanAt(spans, "string"), "#c58af9")).toBe(true);
+	expect(fgIs(spanAt(spans, "// note"), "#6f6f6f")).toBe(true);
+	const you = spanAt(spans, "Swiss");
+	expect(bgIs(you, "#222222")).toBe(true);
+	expect(
+		piu.renderer.getCursorState().color.equals(RGBA.fromHex("#ff453a")),
+	).toBe(true);
+
+	await piu.waitForFrame(
+		(frame) =>
+			bottomLine(frame).includes("faux-1") &&
+			bottomLine(frame).includes("no reasoning"),
+	);
+	const row = panelBoxes(piu).find((box) => box.id === bottomPanel)?.y ?? -1;
+	const bottom = piu.captureSpans().lines[row]?.spans ?? [];
+	expect(bottom.length).toBeGreaterThan(0);
+	expect(bottom.every((span) => bgIs(span, "#262626"))).toBe(true);
+	const model = bottom.find((span) => span.text.includes("faux-1"));
+	expect(fgIs(model, "#ffffff") && bold(model)).toBe(true);
+	const reasoning = bottom.find((span) => span.text.includes("no reasoning"));
+	expect(fgIs(reasoning, "#a8a8a8")).toBe(true);
+});
+
+test("a Modal on a dark terminal stands out from the dimmed graphite behind it", async () => {
+	await using piu = await startPiu({
+		script: none,
+		terminalBackground: "dark",
+	});
+	await piu.waitForFrame((frame) => frame.includes("faux-1"));
+	piu.mockInput.pressKey("l", { ctrl: true });
+	await piu.waitForFrame(
+		(frame) => frame.includes("search models") && frame.includes("faux-2"),
+	);
+	const box = modalBounds(piu);
+	if (!box) throw new Error("no Modal");
+	const cellAt = (x: number, y: number) => {
+		let column = 0;
+		for (const span of piu.captureSpans().lines[y]?.spans ?? []) {
+			if (x < column + span.width) return span;
+			column += span.width;
+		}
+	};
+
+	expect(onModalFill(piu, box.left + 1, box.top + 1)).toBe(true);
+	const rule = cellAt(box.left, box.top);
+	expect(fgIs(rule, "#ececec") && bgIs(rule, "#121212")).toBe(true);
+	const behind = cellAt(0, box.top);
+	expect(bgIs(behind, "#121212")).toBe(false);
+	expect(bgIs(behind, "#000000")).toBe(false);
 });
 
 test("a signal override in config.json colors the list markers", async () => {

@@ -4,7 +4,7 @@ import { focusedPanels, glyphs, sidePlacement, startPiu } from "./harness.ts";
 
 for (const [mode, surface, raised, ink] of [
 	["light", "#ffffff", "#f2f2f2", "#000000"],
-	["dark", "#1c202b", "#252b39", "#e5e9f5"],
+	["dark", "#121212", "#222222", "#ececec"],
 ] as const) {
 	test(`thin Panel dividers stay one neutral color when focus changes on a ${mode} terminal`, async () => {
 		await using piu = await startPiu({
@@ -18,7 +18,7 @@ for (const [mode, surface, raised, ink] of [
 			(frame) =>
 				frame.includes("faux-1") && frame.includes("/ commands   @ files"),
 		);
-		const border = RGBA.fromHex(mode === "light" ? "#e3e3e3" : "#46516b");
+		const border = RGBA.fromHex(mode === "light" ? "#e3e3e3" : "#2e2e2e");
 		const checkBorders = () => {
 			const outlines = piu
 				.captureSpans()
