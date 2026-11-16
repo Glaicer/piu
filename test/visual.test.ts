@@ -16,7 +16,7 @@ for (const [mode, surface, raised, ink] of [
 		});
 		await piu.waitForFrame(
 			(frame) =>
-				frame.includes("faux-1") && frame.includes("/ commands · @ files"),
+				frame.includes("faux-1") && frame.includes("/ commands   @ files"),
 		);
 		const border = RGBA.fromHex(mode === "light" ? "#e3e3e3" : "#46516b");
 		const checkBorders = () => {

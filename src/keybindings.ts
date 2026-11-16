@@ -40,6 +40,14 @@ export function parseChord(spec: string): Chord | undefined {
 	};
 }
 
+const KEY_LABELS: Readonly<Record<string, string>> = {
+	return: "⏎",
+};
+
+export function formatChord(chord: Chord) {
+	return `${chord.ctrl ? "ctrl+" : ""}${chord.meta ? "alt+" : ""}${chord.shift ? "⇧" : ""}${KEY_LABELS[chord.name] ?? chord.name}`;
+}
+
 // why: a terminal without the kitty protocol sends Ctrl+J as a bare line feed, which OpenTUI names "linefeed"; with the protocol it arrives as "j" plus ctrl.
 export function matches(chord: Chord, event: KeyEvent) {
 	const linefeed = event.name === "linefeed";

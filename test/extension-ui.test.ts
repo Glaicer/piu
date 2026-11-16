@@ -1,6 +1,12 @@
 import { expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
-import { inputArea, panelText, startPiu, statusArea } from "./harness.ts";
+import {
+	inputArea,
+	panelText,
+	startPiu,
+	statusArea,
+	working,
+} from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -289,9 +295,7 @@ test("a dialog still open when its tool call ends closes by itself, while the ru
 	await send(piu, "go");
 	await piu.waitForFrame((f) => f.includes("Stale question"));
 
-	await piu.waitForFrame(
-		(f) => !f.includes("Stale question") && inputArea(f).includes("Working"),
-	);
+	await piu.waitForFrame((f) => !f.includes("Stale question") && working(f));
 });
 
 test("a dialog with a timeout closes once Pi has answered it, while its tool still runs", async () => {
@@ -308,7 +312,7 @@ test("a dialog with a timeout closes once Pi has answered it, while its tool sti
 		(f) => !f.includes("Quick question"),
 		1500,
 	);
-	expect(inputArea(frame)).toContain("Working");
+	expect(working(frame)).toBe(true);
 });
 
 test("a dialog raised outside any tool call outlives the tools and closes when the run ends", async () => {
@@ -355,9 +359,7 @@ test("a dialog raised by a tool that is then aborted disappears, and the run end
 	await piu.waitForFrame((f) => f.includes("Doomed question"));
 
 	await hooks.probe.actions?.abort();
-	await piu.waitForFrame(
-		(f) => !f.includes("Doomed question") && !inputArea(f).includes("Working"),
-	);
+	await piu.waitForFrame((f) => !f.includes("Doomed question") && !working(f));
 });
 
 test("a new session drops the old session's statuses and keeps the ones its own start sets", async () => {

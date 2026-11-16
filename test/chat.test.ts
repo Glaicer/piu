@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getTreeSitterClient, RGBA, TextAttributes } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
-import { panelText, startPiu } from "./harness.ts";
+import { panelText, startPiu, working } from "./harness.ts";
 
 const FAUX_CHARS_PER_TOKEN = 4;
 
@@ -254,13 +254,12 @@ test("the bottom hint follows mouse scrolling", async () => {
 	});
 	await piu.waitForFrame(
 		(frame) =>
-			frame.includes("faux-1") && frame.includes("/ commands · @ files"),
+			frame.includes("faux-1") && frame.includes("/ commands   @ files"),
 	);
 	await piu.mockInput.typeText("Lines");
 	piu.mockInput.pressEnter();
 	await piu.waitForFrame(
-		(frame) =>
-			agentPanel(frame).includes("Line 119") && !frame.includes("Working"),
+		(frame) => agentPanel(frame).includes("Line 119") && !working(frame),
 	);
 	await piu.mockMouse.scroll(10, 5, "up");
 	await piu.waitForFrame((frame) =>

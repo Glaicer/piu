@@ -213,7 +213,7 @@ test("a prompt template expands and reaches the model", async () => {
 		promptTemplates,
 	});
 	await piu.waitForFrame(
-		(f) => f.includes("faux-1") && f.includes("/ commands · @ files"),
+		(f) => f.includes("faux-1") && f.includes("/ commands   @ files"),
 	);
 
 	await piu.mockInput.typeText("/review-code");

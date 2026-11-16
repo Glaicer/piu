@@ -3,7 +3,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseLive } from "../src/subagents.ts";
-import { focusedPanels, modalBounds, panelText, startPiu } from "./harness.ts";
+import {
+	focusedPanels,
+	modalBounds,
+	panelText,
+	startPiu,
+	working,
+} from "./harness.ts";
 import { subagentsControl } from "./subagents-control.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -56,7 +62,7 @@ test("a background subagent has a card with its id, task and status that stays r
 		(f) =>
 			cards(f, "Audit the auth code").length === 1 &&
 			f.includes("Spawned it") &&
-			!f.includes("Working"),
+			!working(f),
 	);
 
 	expect(cards(frame)[0]).toMatch(/agent @max +Audit the auth code +running/);

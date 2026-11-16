@@ -7,6 +7,7 @@ import {
 	messageBar,
 	panelText,
 	startPiu,
+	working,
 } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -61,7 +62,7 @@ test("a command started in the background is pinned above the input with its job
 		(f) =>
 			pinnedRows(f, "alpha").length === 1 &&
 			f.includes("Launched it") &&
-			!f.includes("Working"),
+			!working(f),
 	);
 
 	expect(pinnedRows(frame)[0]).toMatch(/bg-1 +running +: alpha/);
@@ -167,13 +168,13 @@ test("a job that ends while another command keeps the run busy is unpinned at on
 	});
 	await send(piu, "Go");
 	await piu.waitForFrame(
-		(f) => pinnedRows(f, "first").length === 1 && f.includes("Working"),
+		(f) => pinnedRows(f, "first").length === 1 && working(f),
 	);
 
 	first.release();
 
 	const frame = await piu.waitForFrame((f) => !f.includes(HEADER));
-	expect(frame).toContain("Working");
+	expect(working(frame)).toBe(true);
 	expect(frame).not.toContain("All over");
 	second.release();
 	await piu.waitForFrame((f) => f.includes("All over"));

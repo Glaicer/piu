@@ -2,7 +2,9 @@ import {
 	type BoxRenderable,
 	CliRenderEvents,
 	type KeyEvent,
+	RenderableEvents,
 	ScrollBarRenderable,
+	TextAttributes,
 	type TextareaRenderable,
 } from "@opentui/core";
 import { Portal, useRenderer } from "@opentui/solid";
@@ -16,9 +18,9 @@ import {
 	Show,
 } from "solid-js";
 import { paintCard } from "../../src/card.ts";
-import { matches } from "../../src/keybindings.ts";
+import { defaultConfig } from "../../src/config.ts";
+import { formatChord, matches, parseChord } from "../../src/keybindings.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
-import { workingSpinner } from "../../src/spinner.ts";
 import { type Entry, findTrigger, narrow } from "./autocomplete.ts";
 import { Directory } from "./dir.tsx";
 import { listFiles } from "./files.ts";
@@ -27,9 +29,15 @@ const MAX_LIST_ROWS = 8;
 const MIN_LINES = 4;
 const MAX_LINES = 16;
 
+export const promptFieldId = "input.prompt.field";
+
 const keyBindings = [
 	{ name: "return", shift: true, action: "newline" as const },
 ];
+const shiftEnter = { name: "return", ctrl: false, shift: true, meta: false };
+const defaultNewline = parseChord(
+	defaultConfig.keybindings["input.newline"] ?? "",
+);
 
 function Prompt(props: { context: ModuleContext }) {
 	let field: TextareaRenderable | undefined;
@@ -57,7 +65,20 @@ function Prompt(props: { context: ModuleContext }) {
 		},
 	});
 	scrollbar.focusable = false;
-	const spinner = workingSpinner(props.context);
+	const [focused, setFocused] = createSignal(true);
+	// why: Shift+Enter is the textarea's own newline key and the default ctrl+j is only the fallback for terminals without the kitty protocol, so the hint names Shift+Enter unless the user has chosen another input.newline.
+	const newlineKey = () => {
+		const bound = props.context.keybindings["input.newline"];
+		const remapped =
+			bound !== undefined &&
+			defaultNewline !== undefined &&
+			formatChord(bound) !== formatChord(defaultNewline);
+		return formatChord(remapped ? bound : shiftEnter);
+	};
+	const keyHints = () =>
+		props.context.pi.working
+			? "esc stop   alt+⏎ queue"
+			: `⏎ send   ${newlineKey()} new line`;
 	const [before, setBefore] = createSignal("");
 	const [lineCount, setLineCount] = createSignal(1);
 	const height = () => Math.max(MIN_LINES, Math.min(MAX_LINES, lineCount()));
@@ -308,37 +329,35 @@ function Prompt(props: { context: ModuleContext }) {
 	}
 
 	return (
-		<box flexDirection="column">
-			<Show when={props.context.pi.working}>
-				<box flexDirection="row" justifyContent="space-between" flexShrink={0}>
-					<text fg={props.context.theme.accent} flexShrink={0}>
-						{`${spinner()}Working…`}
-					</text>
-					<text
-						fg={props.context.theme.muted}
-						wrapMode="none"
-						truncate
-						marginRight={1}
-					>
-						Esc stop · Alt+Enter queue
-					</text>
-				</box>
-			</Show>
+		<box flexDirection="column" paddingTop={1}>
 			<box ref={setEditorRow} flexDirection="row" minHeight={MIN_LINES}>
+				<text
+					width={2}
+					flexShrink={0}
+					fg={
+						focused() ? props.context.theme.signal : props.context.theme.faint
+					}
+					attributes={TextAttributes.BOLD}
+				>
+					›
+				</text>
 				<textarea
 					ref={(element: TextareaRenderable) => {
 						field = element;
+						setFocused(element.focused);
+						element.on(RenderableEvents.FOCUSED, () => setFocused(true));
+						element.on(RenderableEvents.BLURRED, () => setFocused(false));
 					}}
+					id={promptFieldId}
 					focused
 					height="100%"
 					flexGrow={1}
 					textColor={props.context.theme.text}
 					cursorColor={props.context.theme.signal}
+					cursorStyle={{ style: "block" }}
 					focusedTextColor={props.context.theme.text}
 					backgroundColor="transparent"
 					focusedBackgroundColor="transparent"
-					placeholder="  / commands · @ files"
-					placeholderColor={props.context.theme.muted}
 					keyBindings={keyBindings}
 					onKeyDown={onKeyDown}
 					onContentChange={sync}
@@ -354,6 +373,27 @@ function Prompt(props: { context: ModuleContext }) {
 					}}
 				/>
 			</box>
+			<box flexDirection="row" flexShrink={0} paddingLeft={2}>
+				<text flexShrink={0} wrapMode="none" fg={props.context.theme.faint}>
+					{"/ commands   @ files"}
+				</text>
+				<box
+					flexGrow={1}
+					flexShrink={1}
+					flexDirection="row"
+					justifyContent="flex-end"
+					marginLeft={3}
+				>
+					<text
+						flexShrink={1}
+						wrapMode="none"
+						truncate
+						fg={props.context.theme.faint}
+					>
+						{keyHints()}
+					</text>
+				</box>
+			</box>
 			<Show when={open()}>
 				<Portal
 					mount={renderer.root}
@@ -361,12 +401,12 @@ function Prompt(props: { context: ModuleContext }) {
 						Object.assign(container, { position: "absolute", left: 0, top: 0 });
 					}}
 				>
-					{/* why: the list spans the input Panel's frame (two cells left of the field, scrollbar and edge right of it) and ends above the Panel's top edge. */}
+					{/* why: the list spans the input Panel's frame (the padding and prompt mark left of the field, scrollbar and edge right of it) and ends above the heavy line, which sits a blank row above the field. */}
 					<box
 						position="absolute"
-						left={anchor().left - 2}
-						top={Math.max(0, anchor().top - shown().length - 3)}
-						width={anchor().width + 4}
+						left={anchor().left - 4}
+						top={Math.max(0, anchor().top - shown().length - 4)}
+						width={anchor().width + 6}
 						height={shown().length + 2}
 						zIndex={50}
 						flexDirection="column"
@@ -420,7 +460,7 @@ export default {
 	modules: [
 		{
 			id: "prompt",
-			minHeight: MIN_LINES,
+			minHeight: MIN_LINES + 2,
 			render: (context) => <Prompt context={context} />,
 		},
 		{

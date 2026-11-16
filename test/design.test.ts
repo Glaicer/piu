@@ -6,6 +6,7 @@ import {
 	bottomLine,
 	glyphs,
 	inputArea,
+	inputHints,
 	messageBar,
 	modalTitle,
 	onModalFill,
@@ -39,15 +40,13 @@ test("the idle composer shows only command and file hints", async () => {
 	const frame = await piu.waitForFrame(
 		(frame) =>
 			bottomLine(frame).includes(basename(piu.dir)) &&
-			inputArea(frame).includes("/ commands · @ files"),
+			inputHints(frame).startsWith("/ commands   @ files"),
 	);
-	expect(
-		inputArea(frame)
-			.split("\n")
-			.map((line) => line.trim())
-			.filter(Boolean),
-	).toEqual(["/ commands · @ files"]);
+	expect(inputArea(frame).trim()).toBe("");
 	expect(inputArea(frame).split("\n")).toHaveLength(4);
+	expect(inputHints(frame).replace(/\s+/g, " ")).toBe(
+		"/ commands @ files ⏎ send ⇧⏎ new line",
+	);
 });
 
 test("user messages have no added prompt marker and preserve a typed greater-than sign", async () => {

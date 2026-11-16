@@ -19,6 +19,7 @@ import {
 import type { ManualClock } from "@opentui/core/testing";
 import { testRender } from "@opentui/solid";
 import { stringWidth } from "bun";
+import { promptFieldId } from "../builtin/input/index.tsx";
 import { createApp, type ExitRequest } from "../src/app.tsx";
 import type { UpdateCheckOptions } from "../src/backend-updates.ts";
 import { panelIdPrefix } from "../src/layout.tsx";
@@ -224,8 +225,45 @@ export function inputTop() {
 	);
 }
 
-export function inputArea(frame: string) {
+export function inputPanel(frame: string) {
 	return panelText(frame, 10, inputTop() + 1);
+}
+
+function promptField() {
+	const renderer = current;
+	if (!renderer) throw new Error("No app is running");
+	const node = renderer.root.findDescendantById(promptFieldId);
+	for (let at: Renderable | null | undefined = node; at; at = at.parent)
+		if (!at.visible) return undefined;
+	return node;
+}
+
+// why: the prompt's Panel also holds the hint row and the question card, so this reads the text field's rows alone.
+export function inputArea(frame: string) {
+	const field = promptField();
+	if (!field) return "";
+	return frame
+		.split("\n")
+		.slice(field.screenY, field.screenY + field.height)
+		.map((text) => cells(text, field.screenX, field.screenX + field.width))
+		.join("\n");
+}
+
+// why: the prompt's hints are the row right under its text field, starting at the field's text column.
+export function inputHints(frame: string) {
+	const field = promptField();
+	if (!field) return "";
+	const panel = panelAt(field.screenX, field.screenY);
+	if (!panel) return "";
+	return cells(
+		frame.split("\n")[field.screenY + field.height] ?? "",
+		field.screenX,
+		panel.x + panel.width - 1,
+	);
+}
+
+export function working(frame: string) {
+	return bottomLine(frame).includes("working");
 }
 
 export function statusArea(frame: string) {

@@ -2,10 +2,12 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { ManualClock } from "@opentui/core/testing";
 import {
+	bottomLine,
 	type FauxScript,
 	focusedPanels,
 	onModalFill,
 	startPiu,
+	working,
 } from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
@@ -234,7 +236,7 @@ const slowTool = {
 };
 
 function workingLine(frame: string) {
-	return frame.split("\n").find((row) => row.includes("Working")) ?? "";
+	return /\S* ?working/.exec(bottomLine(frame))?.[0] ?? "";
 }
 
 test("the working indicator turns while the agent works and goes when it stops", async () => {
@@ -244,7 +246,7 @@ test("the working indicator turns while the agent works and goes when it stops",
 	});
 	await app.piu.mockInput.typeText("go");
 	app.piu.mockInput.pressEnter();
-	await app.piu.waitForFrame((f) => f.includes("Working"));
+	await app.piu.waitForFrame((f) => working(f));
 
 	const lines = new Set<string>();
 	for (let step = 0; step < 12; step++) {
@@ -263,7 +265,7 @@ test("with animations off the working indicator is the still text", async () => 
 	});
 	await app.piu.mockInput.typeText("go");
 	app.piu.mockInput.pressEnter();
-	await app.piu.waitForFrame((f) => f.includes("Working"));
+	await app.piu.waitForFrame((f) => working(f));
 
 	const lines = new Set<string>();
 	for (let step = 0; step < 6; step++) {

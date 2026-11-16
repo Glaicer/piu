@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { stringWidth } from "bun";
-import { bottomLine, inputArea, startPiu } from "./harness.ts";
+import { bottomLine, inputPanel, startPiu } from "./harness.ts";
 
 function workspace(name = "project") {
 	const root = mkdtempSync(join(tmpdir(), "piu-dir-"));
@@ -39,8 +39,8 @@ test("the directory Module is on the bottom line, not in the input, and omits th
 		directoryLine(frame).includes(basename(project.cwd)),
 	);
 	expect(directoryLine(frame)).toBe(basename(project.cwd));
-	expect(inputArea(frame)).toContain("/ commands · @ files");
-	expect(inputArea(frame)).not.toContain(basename(project.cwd));
+	expect(inputPanel(frame)).toContain("/ commands   @ files");
+	expect(inputPanel(frame)).not.toContain(basename(project.cwd));
 });
 
 test("the directory line shows the current branch even before the first commit", async () => {
@@ -126,5 +126,5 @@ test("the directory Module can be placed without the prompt", async () => {
 	const frame = await piu.waitForFrame((frame) =>
 		frame.includes(basename(project.cwd)),
 	);
-	expect(frame).not.toContain("/ commands · @ files");
+	expect(frame).not.toContain("/ commands   @ files");
 });

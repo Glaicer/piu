@@ -5,6 +5,7 @@ import {
 	messageBar,
 	panelText,
 	startPiu,
+	working,
 } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -182,13 +183,13 @@ async function expectQueueRestoredByEsc(
 		script: { replies: [slowTool(5), "Model got {lastUser}"] },
 	});
 	await send(piu, "Go");
-	await piu.waitForFrame((f) => f.includes("Working"));
+	await piu.waitForFrame((f) => working(f));
 	await piu.mockInput.typeText(queued);
 	queue(piu);
 	await Bun.sleep(300);
 
 	piu.mockInput.pressEscape();
-	await piu.waitForFrame((f) => !f.includes("Working"));
+	await piu.waitForFrame((f) => !working(f));
 	const restored = await piu.waitForFrame((f) => inputArea(f).includes(queued));
 	await Bun.sleep(500);
 	await piu.renderOnce();

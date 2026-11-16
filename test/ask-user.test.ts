@@ -3,7 +3,7 @@ import { join } from "node:path";
 import {
 	bottomPanel,
 	focusedPanels,
-	inputArea,
+	inputPanel,
 	panelBoxes,
 	panelText,
 	startPiu,
@@ -64,8 +64,8 @@ function asking(...after: string[]) {
 }
 
 const showsCard = (frame: string) =>
-	inputArea(frame).includes("Which fruit do you want?") &&
-	inputArea(frame).includes("Banana");
+	inputPanel(frame).includes("Which fruit do you want?") &&
+	inputPanel(frame).includes("Banana");
 
 test("calling ask_user shows the question card in place of the input", async () => {
 	await using piu = await startPiu({
@@ -75,11 +75,11 @@ test("calling ask_user shows the question card in place of the input", async () 
 	await send(piu, "go");
 
 	const frame = await piu.waitForFrame(showsCard);
-	const shown = inputArea(frame);
+	const shown = inputPanel(frame);
 	expect(shown).toContain("Fruit");
 	expect(shown).toContain("Apple");
 	expect(shown).toContain("Crisp and red");
-	expect(shown).not.toContain("Working");
+	expect(shown).not.toContain("/ commands");
 	expect(frame).not.toContain("opentui:ask-user-question");
 });
 
@@ -92,7 +92,7 @@ function locate(frame: string, text: string) {
 
 async function expectInputBack(piu: Piu) {
 	await piu.mockInput.typeText("typing again");
-	await piu.waitForFrame((f) => inputArea(f).includes("typing again"));
+	await piu.waitForFrame((f) => inputPanel(f).includes("typing again"));
 }
 
 test("clicking an option sends it to the model, and the input comes back", async () => {
@@ -181,19 +181,19 @@ test("three questions show three tabs, and switching tabs keeps unsent choices",
 	await send(piu, "go");
 	const first = await piu.waitForFrame(showsCard);
 	for (const header of ["Fruit", "Colors", "Size", "Review"]) {
-		expect(inputArea(first)).toContain(header);
+		expect(inputPanel(first)).toContain(header);
 	}
 
 	piu.mockInput.pressArrow("down");
 	piu.mockInput.pressEnter();
 	await piu.waitForFrame((f) =>
-		inputArea(f).includes("Which colors do you like?"),
+		inputPanel(f).includes("Which colors do you like?"),
 	);
 
 	piu.mockInput.pressArrow("left");
 	const back = await piu.waitForFrame(showsCard);
-	expect(inputArea(back)).toContain("(x) Banana");
-	expect(inputArea(back)).toContain("( ) Apple");
+	expect(inputPanel(back)).toContain("(x) Banana");
+	expect(inputPanel(back)).toContain("( ) Apple");
 });
 
 const modelGot = (frame: string, text: string) =>
@@ -211,19 +211,19 @@ async function click(
 	after?: (frame: string) => boolean,
 ) {
 	const frame = await piu.waitForFrame(
-		(f) => inputArea(f).includes(text) && (after?.(f) ?? true),
+		(f) => inputPanel(f).includes(text) && (after?.(f) ?? true),
 	);
 	const { x, y } = locate(frame, text);
 	await piu.mockMouse.click(x, y);
 }
 
 const pointsAt = (text: string) => (frame: string) =>
-	inputArea(frame)
+	inputPanel(frame)
 		.split("\n")
 		.some((line) => line.includes("▸") && line.includes(text));
 
 const onQuestion = (text: string) => (frame: string) =>
-	inputArea(frame).includes(text);
+	inputPanel(frame).includes(text);
 
 test("answering every question and submitting from Review sends all answers (keyboard)", async () => {
 	await using piu = await startPiu({
@@ -241,9 +241,9 @@ test("answering every question and submitting from Review sends all answers (key
 	piu.mockInput.pressEnter();
 
 	const review = await piu.waitForFrame(onQuestion("Review your answers"));
-	expect(inputArea(review)).toContain("Fruit: Apple");
-	expect(inputArea(review)).toContain("Colors: Red");
-	expect(inputArea(review)).toContain("Size: Large");
+	expect(inputPanel(review)).toContain("Fruit: Apple");
+	expect(inputPanel(review)).toContain("Colors: Red");
+	expect(inputPanel(review)).toContain("Size: Large");
 	for (let i = 0; i < 3; i++) piu.mockInput.pressArrow("down");
 	piu.mockInput.pressEnter();
 
@@ -305,13 +305,13 @@ test("a multi-select question toggles options on and off, and the model gets all
 	piu.mockInput.pressArrow("down");
 	piu.mockInput.pressKey(" ");
 	const toggled = await piu.waitForFrame((f) =>
-		inputArea(f).includes("[x] Blue"),
+		inputPanel(f).includes("[x] Blue"),
 	);
-	expect(inputArea(toggled)).toContain("[x] Red");
-	expect(inputArea(toggled)).toContain("[x] Green");
+	expect(inputPanel(toggled)).toContain("[x] Red");
+	expect(inputPanel(toggled)).toContain("[x] Green");
 
 	piu.mockInput.pressKey(" ");
-	await piu.waitForFrame((f) => inputArea(f).includes("[ ] Blue"));
+	await piu.waitForFrame((f) => inputPanel(f).includes("[ ] Blue"));
 	piu.mockInput.pressEnter();
 
 	await piu.waitForFrame((f) =>
@@ -334,8 +334,8 @@ test("clicking options of a multi-select question toggles them", async () => {
 	});
 	await send(piu, "go");
 	await click(piu, "Blue");
-	await click(piu, "Red", (f) => inputArea(f).includes("[x] Blue"));
-	await piu.waitForFrame((f) => inputArea(f).includes("[x] Red"));
+	await click(piu, "Red", (f) => inputPanel(f).includes("[x] Blue"));
+	await piu.waitForFrame((f) => inputPanel(f).includes("[x] Red"));
 	piu.mockInput.pressEnter();
 
 	await piu.waitForFrame((f) =>
@@ -354,7 +354,7 @@ test("typing a custom answer sends it instead of an option (keyboard)", async ()
 	piu.mockInput.pressArrow("down");
 	await piu.waitForFrame(pointsAt("Type your own answer"));
 	await piu.mockInput.typeText("Pear");
-	await piu.waitForFrame((f) => inputArea(f).includes("Pear"));
+	await piu.waitForFrame((f) => inputPanel(f).includes("Pear"));
 	piu.mockInput.pressEnter();
 
 	await piu.waitForFrame((f) =>
@@ -369,7 +369,7 @@ test("clicking the custom answer field and typing sends the text (mouse)", async
 	await send(piu, "go");
 	await click(piu, "Type your own answer");
 	await piu.mockInput.typeText("Plum");
-	await piu.waitForFrame((f) => inputArea(f).includes("Plum"));
+	await piu.waitForFrame((f) => inputPanel(f).includes("Plum"));
 	piu.mockInput.pressEnter();
 
 	await piu.waitForFrame((f) =>
@@ -387,7 +387,7 @@ test("choosing an option after typing a custom answer replaces the typed text", 
 	piu.mockInput.pressArrow("down");
 	await piu.waitForFrame(pointsAt("Type your own answer"));
 	await piu.mockInput.typeText("Pear");
-	await piu.waitForFrame((f) => inputArea(f).includes("Pear"));
+	await piu.waitForFrame((f) => inputPanel(f).includes("Pear"));
 	piu.mockInput.pressArrow("up");
 	piu.mockInput.pressArrow("up");
 	piu.mockInput.pressEnter();
@@ -395,9 +395,9 @@ test("choosing an option after typing a custom answer replaces the typed text", 
 	piu.mockInput.pressArrow("left");
 
 	const back = await piu.waitForFrame(showsCard);
-	expect(inputArea(back)).toContain("( ) Banana");
-	expect(inputArea(back)).toContain("(x) Apple");
-	expect(inputArea(back)).not.toContain("Pear");
+	expect(inputPanel(back)).toContain("( ) Banana");
+	expect(inputPanel(back)).toContain("(x) Apple");
+	expect(inputPanel(back)).not.toContain("Pear");
 });
 
 test("changing an answer from Review is what the model receives (keyboard)", async () => {
@@ -413,7 +413,7 @@ test("changing an answer from Review is what the model receives (keyboard)", asy
 	await piu.waitForFrame(onQuestion("How big should it be?"));
 	piu.mockInput.pressEnter();
 	const review = await piu.waitForFrame(onQuestion("Review your answers"));
-	expect(inputArea(review)).toContain("Colors: Red");
+	expect(inputPanel(review)).toContain("Colors: Red");
 
 	piu.mockInput.pressArrow("down");
 	piu.mockInput.pressEnter();
@@ -423,7 +423,7 @@ test("changing an answer from Review is what the model receives (keyboard)", asy
 	piu.mockInput.pressKey(" ");
 	piu.mockInput.pressEnter();
 	const changed = await piu.waitForFrame(onQuestion("Review your answers"));
-	expect(inputArea(changed)).toContain("Colors: Green");
+	expect(inputPanel(changed)).toContain("Colors: Green");
 	for (let i = 0; i < 3; i++) piu.mockInput.pressArrow("down");
 	piu.mockInput.pressEnter();
 
@@ -486,24 +486,24 @@ test("a custom answer stays with its own question when switching tabs", async ()
 	piu.mockInput.pressArrow("down");
 	await piu.waitForFrame(pointsAt("Type your own answer"));
 	await piu.mockInput.typeText("Pear");
-	await piu.waitForFrame((f) => inputArea(f).includes("Pear"));
+	await piu.waitForFrame((f) => inputPanel(f).includes("Pear"));
 	piu.mockInput.pressArrow("up");
 	piu.mockInput.pressArrow("right");
 
 	const colors = await piu.waitForFrame(
 		onQuestion("Which colors do you like?"),
 	);
-	expect(inputArea(colors)).toContain("Type your own answer");
-	expect(inputArea(colors)).not.toContain("Pear");
+	expect(inputPanel(colors)).toContain("Type your own answer");
+	expect(inputPanel(colors)).not.toContain("Pear");
 
 	piu.mockInput.pressArrow("left");
 	const back = await piu.waitForFrame(showsCard);
-	expect(inputArea(back)).toContain("(x) Pear");
+	expect(inputPanel(back)).toContain("(x) Pear");
 	piu.mockInput.pressArrow("right");
 	piu.mockInput.pressArrow("right");
 	piu.mockInput.pressArrow("right");
 	const review = await piu.waitForFrame(onQuestion("Review your answers"));
-	expect(inputArea(review)).toContain("Fruit: Pear");
+	expect(inputPanel(review)).toContain("Fruit: Pear");
 });
 
 test("after changing an answer from Review, leaving that question by arrow keys does not send the next Enter back to Review", async () => {
@@ -556,26 +556,26 @@ const panelRows = (piu: Piu) =>
 		.filter((box) => box.x === 0 && box.id !== bottomPanel)
 		.map((box) => box.y);
 
-const hints = "/ commands · @ files";
+const hints = "/ commands   @ files";
 
 test("the input Panel fits the card and restores the editor after", async () => {
 	await using piu = await startPiu({
 		script: asking("Model got {toolResult}"),
 	});
 	await piu.waitForFrame(
-		(f) => f.includes("faux-1") && inputArea(f).includes(hints),
+		(f) => f.includes("faux-1") && inputPanel(f).includes(hints),
 	);
-	expect(panelRows(piu)).toEqual([0, 23]);
+	expect(panelRows(piu)).toEqual([0, 21]);
 	await send(piu, "go");
 	const asked = await piu.waitForFrame(showsCard);
 	expect(panelRows(piu)).toEqual([0, 21]);
-	expect(inputArea(asked)).not.toContain(hints);
+	expect(inputPanel(asked)).not.toContain(hints);
 
 	piu.mockInput.pressEnter();
 	await piu.waitForFrame(
-		(f) => agentPanel(f).includes("Model got") && inputArea(f).includes(hints),
+		(f) => agentPanel(f).includes("Model got") && inputPanel(f).includes(hints),
 	);
-	expect(panelRows(piu)).toEqual([0, 23]);
+	expect(panelRows(piu)).toEqual([0, 21]);
 });
 
 test("ask_user_question stays out after a tool call and in the next run", async () => {
@@ -679,18 +679,18 @@ test("in a terminal shorter than the card, the card scrolls to the selected row 
 	});
 	await send(piu, "go");
 	const first = await piu.waitForFrame((f) =>
-		inputArea(f).includes("Letter A"),
+		inputPanel(f).includes("Letter A"),
 	);
-	expect(inputArea(first)).not.toContain("Type your own answer");
-	expect(inputArea(first)).toContain("Dismiss (Esc)");
+	expect(inputPanel(first)).not.toContain("Type your own answer");
+	expect(inputPanel(first)).toContain("Dismiss (Esc)");
 
 	for (let i = 0; i < 4; i++) piu.mockInput.pressArrow("down");
 
 	const last = await piu.waitForFrame((f) =>
-		inputArea(f).includes("Type your own answer"),
+		inputPanel(f).includes("Type your own answer"),
 	);
-	expect(inputArea(last)).not.toContain("Letter A");
-	expect(inputArea(last)).toContain("Dismiss (Esc)");
+	expect(inputPanel(last)).not.toContain("Letter A");
+	expect(inputPanel(last)).toContain("Dismiss (Esc)");
 });
 
 test("in a short terminal Review's Submit can be reached and pressed", async () => {
@@ -709,7 +709,7 @@ test("in a short terminal Review's Submit can be reached and pressed", async () 
 
 	for (let i = 0; i < 3; i++) piu.mockInput.pressArrow("down");
 
-	await piu.waitForFrame((f) => inputArea(f).includes("Submit"));
+	await piu.waitForFrame((f) => inputPanel(f).includes("Submit"));
 	piu.mockInput.pressEnter();
 	piu.resize(160, 30);
 	await piu.waitForFrame((f) => agentPanel(f).includes("Model got"));

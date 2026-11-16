@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { inputArea, panelBoxes, startPiu } from "./harness.ts";
+import { inputArea, panelBoxes, startPiu, working } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -17,13 +17,13 @@ test("a working indicator shows while the agent runs and is gone once it settles
 		script: { replies: [slowTool(1), "All done"] },
 	});
 	await piu.renderOnce();
-	expect(piu.captureCharFrame()).not.toContain("Working");
+	expect(working(piu.captureCharFrame())).toBe(false);
 
 	await send(piu, "Go");
-	await piu.waitForFrame((f) => f.includes("Working"));
+	await piu.waitForFrame((f) => working(f));
 
 	await piu.waitForFrame((f) => f.includes("All done"));
-	await piu.waitForFrame((f) => !f.includes("Working"));
+	await piu.waitForFrame((f) => !working(f));
 });
 
 test("Shift+Enter adds a line and Enter sends both lines as one prompt", async () => {
@@ -45,7 +45,7 @@ test("Shift+Enter adds a line and Enter sends both lines as one prompt", async (
 
 async function sendAndSettle(piu: Piu, text: string, reply: string) {
 	await send(piu, text);
-	await piu.waitForFrame((f) => f.includes(reply) && !f.includes("Working"));
+	await piu.waitForFrame((f) => f.includes(reply) && !working(f));
 }
 
 test("Up and Down walk the prompt history and back to the empty draft", async () => {
@@ -151,7 +151,7 @@ test("Esc during a run aborts it and the indicator goes away", async () => {
 
 	piu.mockInput.pressEscape();
 
-	const frame = await piu.waitForFrame((f) => !f.includes("Working"));
+	const frame = await piu.waitForFrame((f) => !working(f));
 	expect(frame).not.toContain("running");
 	expect(frame).not.toContain("Never reached");
 });
@@ -174,10 +174,10 @@ test("the indicator goes away when the Backend dies mid-run", async () => {
 		},
 	});
 	await send(piu, "Go");
-	await piu.waitForFrame((f) => f.includes("Working"));
+	await piu.waitForFrame((f) => working(f));
 
 	await send(piu, "/crash");
 
 	const frame = await piu.waitForFrame((f) => f.includes("Restart"));
-	expect(frame).not.toContain("Working");
+	expect(working(frame)).toBe(false);
 });

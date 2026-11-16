@@ -17,7 +17,7 @@ for (const mode of ["light", "dark"] as const) {
 			piu.renderer.getCursorState().color.equals(RGBA.fromHex(color));
 		await piu.waitForFrame(
 			(frame) =>
-				frame.includes("faux-1") && frame.includes("/ commands · @ files"),
+				frame.includes("faux-1") && frame.includes("/ commands   @ files"),
 		);
 		expect(cursorIs(initial.signal)).toBe(true);
 		piu.mockInput.pressKey("l", { ctrl: true });
@@ -30,7 +30,7 @@ for (const mode of ["light", "dark"] as const) {
 		piu.mockInput.pressKey("ESCAPE");
 		await piu.waitForFrame(
 			(frame) =>
-				!frame.includes("Search:") && frame.includes("/ commands · @ files"),
+				!frame.includes("Search:") && frame.includes("/ commands   @ files"),
 		);
 		expect(cursorIs(changed.signal)).toBe(true);
 	});

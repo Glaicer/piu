@@ -1280,7 +1280,7 @@ test("Esc closes the Modal and does not abort a running agent", async () => {
 	});
 	await piu.mockInput.typeText("Go");
 	piu.mockInput.pressEnter();
-	await piu.waitForFrame((f) => f.includes("Working"));
+	await piu.waitForFrame((f) => f.includes("running"));
 
 	await clickText(piu, "faux-1");
 	await piu.waitForFrame((f) => f.includes("faux-2"));

@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { blocker } from "./blocker.ts";
-import { inputArea, messageBar, panelText, startPiu } from "./harness.ts";
+import {
+	inputArea,
+	messageBar,
+	panelText,
+	startPiu,
+	working,
+} from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -100,10 +106,7 @@ test("several queued messages stay separate and in the order they were sent, eve
 
 	block.release();
 	const settled = await piu.waitForFrame(
-		(f) =>
-			lines(f, "Got").length === 3 &&
-			!f.includes("queued") &&
-			f.includes("Working") === false,
+		(f) => lines(f, "Got").length === 3 && !f.includes("queued") && !working(f),
 	);
 	expect(lines(settled, messageBar("again"))).toHaveLength(2);
 	expect(lines(settled, messageBar("second one"))).toHaveLength(1);
