@@ -69,7 +69,7 @@ function Messages(props: { context: ModuleContext }) {
 		}
 	});
 	return (
-		<box paddingX={1}>
+		<box paddingX={1} paddingBottom={2}>
 			<Show when={pi.messages.length === 0 && pi.pending.length === 0}>
 				<box paddingX={2} paddingY={2}>
 					<text fg={theme.text}>

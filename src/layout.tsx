@@ -307,9 +307,9 @@ export function SlotView(props: SlotProps) {
 					position="absolute"
 					right={2}
 					bottom={footerHeight() + 1}
-					backgroundColor={shared.theme.raised}
+					backgroundColor={shared.theme.jump}
 				>
-					<text fg={shared.theme.muted}>CTRL+End: jump to bottom</text>
+					<text fg={shared.theme.barText}>CTRL+End: jump to bottom</text>
 				</box>
 			)}
 		</box>

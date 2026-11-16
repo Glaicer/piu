@@ -210,7 +210,10 @@ test("the agent Panel follows new output at the bottom and stays put when scroll
 
 	const backAtBottom = async () => {
 		await piu.renderOnce();
-		return agentPanel(piu.captureCharFrame()).includes("Fresh reply");
+		const [last, blank] = agentPanel(piu.captureCharFrame())
+			.split("\n")
+			.slice(-2);
+		return last?.trim() === "Fresh reply" && blank?.trim() === "";
 	};
 	for (let tick = 0; tick < maxWheelTicks && !(await backAtBottom()); tick++)
 		await piu.mockMouse.scroll(10, 5, "down");
@@ -230,6 +233,9 @@ test("Ctrl+Home and Ctrl+End jump through chat and show a bottom hint when scrol
 		agentPanel(frame).includes("Line 119"),
 	);
 	expect(agentPanel(bottom)).not.toContain("CTRL+End: jump to bottom");
+	const tail = agentPanel(bottom).split("\n").slice(-2);
+	expect(tail[0]?.trim()).toBe("Line 119");
+	expect(tail[1]?.trim()).toBe("");
 
 	piu.mockInput.pressKey("HOME", { ctrl: true });
 	const top = await piu.waitForFrame(
@@ -238,6 +244,12 @@ test("Ctrl+Home and Ctrl+End jump through chat and show a bottom hint when scrol
 			agentPanel(frame).includes("CTRL+End: jump to bottom"),
 	);
 	expect(agentPanel(top)).not.toContain("Line 119");
+	const hint = piu
+		.captureSpans()
+		.lines.flatMap((line) => line.spans)
+		.find((span) => span.text.includes("CTRL+End"));
+	expect(hint?.bg.equals(RGBA.fromHex("#555555"))).toBe(true);
+	expect(hint?.fg.equals(RGBA.fromHex(darkTheme.barText))).toBe(true);
 
 	piu.mockInput.pressKey("END", { ctrl: true });
 	const end = await piu.waitForFrame(
