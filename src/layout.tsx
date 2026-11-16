@@ -24,13 +24,16 @@ type SlotBase = {
 };
 export type Slot =
 	| (SlotBase & { kind: "container"; children: readonly Slot[] })
-	| (SlotBase & { kind: "panel" });
+	| (SlotBase & { kind: "panel"; bar?: boolean });
 
 type PanelContext = Omit<
 	ModuleContext,
 	"onCleanup" | "settings" | "channel" | "holdFocusKeys"
 >;
-export type SharedContext = Omit<PanelContext, "reportPresence" | "onKey"> & {
+export type SharedContext = Omit<
+	PanelContext,
+	"reportPresence" | "onKey" | "bar"
+> & {
 	focus?: PanelFocus;
 };
 
@@ -45,6 +48,9 @@ type SlotProps = {
 };
 
 export const panelIdPrefix = "panel:";
+
+// why: the Bottom line has no dividers, so its Modules are set apart by space alone.
+const barGap = 4;
 
 // why: a Panel keeps a cell on every side for its dividers and title, and a blank column keeps text off its left divider; a Modal floats, so it gets a row and a column more of air on each side.
 const panelFrame = { padding: 1, paddingLeft: 2 };
@@ -154,30 +160,40 @@ export function SlotView(props: SlotProps) {
 			: props.modal
 				? entries[0]?.placed.module.title
 				: undefined;
-	const frame = props.modal
+	const bar = slot.bar ?? false;
+	const frame = bar
 		? {
-				...modalFrame,
-				renderBefore: paintCard(() => ({
-					fill: fill(),
-					title: title(),
-					titleColor: shared.theme.text,
-				})),
-			}
-		: {
-				...panelFrame,
 				id: `${panelIdPrefix}${slot.id}`,
-				renderBefore: paintPanel(() => ({
-					fill: fill(),
-					rule: shared.theme.border,
-					heavyRule: shared.theme.text,
-					title: title(),
-					titleColor: shared.theme.signal,
-					joinedAt:
-						slot.joinAbove && props.parentDirection === "column"
-							? frameElement?.screenY
-							: props.joinedAt?.(),
-				})),
-			};
+				paddingX: 1,
+				columnGap: barGap,
+				get backgroundColor() {
+					return shared.theme.bar;
+				},
+			}
+		: props.modal
+			? {
+					...modalFrame,
+					renderBefore: paintCard(() => ({
+						fill: fill(),
+						title: title(),
+						titleColor: shared.theme.text,
+					})),
+				}
+			: {
+					...panelFrame,
+					id: `${panelIdPrefix}${slot.id}`,
+					renderBefore: paintPanel(() => ({
+						fill: fill(),
+						rule: shared.theme.border,
+						heavyRule: shared.theme.text,
+						title: title(),
+						titleColor: shared.theme.signal,
+						joinedAt:
+							slot.joinAbove && props.parentDirection === "column"
+								? frameElement?.screenY
+								: props.joinedAt?.(),
+					})),
+				};
 	const routeKey = (event: KeyEvent) => {
 		for (const entry of entries) {
 			if (!shown(entry)) continue;
@@ -186,11 +202,18 @@ export function SlotView(props: SlotProps) {
 		}
 	};
 	const moduleView = (entry: (typeof entries)[number]) => (
-		<box visible={shown(entry)} minHeight={entry.placed.module.minHeight}>
+		<box
+			visible={shown(entry)}
+			minHeight={entry.placed.module.minHeight}
+			{...(entry.placed.module.grow && slot.direction === "row"
+				? { flexGrow: 1, flexBasis: 0 }
+				: {})}
+		>
 			<ModuleView
 				placed={entry.placed}
 				context={{
 					...shared,
+					bar,
 					reportPresence: entry.setPresence,
 					onKey: (handler) => entry.keyHandlers.push(handler),
 					holdFocusKeys: (active) => focus?.hold(active),
@@ -199,7 +222,7 @@ export function SlotView(props: SlotProps) {
 		</box>
 	);
 	const modules = <For each={entries}>{(entry) => moduleView(entry)}</For>;
-	if (slot.size === "content") {
+	if (slot.size === "content" || bar) {
 		return (
 			<box
 				ref={(node: Renderable) => {

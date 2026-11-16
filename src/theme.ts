@@ -20,6 +20,9 @@ export const themeTokens = [
 	"code",
 	"codeBlock",
 	"tertiary",
+	"bar",
+	"barText",
+	"barMuted",
 ] as const;
 
 export type ThemeToken = (typeof themeTokens)[number];
@@ -50,6 +53,9 @@ export const darkTheme: Theme = {
 	code: "#263049",
 	codeBlock: "#232836",
 	tertiary: "#c58af9",
+	bar: "#262626",
+	barText: "#ffffff",
+	barMuted: "#a8a8a8",
 };
 
 export const lightTheme: Theme = {
@@ -70,6 +76,9 @@ export const lightTheme: Theme = {
 	code: "#f1f3f8",
 	codeBlock: "#f5f5f5",
 	tertiary: "#7a1fa2",
+	bar: "#000000",
+	barText: "#ffffff",
+	barMuted: "#bdbdbd",
 };
 
 const builtIn: Readonly<Record<ThemeMode, Theme>> = {

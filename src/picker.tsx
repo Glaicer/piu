@@ -1,4 +1,4 @@
-import type { BoxRenderable } from "@opentui/core";
+import { type BoxRenderable, TextAttributes } from "@opentui/core";
 import { createEffect, createSignal, For } from "solid-js";
 import { modalFrameRows } from "./layout.tsx";
 import { moduleModal } from "./modal.tsx";
@@ -115,6 +115,8 @@ export function PickerLink(props: {
 	label: string;
 	onPress(): void;
 	plain?: boolean;
+	color?: string;
+	bold?: boolean;
 }) {
 	return (
 		<box
@@ -125,7 +127,8 @@ export function PickerLink(props: {
 			}}
 		>
 			<text
-				fg={props.context.theme.secondary}
+				fg={props.color ?? props.context.theme.secondary}
+				attributes={props.bold ? TextAttributes.BOLD : undefined}
 				wrapMode={props.plain ? "none" : undefined}
 			>
 				{props.plain ? props.label : ` ${props.label} `}

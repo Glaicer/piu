@@ -25,56 +25,77 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 	layout: {
 		kind: "container",
 		id: "root",
-		direction: "row",
+		direction: "column",
 		size: "rest",
 		children: [
 			{
 				kind: "container",
-				id: "main",
-				direction: "column",
+				id: "body",
+				direction: "row",
 				size: "rest",
 				children: [
-					{ kind: "panel", id: "agent", direction: "column", size: "rest" },
-					{ kind: "panel", id: "pinned", direction: "column", size: "content" },
 					{
 						kind: "container",
-						id: "input-area",
+						id: "main",
 						direction: "column",
-						size: "content",
-						joinAbove: true,
+						size: "rest",
 						children: [
+							{ kind: "panel", id: "agent", direction: "column", size: "rest" },
 							{
 								kind: "panel",
-								id: "status",
-								direction: "row",
-								size: "content",
-							},
-							{
-								kind: "panel",
-								id: "input",
+								id: "pinned",
 								direction: "column",
 								size: "content",
-								title: "",
+							},
+							{
+								kind: "container",
+								id: "input-area",
+								direction: "column",
+								size: "content",
+								joinAbove: true,
+								children: [
+									{
+										kind: "panel",
+										id: "status",
+										direction: "row",
+										size: "content",
+									},
+									{
+										kind: "panel",
+										id: "input",
+										direction: "column",
+										size: "content",
+										title: "",
+									},
+								],
 							},
 						],
+					},
+					{
+						kind: "panel",
+						id: "side",
+						direction: "column",
+						size: "33%",
+						hideBelow: 120,
 					},
 				],
 			},
 			{
 				kind: "panel",
-				id: "side",
-				direction: "column",
-				size: "33%",
-				hideBelow: 120,
+				id: "bottom",
+				direction: "row",
+				size: "content",
+				bar: true,
 			},
 		],
 	},
 	placement: {
-		agent: ["chat.messages", "model.current"],
+		agent: ["chat.messages"],
 		pinned: ["background.processes"],
-		input: ["ask-user-question.card", "input.prompt", "input.dir"],
+		input: ["ask-user-question.card", "input.prompt"],
 		status: ["status.line"],
 		side: [],
+		bottom: ["model.current", "input.dir", "status.working"],
 	},
 	modules: {},
 	theme: {},
@@ -196,7 +217,7 @@ function parseSlot(value: unknown, path: string, panelIds: Set<string>): Slot {
 	}
 	onlyKeys(
 		fields,
-		[...slotKeys, ...(kind === "container" ? ["children"] : [])],
+		[...slotKeys, ...(kind === "container" ? ["children"] : ["bar"])],
 		path,
 	);
 	const base = {
@@ -217,7 +238,13 @@ function parseSlot(value: unknown, path: string, panelIds: Set<string>): Slot {
 			throw fieldError(`${path}.id`, `Panel id "${base.id}" is already used`);
 		}
 		panelIds.add(base.id);
-		return { kind, ...base };
+		return {
+			kind,
+			...base,
+			...(fields.bar === undefined
+				? {}
+				: { bar: boolean(fields.bar, `${path}.bar`) }),
+		};
 	}
 	return {
 		kind,

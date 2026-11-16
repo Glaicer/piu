@@ -21,16 +21,19 @@ function tail(text: string, width: number) {
 	return `…${result}`;
 }
 
+const separator = " · ";
+
 function label(cwd: string, branch: string | undefined, width: number) {
 	if (!branch) return tail(cwd, width);
-	const full = `${cwd}:${branch}`;
-	if (stringWidth(full) <= width || width < 3) return tail(full, width);
-	const space = width - 1;
+	const full = `${cwd}${separator}${branch}`;
+	if (stringWidth(full) <= width || width < separator.length + 2)
+		return tail(full, width);
+	const space = width - separator.length;
 	const branchWidth = Math.min(
 		stringWidth(branch),
 		Math.max(Math.floor(space / 2), space - stringWidth(cwd)),
 	);
-	return `${tail(cwd, space - branchWidth)}:${tail(branch, branchWidth)}`;
+	return `${tail(cwd, space - branchWidth)}${separator}${tail(branch, branchWidth)}`;
 }
 
 export function Directory(props: { context: ModuleContext }) {
@@ -71,7 +74,7 @@ export function Directory(props: { context: ModuleContext }) {
 			<text
 				width="100%"
 				height={1}
-				fg={theme.muted}
+				fg={props.context.bar ? theme.barMuted : theme.muted}
 				wrapMode="none"
 				ref={(node) => {
 					element = node;

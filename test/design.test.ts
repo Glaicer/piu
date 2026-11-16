@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
+import { basename } from "node:path";
 import { RGBA } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
 import {
+	bottomLine,
 	glyphs,
 	inputArea,
 	messageBar,
@@ -32,21 +34,20 @@ test("the default side Panel is hidden while the chat shows its welcome", async 
 	);
 });
 
-test("the idle composer shows command and file hints followed by its directory", async () => {
+test("the idle composer shows only command and file hints", async () => {
 	await using piu = await startPiu({ script: { replies: [] }, width: 80 });
 	const frame = await piu.waitForFrame(
 		(frame) =>
-			frame.includes("faux-1") &&
-			inputArea(frame).includes("/ commands · @ files") &&
-			inputArea(frame).includes(piu.dir),
+			bottomLine(frame).includes(basename(piu.dir)) &&
+			inputArea(frame).includes("/ commands · @ files"),
 	);
 	expect(
 		inputArea(frame)
 			.split("\n")
 			.map((line) => line.trim())
 			.filter(Boolean),
-	).toEqual(["/ commands · @ files", piu.dir]);
-	expect(inputArea(frame).split("\n")).toHaveLength(5);
+	).toEqual(["/ commands · @ files"]);
+	expect(inputArea(frame).split("\n")).toHaveLength(4);
 });
 
 test("user messages have no added prompt marker and preserve a typed greater-than sign", async () => {

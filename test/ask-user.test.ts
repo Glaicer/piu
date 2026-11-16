@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import {
+	bottomPanel,
 	focusedPanels,
 	inputArea,
 	panelBoxes,
@@ -552,26 +553,27 @@ test("clicking Dismiss gives the model a declined result", async () => {
 
 const panelRows = (piu: Piu) =>
 	panelBoxes(piu)
-		.filter((box) => box.x === 0)
+		.filter((box) => box.x === 0 && box.id !== bottomPanel)
 		.map((box) => box.y);
 
-test("the input Panel fits the card and restores the editor and directory after", async () => {
+const hints = "/ commands · @ files";
+
+test("the input Panel fits the card and restores the editor after", async () => {
 	await using piu = await startPiu({
 		script: asking("Model got {toolResult}"),
 	});
 	await piu.waitForFrame(
-		(f) => f.includes("faux-1") && inputArea(f).includes(piu.dir),
+		(f) => f.includes("faux-1") && inputArea(f).includes(hints),
 	);
 	expect(panelRows(piu)).toEqual([0, 23]);
 	await send(piu, "go");
 	const asked = await piu.waitForFrame(showsCard);
-	expect(panelRows(piu)).toEqual([0, 22]);
-	expect(inputArea(asked)).not.toContain(piu.dir);
+	expect(panelRows(piu)).toEqual([0, 21]);
+	expect(inputArea(asked)).not.toContain(hints);
 
 	piu.mockInput.pressEnter();
 	await piu.waitForFrame(
-		(f) =>
-			agentPanel(f).includes("Model got") && inputArea(f).includes(piu.dir),
+		(f) => agentPanel(f).includes("Model got") && inputArea(f).includes(hints),
 	);
 	expect(panelRows(piu)).toEqual([0, 23]);
 });

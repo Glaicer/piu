@@ -3,11 +3,12 @@ import { basename, join } from "node:path";
 import { RGBA, TextareaRenderable } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
 import {
+	bottomLine,
 	focusedPanels,
 	glyphs,
 	inputArea,
 	inputTop,
-	panelText,
+	panelBoxes,
 	startPiu,
 } from "./harness.ts";
 
@@ -20,10 +21,8 @@ for (const width of [80, 160]) {
 			(f) => f.includes("faux-1") && f.includes("/ commands · @ files"),
 		);
 		const top = inputTop();
-		const modelRow = frame
-			.split("\n")
-			.findIndex((line) => line.includes("faux-1"));
-		expect(top).toBe(modelRow + 1);
+		const agent = panelBoxes(piu).find((box) => box.id === "agent");
+		expect(top).toBe((agent?.y ?? 0) + (agent?.height ?? 0) - 1);
 		expect(frame.split("\n")[top]).toBe(glyphs.heavyRule.repeat(width));
 		expect(editor(piu).height).toBe(4);
 	});
@@ -95,26 +94,6 @@ test("wrapped lines grow and shrink the editor when the terminal is resized", as
 	await piu.waitForFrame(
 		(frame) => frame.includes("wwww") && editor(piu).height === 4,
 	);
-});
-
-test("the selected model stays above the input while the chat scrolls", async () => {
-	const reply = Array.from({ length: 50 }, (_, at) => `Reply ${at}`).join(
-		"\n\n",
-	);
-	await using piu = await startPiu({ script: { replies: [reply] }, width: 80 });
-	await piu.mockInput.typeText("Fill the conversation");
-	piu.mockInput.pressEnter();
-	const bottom = await piu.waitForFrame((frame) => frame.includes("Reply 49"));
-	const modelRow = bottom
-		.split("\n")
-		.findIndex((line) => line.includes("faux-1"));
-	expect(modelRow).toBeLessThan(editor(piu).screenY);
-	piu.mockInput.pressKey("HOME", { ctrl: true });
-	const top = await piu.waitForFrame((frame) =>
-		panelText(frame, 10).includes("Reply 0"),
-	);
-	expect(top.split("\n")[modelRow]).toContain("faux-1");
-	expect(top.split("\n")[modelRow]).toContain(":no reasoning");
 });
 
 test("the editor grows for extra lines and shrinks to four after sending", async () => {
@@ -206,7 +185,7 @@ test("a short terminal keeps the draft cursor and directory visible when the edi
 	const frame = await piu.waitForFrame(
 		(frame) =>
 			inputArea(frame).includes("Short 20") &&
-			inputArea(frame).includes(basename(piu.dir)),
+			bottomLine(frame).includes(basename(piu.dir)),
 	);
 	const field = editor(piu);
 	expect(field.height).toBeGreaterThanOrEqual(4);

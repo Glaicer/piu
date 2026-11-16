@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { stringWidth } from "bun";
-import { inputArea, startPiu } from "./harness.ts";
+import { bottomLine, inputArea, startPiu } from "./harness.ts";
 
 function workspace(name = "project") {
 	const root = mkdtempSync(join(tmpdir(), "piu-dir-"));
@@ -21,15 +21,14 @@ function git(cwd: string, ...args: string[]) {
 	execFileSync("git", ["-C", cwd, ...args], { stdio: "pipe" });
 }
 
+const modelPart = "faux-1 · no reasoning    ";
+
 function directoryLine(frame: string) {
-	return inputArea(frame)
-		.split("\n")
-		.map((line) => line.trim())
-		.filter(Boolean)
-		.at(-1);
+	const line = bottomLine(frame).trim();
+	return line.startsWith(modelPart) ? line.slice(modelPart.length) : "";
 }
 
-test("the directory Module is the last input line and omits the branch outside Git", async () => {
+test("the directory Module is on the bottom line, not in the input, and omits the branch outside Git", async () => {
 	using project = workspace();
 	await using piu = await startPiu({
 		script: { replies: [] },
@@ -37,10 +36,11 @@ test("the directory Module is the last input line and omits the branch outside G
 		width: 100,
 	});
 	const frame = await piu.waitForFrame((frame) =>
-		inputArea(frame).includes(basename(project.cwd)),
+		directoryLine(frame).includes(basename(project.cwd)),
 	);
 	expect(directoryLine(frame)).toBe(basename(project.cwd));
 	expect(inputArea(frame)).toContain("/ commands · @ files");
+	expect(inputArea(frame)).not.toContain(basename(project.cwd));
 });
 
 test("the directory line shows the current branch even before the first commit", async () => {
@@ -52,10 +52,10 @@ test("the directory line shows the current branch even before the first commit",
 		width: 100,
 	});
 	const frame = await piu.waitForFrame((frame) =>
-		inputArea(frame).includes(":feature/composer"),
+		directoryLine(frame).includes(" · feature/composer"),
 	);
 	expect(directoryLine(frame)).toBe(
-		`${basename(project.cwd)}:feature/composer`,
+		`${basename(project.cwd)} · feature/composer`,
 	);
 });
 
@@ -67,12 +67,12 @@ test("the directory line refreshes after switching branches", async () => {
 		cwd: project.cwd,
 		width: 100,
 	});
-	await piu.waitForFrame((frame) => inputArea(frame).includes(":before"));
+	await piu.waitForFrame((frame) => directoryLine(frame).includes(" · before"));
 	git(project.cwd, "symbolic-ref", "HEAD", "refs/heads/after");
 	const frame = await piu.waitForFrame((frame) =>
-		inputArea(frame).includes(":after"),
+		directoryLine(frame).includes(" · after"),
 	);
-	expect(directoryLine(frame)).toBe(`${basename(project.cwd)}:after`);
+	expect(directoryLine(frame)).toBe(`${basename(project.cwd)} · after`);
 });
 
 test("long directory and branch names retain their endings on one line", async () => {
@@ -82,16 +82,16 @@ test("long directory and branch names retain their endings on one line", async (
 	await using piu = await startPiu({
 		script: { replies: [] },
 		cwd: project.cwd,
-		width: 50,
+		width: 80,
 	});
 	const frame = await piu.waitForFrame((frame) =>
-		inputArea(frame).includes("branch-tail"),
+		directoryLine(frame).includes("branch-tail"),
 	);
-	const line = directoryLine(frame) ?? "";
+	const line = directoryLine(frame);
 	expect(line).toStartWith("…");
-	expect(line).toContain("directory-tail:…");
+	expect(line).toContain("directory-tail · …");
 	expect(line).toEndWith("branch-tail");
-	expect(stringWidth(line)).toBeLessThanOrEqual(47);
+	expect(stringWidth(line)).toBeLessThanOrEqual(80 - 2 - modelPart.length - 1);
 });
 
 test("wide characters in directory and branch names fit the visible cells", async () => {
@@ -101,15 +101,15 @@ test("wide characters in directory and branch names fit the visible cells", asyn
 	await using piu = await startPiu({
 		script: { replies: [] },
 		cwd: project.cwd,
-		width: 40,
+		width: 60,
 	});
 	const frame = await piu.waitForFrame((frame) =>
-		inputArea(frame).includes("分支尾部"),
+		directoryLine(frame).includes("分支尾部"),
 	);
-	const line = directoryLine(frame) ?? "";
-	expect(line).toContain("末尾:…");
+	const line = directoryLine(frame);
+	expect(line).toContain("末尾 · …");
 	expect(line).toEndWith("分支尾部");
-	expect(stringWidth(line)).toBeLessThanOrEqual(37);
+	expect(stringWidth(line)).toBeLessThanOrEqual(60 - 2 - modelPart.length - 1);
 });
 
 test("the directory Module can be placed without the prompt", async () => {

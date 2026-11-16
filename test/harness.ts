@@ -206,11 +206,20 @@ export function panelText(frame: string, column: number, row = 0) {
 		.join("\n");
 }
 
+// why: the Bottom line is a one-row Panel with no frame under the whole Layout, so it is read by its id and is not the input's Panel.
+export const bottomPanel = "bottom";
+
+export function bottomLine(frame: string) {
+	const box = panelBoxes().find((found) => found.id === bottomPanel);
+	if (!box) return "";
+	return cells(frame.split("\n")[box.y] ?? "", box.x, box.x + box.width);
+}
+
 // why: the chat repeats every prompt, so history is asserted on the last Panel in the main column, not the whole frame.
 export function inputTop() {
 	return Math.max(
 		...panelBoxes()
-			.filter((box) => box.x === 0)
+			.filter((box) => box.x === 0 && box.id !== bottomPanel)
 			.map((box) => box.y),
 	);
 }

@@ -165,6 +165,35 @@ test.each([
 		{ keybindings: { "focus.next": "constructor+tab" } },
 		"keybindings.focus.next",
 	],
+	[
+		"bar on a Container",
+		{
+			layout: {
+				kind: "container",
+				id: "root",
+				direction: "row",
+				size: "rest",
+				bar: true,
+				children: [
+					{ kind: "panel", id: "p", direction: "column", size: "rest" },
+				],
+			},
+		},
+		"layout.bar",
+	],
+	[
+		"a bar that is not a boolean",
+		{
+			layout: {
+				kind: "panel",
+				id: "p",
+				direction: "row",
+				size: "content",
+				bar: "yes",
+			},
+		},
+		"layout.bar",
+	],
 	["a misspelled top-level key", { palcement: {} }, "palcement"],
 	[
 		"a misspelled key inside backend",
@@ -215,7 +244,14 @@ test.each([
 	[
 		"an empty Placement",
 		{
-			placement: { agent: [], pinned: [], input: [], status: [], side: [] },
+			placement: {
+				agent: [],
+				pinned: [],
+				input: [],
+				status: [],
+				side: [],
+				bottom: [],
+			},
 		},
 		"no Module is placed",
 	],

@@ -30,3 +30,7 @@
 - [ ] Тесты через `startPiu`: пустая строка под линией, `›` и его цвет в фокусе и без, цвет курсора, обе версии подсказок, отсутствие `Working…`, переназначенный `input.newline` меняет подсказку.
 - [ ] `test/composer.test.ts`, `test/input.test.ts`, `test/autocomplete.test.ts` зелёные; `inputArea` в harness читает только строки поля.
 - [ ] `pnpm check`.
+
+## Comments
+
+- From 39: спиннер теперь в `src/spinner.ts` (`workingSpinner`), его же использует `status.working` на нижней строке. Убирая строку `Working…`, убрать и её вызов в `builtin/input/index.tsx`; `test/animation.test.ts` (`workingLine` ищет `Working`) и `test/input.test.ts` тогда перевести на `working` в `bottomLine`.

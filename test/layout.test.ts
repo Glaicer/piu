@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { RGBA, TextAttributes } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
 import {
+	bottomPanel,
 	focusedPanels,
 	glyphs,
 	panelBoxes,
@@ -33,7 +34,7 @@ function lineOf(frame: string, text: string) {
 
 function panelRows(piu: Piu, column: number) {
 	return panelBoxes(piu)
-		.filter((box) => box.x === column)
+		.filter((box) => box.x === column && box.id !== bottomPanel)
 		.map((box) => box.y);
 }
 

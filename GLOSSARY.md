@@ -40,7 +40,11 @@ _Avoid_: Widget (that is Pi's word for an extension's text lines), plugin, compo
 
 **Footer**:
 A Module pinned to the bottom of its Panel: it sits inside the Panel's padding, above the divider below it, but stays outside the scrolling content.
-_Avoid_: Status bar, bottom bar
+_Avoid_: Bottom line (that is a Panel of its own)
+
+**Bottom line**:
+The dark row across the bottom of the screen that shows the model, the reasoning level, the folder and branch, and `working` while the agent runs; the default Panel `bottom`, drawn as a bar.
+_Avoid_: Status bar, bottom bar, footer
 
 **Extension**:
 A package of this project that contributes Modules and, when needed, a Pi extension; built-in Modules are Extensions too. A bare "extension" always means this.

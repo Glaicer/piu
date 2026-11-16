@@ -240,12 +240,12 @@ function openModelPicker(context: CommandContext) {
 function modelLabel(context: CommandContext) {
 	if (context.pi.modelRestoring) return "loading model...";
 	const model = context.pi.model;
-	return model ? `${model.provider} · ${model.id}` : "no model";
+	return model ? model.id : "no model";
 }
 
 function reasoningLabel(context: CommandContext) {
 	const level = context.pi.thinkingLevel;
-	return `:${level === "off" ? "no reasoning" : level}`;
+	return level === "off" ? "no reasoning" : level;
 }
 
 export default {
@@ -253,24 +253,32 @@ export default {
 		{
 			id: "current",
 			footer: true,
-			render: (context) => (
-				<box flexDirection="row" paddingX={1} marginTop={1}>
-					<PickerLink
-						plain
-						context={context}
-						label={modelLabel(context)}
-						onPress={() => openModelPicker(context)}
-					/>
-					<Show when={!context.pi.modelRestoring && context.pi.model}>
+			render: (context) => {
+				const { theme } = context;
+				const muted = () => (context.bar ? theme.barMuted : theme.muted);
+				return (
+					<box flexDirection="row" flexShrink={0}>
 						<PickerLink
 							plain
+							bold
+							color={context.bar ? theme.barText : theme.text}
 							context={context}
-							label={reasoningLabel(context)}
-							onPress={() => openReasoningPicker(context)}
+							label={modelLabel(context)}
+							onPress={() => openModelPicker(context)}
 						/>
-					</Show>
-				</box>
-			),
+						<Show when={!context.pi.modelRestoring && context.pi.model}>
+							<text fg={muted()}> · </text>
+							<PickerLink
+								plain
+								color={muted()}
+								context={context}
+								label={reasoningLabel(context)}
+								onPress={() => openReasoningPicker(context)}
+							/>
+						</Show>
+					</box>
+				);
+			},
 		},
 	],
 	commands: [

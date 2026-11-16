@@ -18,6 +18,7 @@ import {
 import { paintCard } from "../../src/card.ts";
 import { matches } from "../../src/keybindings.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
+import { workingSpinner } from "../../src/spinner.ts";
 import { type Entry, findTrigger, narrow } from "./autocomplete.ts";
 import { Directory } from "./dir.tsx";
 import { listFiles } from "./files.ts";
@@ -25,9 +26,6 @@ import { listFiles } from "./files.ts";
 const MAX_LIST_ROWS = 8;
 const MIN_LINES = 4;
 const MAX_LINES = 16;
-const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-const SPINNER_MS = 800;
-const SPINNER_FPS = 10;
 
 const keyBindings = [
 	{ name: "return", shift: true, action: "newline" as const },
@@ -59,23 +57,7 @@ function Prompt(props: { context: ModuleContext }) {
 		},
 	});
 	scrollbar.focusable = false;
-	const [spinner, setSpinner] = createSignal("");
-	createEffect(() => {
-		if (!props.context.pi.working) return;
-		const stop = props.context.animate({
-			from: 0,
-			to: SPINNER.length,
-			duration: SPINNER_MS,
-			loop: true,
-			frameRate: SPINNER_FPS,
-			onUpdate: (value) =>
-				setSpinner(`${SPINNER[Math.floor(value) % SPINNER.length]} `),
-		});
-		onCleanup(() => {
-			stop();
-			setSpinner("");
-		});
-	});
+	const spinner = workingSpinner(props.context);
 	const [before, setBefore] = createSignal("");
 	const [lineCount, setLineCount] = createSignal(1);
 	const height = () => Math.max(MIN_LINES, Math.min(MAX_LINES, lineCount()));
@@ -444,6 +426,7 @@ export default {
 		{
 			id: "dir",
 			minHeight: 1,
+			grow: true,
 			render: (context) => <Directory context={context} />,
 		},
 	],

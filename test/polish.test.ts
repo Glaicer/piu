@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { panelText, startPiu } from "./harness.ts";
+import { bottomLine, panelText, startPiu } from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -11,11 +11,7 @@ async function send(piu: Piu, text: string) {
 }
 
 const agentPanel = (frame: string) => panelText(frame, 10, 0);
-const footer = (frame: string) =>
-	agentPanel(frame)
-		.split("\n")
-		.findLast((line) => line.trim())
-		?.trim() ?? "";
+const shownModel = (frame: string) => bottomLine(frame).trim();
 
 test("a refused model switch shows Pi's error in a Toast and keeps the shown model", async () => {
 	await using piu = await startPiu({
@@ -23,7 +19,7 @@ test("a refused model switch shows Pi's error in a Toast and keeps the shown mod
 		config: { placement: { side: ["probe.capture"] } },
 		extensions: join(import.meta.dir, "fixtures/extensions"),
 	});
-	await piu.waitForFrame((f) => footer(f).includes("faux-1"));
+	await piu.waitForFrame((f) => shownModel(f).includes("faux-1"));
 
 	await hooks.probe.actions?.setModel({
 		provider: "faux",
@@ -34,7 +30,7 @@ test("a refused model switch shows Pi's error in a Toast and keeps the shown mod
 	const frame = await piu.waitForFrame((f) =>
 		f.includes("Model not found: faux/missing"),
 	);
-	expect(footer(frame)).toContain("faux-1");
+	expect(shownModel(frame)).toContain("faux-1");
 });
 
 test("an extension_error shows a Toast naming the Pi extension and its error", async () => {
@@ -53,23 +49,25 @@ test("a Pi extension command that changes the thinking level updates the shown l
 		script: { replies: [], switchCommands: true },
 		args: ["--model", "faux/faux-2"],
 	});
-	await piu.waitForFrame((f) => footer(f).includes("faux-2"));
-	expect(footer(await piu.waitForFrame(() => true))).not.toContain(":high");
+	await piu.waitForFrame((f) => shownModel(f).includes("faux-2"));
+	expect(shownModel(await piu.waitForFrame(() => true))).not.toContain(
+		"· high",
+	);
 
 	await send(piu, "/level-high");
 
-	await piu.waitForFrame((f) => footer(f).includes(":high"));
+	await piu.waitForFrame((f) => shownModel(f).includes("· high"));
 });
 
 test("a Pi extension command that changes the model updates the shown model once it finishes", async () => {
 	await using piu = await startPiu({
 		script: { replies: [], switchCommands: true },
 	});
-	await piu.waitForFrame((f) => footer(f).includes("faux-1"));
+	await piu.waitForFrame((f) => shownModel(f).includes("faux-1"));
 
 	await send(piu, "/to-faux-2");
 
-	await piu.waitForFrame((f) => footer(f).includes("faux-2"));
+	await piu.waitForFrame((f) => shownModel(f).includes("faux-2"));
 });
 
 test("an automatic compaction leaves the chat matching Pi's messages", async () => {

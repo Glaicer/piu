@@ -45,3 +45,7 @@
 - [ ] `test/theme.test.ts`: значения тёмных токенов в кадре (`terminalBackground: "dark"`), включая нижнюю строку и inline-код.
 - [ ] Хелперы harness, которые ищут Modal по `darkTheme.raised` (`onModalFill`, `modalBounds`), по-прежнему находят Modal: `raised` не совпадает ни с одним другим фоном экрана.
 - [ ] `pnpm check`.
+
+## Comments
+
+- From 39: токены `bar`, `barText`, `barMuted` уже заведены, тёмные значения из таблицы стоят в `darkTheme`. Проверку «на экране есть `accent`» в `test/visual.test.ts` 39 убрал: в тёмной теме её выполняла только ссылка модели.

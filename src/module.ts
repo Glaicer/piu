@@ -45,6 +45,7 @@ export type ModuleContext = CommandContext & {
 	readonly channel: Channel;
 	readonly keybindings: Keybindings;
 	readonly animate: Animate;
+	readonly bar: boolean;
 	onCleanup(cleanup: () => void): void;
 	onKey(handler: (event: KeyEvent) => void): void;
 	holdFocusKeys(active: Accessor<boolean>): void;
@@ -57,6 +58,7 @@ export type Module = {
 	readonly minHeight?: number;
 	readonly footer?: boolean;
 	readonly followsOutput?: boolean;
+	readonly grow?: boolean;
 	render(context: ModuleContext): JSX.Element;
 };
 

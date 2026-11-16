@@ -22,6 +22,7 @@ const modelConfig = {
 	placement: {
 		agent: ["chat.messages"],
 		status: ["model.current", "reasoning.level"],
+		bottom: [],
 	},
 };
 

@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { RGBA } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
-import { focusedPanels, inputArea, panelText, startPiu } from "./harness.ts";
+import {
+	bottomLine,
+	focusedPanels,
+	inputArea,
+	panelText,
+	startPiu,
+} from "./harness.ts";
 
 const agentPanel = (frame: string) => panelText(frame, 10, 0);
 
@@ -356,7 +362,9 @@ test("Tab on a selected command that takes no arguments runs it", async () => {
 		script: { replies: [] },
 		args: ["--model", "faux/faux-2"],
 	});
-	await piu.waitForFrame((f) => f.includes("faux · faux-2:medium"));
+	await piu.waitForFrame((f) =>
+		bottomLine(f).trim().startsWith("faux-2 · medium"),
+	);
 
 	await piu.mockInput.typeText("/reas");
 	await piu.waitForFrame((f) => f.includes("Set the reasoning level"));
