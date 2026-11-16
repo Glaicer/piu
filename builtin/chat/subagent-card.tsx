@@ -5,9 +5,7 @@ import { type Selection, selectable } from "./selection.ts";
 
 export function statusColor(status: Subagent["status"], theme: Theme) {
 	if (status === "failed") return theme.error;
-	if (status === "done") return theme.success;
-	if (status === "running" || status === "stopped") return theme.warning;
-	return theme.muted;
+	return status === "running" ? theme.signal : theme.faint;
 }
 
 export function SubagentCard(props: {

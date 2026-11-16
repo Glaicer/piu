@@ -128,7 +128,7 @@ test("clicking a card opens that subagent's messages and tool calls, and later o
 		(f) => f.includes("Reading the sources") && f.includes(" read"),
 	);
 	expect(open).toMatch(/> Do: Audit the auth code/);
-	expect(open).toMatch(/ read .*src\/auth\.ts.* done/);
+	expect(open).toMatch(/ read .*src\/auth\.ts.* ●/);
 	expect(open).not.toContain("[sending]");
 	expect(open).not.toContain("export const auth = 1");
 

@@ -109,12 +109,14 @@ for (const mode of ["dark", "light"] as const) {
 		});
 
 		await piu.waitForFrame((f) => f.includes("faux-1"));
+		piu.mockInput.pressKey("l", { ctrl: true });
+		await piu.waitForFrame((f) => f.includes("faux-2") && f.includes("All"));
 		expect(
 			piu
 				.captureSpans()
-				.lines.some((line) =>
-					line.spans.some((span) => span.fg.equals(RGBA.fromHex("#ff00ff"))),
-				),
+				.lines.flatMap((line) => line.spans)
+				.find((span) => span.text.trim() === "All")
+				?.fg.equals(RGBA.fromHex("#ff00ff")),
 		).toBe(true);
 	});
 }

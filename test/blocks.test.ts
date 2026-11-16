@@ -83,7 +83,7 @@ test("a tool call is a card that runs, finishes with a duration, and opens and c
 		f.includes("Finished the job"),
 	);
 	expect(finished).not.toContain("running");
-	expect(finished).toMatch(/done\s+\d+(\.\d+)?m?s/);
+	expect(finished).toMatch(/●\s+\d+(\.\d+)?m?s/);
 	expect(finished).not.toContain("zebra-2");
 
 	await clickOn(piu, finished, "bash");
@@ -217,7 +217,7 @@ test("a resumed session shows its tool cards as finished", async () => {
 
 		expect(frame).toContain("bash");
 		expect(frame).toContain("echo $((6*7))");
-		expect(frame).toMatch(/done/);
+		expect(frame).toContain("●");
 		expect(frame).not.toContain("running");
 	} finally {
 		rmSync(dir, { recursive: true, force: true });

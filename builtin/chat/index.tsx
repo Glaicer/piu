@@ -33,6 +33,21 @@ function Messages(props: { context: ModuleContext }) {
 		onCleanup(() => style.destroy());
 		return style;
 	});
+	const groupedTools = createMemo(() => {
+		const grouped = new Set<string>();
+		const servicePositions = new Set(pi.serviceRows.map((row) => row.position));
+		let previousTool = false;
+		pi.messages.forEach((message, index) => {
+			if (servicePositions.has(index)) previousTool = false;
+			if (message.role === "user") previousTool = false;
+			if (message.role !== "assistant") return;
+			for (const block of message.content) {
+				if (block.type === "toolCall" && previousTool) grouped.add(block.id);
+				previousTool = block.type === "toolCall";
+			}
+		});
+		return grouped;
+	});
 	const resultFor = (id: string) =>
 		pi.messages.find(
 			(message): message is ToolResultMessage =>
@@ -57,7 +72,7 @@ function Messages(props: { context: ModuleContext }) {
 		<box paddingX={1}>
 			<Show when={pi.messages.length === 0 && pi.pending.length === 0}>
 				<box paddingX={2} paddingY={2}>
-					<text fg={theme.accent}>
+					<text fg={theme.text}>
 						<b>What would you like to build?</b>
 					</text>
 					<text fg={theme.muted}>
@@ -74,6 +89,7 @@ function Messages(props: { context: ModuleContext }) {
 								{(block, blockIndex) => (
 									<AssistantBlock
 										block={block()}
+										groupedTools={groupedTools()}
 										resultFor={resultFor}
 										jobs={() => pi.backgroundJobs}
 										abandoned={
@@ -98,8 +114,14 @@ function Messages(props: { context: ModuleContext }) {
 									paddingX={2}
 									paddingY={1}
 									marginTop={1}
+									flexDirection="row"
 								>
-									<text fg={theme.text}>{messageText(message)}</text>
+									<text fg={theme.text} flexGrow={1} flexShrink={1}>
+										<b>{messageText(message)}</b>
+									</text>
+									<text fg={theme.faint} flexShrink={0} marginLeft={1}>
+										you
+									</text>
 								</box>
 							)
 						)}
@@ -153,6 +175,7 @@ type AssistantBlockData = Extract<
 
 function AssistantBlock(props: {
 	block: AssistantBlockData;
+	groupedTools: ReadonlySet<string>;
 	resultFor: (toolCallId: string) => ToolResultMessage | undefined;
 	jobs: () => readonly BackgroundJob[];
 	abandoned: boolean;
@@ -193,6 +216,7 @@ function AssistantBlock(props: {
 				</box>
 			) : type() === "toolCall" ? (
 				<ToolCard
+					grouped={props.groupedTools.has(toolCall()?.id ?? "")}
 					call={toolCall}
 					result={() => {
 						const id = toolCall()?.id;

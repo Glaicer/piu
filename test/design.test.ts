@@ -58,24 +58,24 @@ test("user messages have no added prompt marker and preserve a typed greater-tha
 	const first = await piu.waitForFrame((frame) =>
 		frame.includes("First reply"),
 	);
-	expect(
-		panelText(first, 10)
-			.split("\n")
-			.find((line) => line.includes("A plain prompt"))
-			?.trim(),
-	).toBe(messageBar("A plain prompt").trim());
+	const firstRow = panelText(first, 10)
+		.split("\n")
+		.find((line) => line.includes("A plain prompt"));
+	expect(firstRow?.trim()).toBe(
+		messageBar("A plain prompt", firstRow?.length).trim(),
+	);
 
 	await piu.mockInput.typeText("> A deliberate quote");
 	piu.mockInput.pressEnter();
 	const second = await piu.waitForFrame((frame) =>
 		frame.includes("Second reply"),
 	);
-	expect(
-		panelText(second, 10)
-			.split("\n")
-			.find((line) => line.includes("A deliberate quote"))
-			?.trim(),
-	).toBe(messageBar("> A deliberate quote").trim());
+	const secondRow = panelText(second, 10)
+		.split("\n")
+		.find((line) => line.includes("A deliberate quote"));
+	expect(secondRow?.trim()).toBe(
+		messageBar("> A deliberate quote", secondRow?.length).trim(),
+	);
 });
 
 test("a user message and an opened tool card body stand out from the Panel with a raised fill", async () => {
@@ -131,7 +131,7 @@ test("a compact tool row keeps its status visible next to a long command on a na
 	);
 	const rows = panelText(frame, 10).split("\n");
 	const row = rows.findIndex((line) => line.includes(" bash"));
-	expect(rows[row]).toMatch(/done\s+\d+(\.\d+)?m?s/);
+	expect(rows[row]).toMatch(/●\s+\d+(\.\d+)?m?s/);
 	expect(rows[row - 1]).not.toContain(glyphs.topLeft);
 	expect(rows[row + 1]).not.toContain(glyphs.bottomLeft);
 });

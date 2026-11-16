@@ -142,9 +142,10 @@ export function modalBounds(piu: Awaited<ReturnType<typeof startPiu>>) {
 	return { left, top, width: right - left + 1, height: bottom - top + 1 };
 }
 
-export function messageBar(text: string) {
-	// why: a user message is the only chat row padded this deep, which tells it from a queued entry or a reply that quotes the text.
-	return `   ${text}`;
+export function messageBar(text: string, width?: number) {
+	// why: without a Panel content width, match only the padded prefix; `you` sits at the far right of the first row.
+	const prefix = `   ${text}`;
+	return width === undefined ? prefix : `${prefix.padEnd(width - 5)}you`;
 }
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;

@@ -19,7 +19,10 @@ export function Thinking(props: {
 		<box flexDirection="column" paddingX={1} marginTop={1}>
 			<box ref={label.ref} alignSelf="flex-start" onMouseDown={label.activate}>
 				<text fg={props.theme.muted}>
-					{`${label.selected() ? "› " : ""}${filled() ? (reveal.open() ? "▾" : "▸") : "·"} Thinking`}
+					<span style={{ fg: props.theme.faint }}>
+						{`${label.selected() ? "› " : ""}${filled() ? (reveal.open() ? "▾" : "▸") : "·"} `}
+					</span>
+					<i>Thinking</i>
 				</text>
 			</box>
 			{body() !== undefined && (

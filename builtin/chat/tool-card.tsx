@@ -63,6 +63,7 @@ export function ToolCard(props: {
 	result: () => ToolResultMessage | undefined;
 	jobs: () => readonly BackgroundJob[];
 	abandoned: boolean;
+	grouped?: boolean;
 	animate: Animate;
 	selection: Selection;
 	theme: Theme;
@@ -82,10 +83,7 @@ export function ToolCard(props: {
 	const color = () => {
 		const current = status();
 		if (current === "error" || current === "failed") return props.theme.error;
-		if (current === "done") return props.theme.muted;
-		return current === "running" || current === "killed"
-			? props.theme.warning
-			: props.theme.muted;
+		return current === "running" ? props.theme.signal : props.theme.faint;
 	};
 	const duration = () => {
 		const ms = props.result()?.durationMs;
@@ -95,7 +93,9 @@ export function ToolCard(props: {
 	};
 	const label = () => {
 		const id = jobId();
-		return id === undefined ? status() : `${id} ${status()}`;
+		if (id !== undefined) return `${id} ${status()}`;
+		if (status() === "running") return "◐ running";
+		return status() === "done" ? "●" : "● error";
 	};
 	const argument = () => {
 		const call = props.call();
@@ -113,7 +113,7 @@ export function ToolCard(props: {
 			flexDirection="column"
 			backgroundColor={row.selected() ? props.theme.selection : undefined}
 			paddingX={1}
-			marginTop={1}
+			marginTop={props.grouped ? 0 : 1}
 		>
 			<box ref={row.ref} flexDirection="row" onMouseDown={row.activate}>
 				{row.selected() && (
@@ -122,10 +122,10 @@ export function ToolCard(props: {
 					</text>
 				)}
 				<text fg={props.theme.surface} bg={props.theme.text} flexShrink={0}>
-					{` ${props.call()?.name ?? ""} `}
+					<b>{` ${props.call()?.name ?? ""} `}</b>
 				</text>
 				<text
-					fg={props.theme.muted}
+					fg={props.theme.text}
 					flexGrow={1}
 					flexShrink={1}
 					wrapMode="none"
