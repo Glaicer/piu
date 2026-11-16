@@ -54,7 +54,9 @@ test("the directory line shows the current branch even before the first commit",
 	const frame = await piu.waitForFrame((frame) =>
 		inputArea(frame).includes(":feature/composer"),
 	);
-	expect(directoryLine(frame)).toBe(`${basename(project.cwd)}:feature/composer`);
+	expect(directoryLine(frame)).toBe(
+		`${basename(project.cwd)}:feature/composer`,
+	);
 });
 
 test("the directory line refreshes after switching branches", async () => {
@@ -121,6 +123,8 @@ test("the directory Module can be placed without the prompt", async () => {
 			placement: { where: ["input.dir"] },
 		},
 	});
-	const frame = await piu.waitForFrame((frame) => frame.includes(basename(project.cwd)));
+	const frame = await piu.waitForFrame((frame) =>
+		frame.includes(basename(project.cwd)),
+	);
 	expect(frame).not.toContain("/ commands · @ files");
 });
