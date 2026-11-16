@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
 import { focusedPanels, glyphs, sidePlacement, startPiu } from "./harness.ts";
 
-for (const [mode, surface, raised, ink] of [
-	["light", "#ffffff", "#f2f2f2", "#000000"],
-	["dark", "#121212", "#222222", "#ececec"],
+for (const [mode, surface, raised, ink, chip] of [
+	["light", "#ffffff", "#f2f2f2", "#000000", "#4e4d4d"],
+	["dark", "#121212", "#222222", "#ececec", "#a8a8a8"],
 ] as const) {
 	test(`thin Panel dividers stay one neutral color when focus changes on a ${mode} terminal`, async () => {
 		await using piu = await startPiu({
@@ -64,7 +64,7 @@ for (const [mode, surface, raised, ink] of [
 		expect(prompt?.fg.equals(RGBA.fromHex(ink))).toBe(true);
 		expect(prompt?.bg.equals(RGBA.fromHex(raised))).toBe(true);
 		expect(badge?.fg.equals(RGBA.fromHex(surface))).toBe(true);
-		expect(badge?.bg.equals(RGBA.fromHex(ink))).toBe(true);
+		expect(badge?.bg.equals(RGBA.fromHex(chip))).toBe(true);
 		expect(frame).not.toContain(glyphs.topLeft);
 		expect(frame).not.toContain("YOU");
 		expect(frame).toContain("Thinking");

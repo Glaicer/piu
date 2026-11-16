@@ -100,6 +100,10 @@ function Messages(props: { context: ModuleContext }) {
 											message === pi.streamingMessage &&
 											blockIndex === message.content.length - 1
 										}
+										final={
+											message !== pi.streamingMessage &&
+											blockIndex === finalTextIndex(message)
+										}
 										selection={selection}
 										syntaxStyle={syntaxStyle()}
 										theme={theme}
@@ -180,6 +184,7 @@ function AssistantBlock(props: {
 	jobs: () => readonly BackgroundJob[];
 	abandoned: boolean;
 	streaming: boolean;
+	final: boolean;
 	selection: Selection;
 	syntaxStyle: SyntaxStyle;
 	theme: Theme;
@@ -207,6 +212,14 @@ function AssistantBlock(props: {
 				/>
 			) : type() === "text" ? (
 				<box paddingX={1} marginTop={1}>
+					{props.final && (
+						<box
+							height={1}
+							marginBottom={1}
+							border={["top"]}
+							borderColor={props.theme.border}
+						/>
+					)}
 					<Markdown
 						text={text()}
 						streaming={props.streaming}
@@ -231,6 +244,14 @@ function AssistantBlock(props: {
 			) : null}
 		</>
 	);
+}
+
+// why: the faux model reports "stop" even for a reply with tool calls, and Pi itself continues on the presence of tool calls, so they decide what is final.
+function finalTextIndex(message: Extract<PiMessage, { role: "assistant" }>) {
+	const { content } = message;
+	if (message.stopReason !== "stop") return -1;
+	if (content.some((block) => block.type === "toolCall")) return -1;
+	return content.findLastIndex((block) => block.type === "text");
 }
 
 const PENDING_LABELS = {

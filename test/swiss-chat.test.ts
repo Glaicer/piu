@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { RGBA, TextAttributes } from "@opentui/core";
-import { lightTheme } from "../src/theme.ts";
+import { darkTheme, lightTheme } from "../src/theme.ts";
 import { blocker } from "./blocker.ts";
 import { panelBoxes, panelText, startPiu } from "./harness.ts";
 import { subagentsControl } from "./subagents-control.ts";
@@ -53,12 +53,12 @@ function foregroundTools(piu: Piu, frame: string) {
 	}
 	const chip = span(piu, " bash ", indices[0]);
 	expect(chip?.fg.equals(RGBA.fromHex(lightTheme.surface))).toBe(true);
-	expect(chip?.bg.equals(RGBA.fromHex(lightTheme.text))).toBe(true);
+	expect(chip?.bg.equals(RGBA.fromHex(lightTheme.chip))).toBe(true);
 	expect((chip?.attributes ?? 0) & TextAttributes.BOLD).toBe(
 		TextAttributes.BOLD,
 	);
 	expect(
-		span(piu, "printf", indices[0])?.fg.equals(RGBA.fromHex(lightTheme.text)),
+		span(piu, "printf", indices[0])?.fg.equals(RGBA.fromHex(lightTheme.muted)),
 	).toBe(true);
 }
 
@@ -122,6 +122,63 @@ test("three tools share consecutive rows with faint done, error and live statuse
 	foregroundTools(piu, frame);
 	await piu.waitForFrame((f) => chat(f).includes("Tools finished"));
 });
+
+test("in the dark theme the tool chip and its argument take the muted Thinking colour", async () => {
+	await using piu = await startPiu({
+		terminalBackground: "dark",
+		script: {
+			replies: [
+				{ toolCalls: [{ name: "bash", args: { command: "printf dark" } }] },
+				"Dark done",
+			],
+		},
+	});
+	await send(piu, "Run dark");
+	const frame = await piu.waitForFrame((f) => chat(f).includes("Dark done"));
+	const row = chat(frame)
+		.split("\n")
+		.findIndex((line) => line.includes(" bash "));
+	const chip = span(piu, " bash ", row);
+	expect(chip?.fg.equals(RGBA.fromHex(darkTheme.surface))).toBe(true);
+	expect(chip?.bg.equals(RGBA.fromHex(darkTheme.muted))).toBe(true);
+	expect(
+		span(piu, "printf dark", row)?.fg.equals(RGBA.fromHex(darkTheme.muted)),
+	).toBe(true);
+});
+
+for (const [mode, theme] of [
+	["light", lightTheme],
+	["dark", darkTheme],
+] as const) {
+	test(`only the final answer has a thin border rule above it on a ${mode} terminal`, async () => {
+		await using piu = await startPiu({
+			terminalBackground: mode,
+			script: {
+				replies: [
+					{
+						text: "Working on it",
+						toolCalls: [{ name: "bash", args: { command: "printf rule" } }],
+					},
+					"All done",
+				],
+			},
+		});
+		await send(piu, "Rule check");
+		const frame = await piu.waitForFrame(
+			(f) => chat(f).includes("All done") && chat(f).includes("●"),
+		);
+		const rows = chat(frame).split("\n");
+		const rules = rows.flatMap((row, index) =>
+			/^─+$/.test(row.trim()) ? [index] : [],
+		);
+		const answer = rows.findIndex((row) => row.includes("All done"));
+		expect(rules).toEqual([answer - 2]);
+		expect(rows[answer - 1]?.trim()).toBe("");
+		expect(
+			span(piu, "─", rules[0])?.fg.equals(RGBA.fromHex(theme.border)),
+		).toBe(true);
+	});
+}
 
 test("Thinking has a faint chevron and italic muted label without a duration", async () => {
 	await using piu = await startPiu({

@@ -121,11 +121,11 @@ export function ToolCard(props: {
 						{"›"}
 					</text>
 				)}
-				<text fg={props.theme.surface} bg={props.theme.text} flexShrink={0}>
+				<text fg={props.theme.surface} bg={props.theme.chip} flexShrink={0}>
 					<b>{` ${props.call()?.name ?? ""} `}</b>
 				</text>
 				<text
-					fg={props.theme.text}
+					fg={props.theme.muted}
 					flexGrow={1}
 					flexShrink={1}
 					wrapMode="none"

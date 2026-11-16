@@ -90,6 +90,7 @@ test("several queued messages stay separate and in the order they were sent, eve
 	await using piu = await startBlocked(
 		["Got {lastUser}", "Got {lastUser}", "Got {lastUser}"],
 		block,
+		{ height: 40 },
 	);
 
 	await send(piu, "again");

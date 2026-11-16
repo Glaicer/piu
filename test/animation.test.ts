@@ -22,10 +22,12 @@ async function start(options: {
 	script?: FauxScript;
 	config?: object;
 	extensions?: string;
+	height?: number;
 }) {
 	const clock = new ManualClock();
 	const piu = await startPiu({
 		script: options.script ?? none,
+		height: options.height,
 		clock,
 		extensions: options.extensions,
 		config: {
@@ -344,6 +346,7 @@ function rowsShown(frame: string) {
 async function toolCardApp(animations: boolean) {
 	const app = await start({
 		animations,
+		height: 40,
 		script: { replies: [listing, "Listed"] },
 	});
 	await app.piu.mockInput.typeText("go");
@@ -388,7 +391,6 @@ test("with animations off a tool card opens and closes at once", async () => {
 	await using app = await toolCardApp(false);
 	await clickText(app.piu, " bash");
 	expect(rowsShown(await app.frame())).toBe(outputRows);
-
 	await clickText(app.piu, " bash");
 	expect(rowsShown(await app.frame())).toBe(0);
 });
