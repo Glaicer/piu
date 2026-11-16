@@ -89,7 +89,7 @@ export const glyphs = {
 	top: "─",
 	left: "│",
 	right: "│",
-	bar: "│",
+	bar: "▌",
 	joinLeft: "├",
 	joinRight: "┤",
 };
@@ -149,7 +149,8 @@ export function modalBounds(piu: Awaited<ReturnType<typeof startPiu>>) {
 }
 
 export function messageBar(text: string) {
-	return `${glyphs.bar} ${text}`;
+	// why: a user message is the only chat row padded this deep, which tells it from a queued entry or a reply that quotes the text.
+	return `   ${text}`;
 }
 
 export function panelText(frame: string, column: number, row = 0) {

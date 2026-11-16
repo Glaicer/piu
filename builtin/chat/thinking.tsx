@@ -10,16 +10,23 @@ export function Thinking(props: {
 	theme: Theme;
 }) {
 	const reveal = createReveal(props.animate);
-	const label = selectable(props.selection, reveal.toggle);
+	const filled = () => props.text.trim() !== "";
+	const label = selectable(props.selection, () => {
+		if (filled()) reveal.toggle();
+	});
 	const body = () => reveal.visible(props.text);
 	return (
 		<box flexDirection="column" paddingX={1} marginTop={1}>
 			<box ref={label.ref} alignSelf="flex-start" onMouseDown={label.activate}>
 				<text fg={props.theme.muted}>
-					{`${label.selected() ? "› " : ""}${reveal.open() ? "▾" : "▸"} Thinking`}
+					{`${label.selected() ? "› " : ""}${filled() ? (reveal.open() ? "▾" : "▸") : "·"} Thinking`}
 				</text>
 			</box>
-			{body() !== undefined && <text fg={props.theme.muted}>{body()}</text>}
+			{body() !== undefined && (
+				<box backgroundColor={props.theme.raised} paddingX={1} marginTop={1}>
+					<text fg={props.theme.muted}>{body()}</text>
+				</box>
+			)}
 		</box>
 	);
 }

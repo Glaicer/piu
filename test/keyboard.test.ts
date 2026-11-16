@@ -37,7 +37,7 @@ test("with the agent Panel focused the arrow keys scroll it", async () => {
 	const top = await piu.waitForFrame((f) =>
 		panelText(f, 10)
 			.split("\n")
-			.some((line) => line.trimStart().startsWith(messageBar("Go "))),
+			.some((line) => line.includes(messageBar("Go "))),
 	);
 	expect(top).not.toContain("Row 30");
 });
@@ -61,11 +61,11 @@ test("with the agent Panel focused Enter expands the selected tool card", async 
 
 	await focusAgent(piu);
 	piu.mockInput.pressArrow("down");
-	await piu.waitForFrame((f) => f.includes("› ▸ bash"));
+	await piu.waitForFrame((f) => f.includes("› bash"));
 	piu.mockInput.pressEnter();
 
 	const open = await piu.waitForFrame((f) => f.includes("RESULTMARK"));
-	expect(open).toContain("▾ bash");
+	expect(open).toContain(" bash");
 });
 
 test("the Restart button on the Backend error card can be selected and pressed by keyboard", async () => {

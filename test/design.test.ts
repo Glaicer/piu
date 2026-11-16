@@ -61,10 +61,8 @@ test("user messages have no added prompt marker and preserve a typed greater-tha
 		panelText(first, 10)
 			.split("\n")
 			.find((line) => line.includes("A plain prompt"))
-			?.trim()
-			.slice(0, -1)
-			.trimEnd(),
-	).toBe(messageBar("A plain prompt"));
+			?.trim(),
+	).toBe(messageBar("A plain prompt").trim());
 
 	await piu.mockInput.typeText("> A deliberate quote");
 	piu.mockInput.pressEnter();
@@ -75,10 +73,37 @@ test("user messages have no added prompt marker and preserve a typed greater-tha
 		panelText(second, 10)
 			.split("\n")
 			.find((line) => line.includes("A deliberate quote"))
-			?.trim()
-			.slice(0, -1)
-			.trimEnd(),
-	).toBe(messageBar("> A deliberate quote"));
+			?.trim(),
+	).toBe(messageBar("> A deliberate quote").trim());
+});
+
+test("a user message and an opened tool card body stand out from the Panel with a raised fill", async () => {
+	await using piu = await startPiu({
+		script: {
+			replies: [
+				{
+					toolCalls: [{ name: "bash", args: { command: "printf RES%s ULT" } }],
+				},
+				"All done",
+			],
+		},
+	});
+	await piu.mockInput.typeText("Shade me");
+	piu.mockInput.pressEnter();
+	const frame = await piu.waitForFrame((f) => f.includes("All done"));
+	const raised = RGBA.fromHex(darkTheme.raised);
+	const bgOf = (needle: string) =>
+		piu
+			.captureSpans()
+			.lines.flatMap((line) => line.spans)
+			.find((span) => span.text.includes(needle))?.bg;
+	expect(bgOf("Shade me")?.equals(raised)).toBe(true);
+
+	const rows = frame.split("\n");
+	const row = rows.findIndex((line) => line.includes(" bash "));
+	await piu.mockMouse.click((rows[row] ?? "").indexOf(" bash ") + 1, row);
+	await piu.waitForFrame((f) => f.includes("RESULT"));
+	expect(bgOf("RESULT")?.equals(raised)).toBe(true);
 });
 
 test("a compact tool row keeps its status visible next to a long command on a narrow terminal", async () => {
@@ -104,7 +129,7 @@ test("a compact tool row keeps its status visible next to a long command on a na
 		frame.includes("Finished cleanly"),
 	);
 	const rows = panelText(frame, 10).split("\n");
-	const row = rows.findIndex((line) => line.includes("▸ bash"));
+	const row = rows.findIndex((line) => line.includes(" bash"));
 	expect(rows[row]).toMatch(/done\s+\d+(\.\d+)?m?s/);
 	expect(rows[row - 1]).not.toContain(glyphs.topLeft);
 	expect(rows[row + 1]).not.toContain(glyphs.bottomLeft);

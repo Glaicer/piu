@@ -94,10 +94,7 @@ function Messages(props: { context: ModuleContext }) {
 						) : (
 							message.role === "user" && (
 								<box
-									renderBefore={paintCard(() => ({
-										fill: theme.surface,
-										edge: theme.accent,
-									}))}
+									renderBefore={paintCard(() => ({ fill: theme.raised }))}
 									paddingX={2}
 									paddingY={1}
 									marginTop={1}

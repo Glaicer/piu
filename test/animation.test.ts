@@ -352,7 +352,7 @@ async function toolCardApp(animations: boolean) {
 
 test("expanding a tool card reveals its body row by row", async () => {
 	await using app = await toolCardApp(true);
-	await clickText(app.piu, "▸ bash");
+	await clickText(app.piu, " bash");
 
 	const shown = [rowsShown(await app.frame())];
 	for (let step = 0; step < 12; step++) {
@@ -367,9 +367,9 @@ test("expanding a tool card reveals its body row by row", async () => {
 
 test("collapsing a tool card hides its body row by row", async () => {
 	await using app = await toolCardApp(true);
-	await clickText(app.piu, "▸ bash");
+	await clickText(app.piu, " bash");
 	await app.frame(1000);
-	await clickText(app.piu, "▾ bash");
+	await clickText(app.piu, " bash");
 
 	const shown = [rowsShown(await app.frame())];
 	for (let step = 0; step < 12; step++) {
@@ -384,10 +384,10 @@ test("collapsing a tool card hides its body row by row", async () => {
 
 test("with animations off a tool card opens and closes at once", async () => {
 	await using app = await toolCardApp(false);
-	await clickText(app.piu, "▸ bash");
+	await clickText(app.piu, " bash");
 	expect(rowsShown(await app.frame())).toBe(outputRows);
 
-	await clickText(app.piu, "▾ bash");
+	await clickText(app.piu, " bash");
 	expect(rowsShown(await app.frame())).toBe(0);
 });
 

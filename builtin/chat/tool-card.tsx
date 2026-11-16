@@ -97,9 +97,6 @@ export function ToolCard(props: {
 		const id = jobId();
 		return id === undefined ? status() : `${id} ${status()}`;
 	};
-	const header = () => {
-		return `${row.selected() ? "› " : ""}${reveal.open() ? "▾" : "▸"}`;
-	};
 	const argument = () => {
 		const call = props.call();
 		return call ? keyArgument(call.arguments) : "";
@@ -115,14 +112,15 @@ export function ToolCard(props: {
 		<box
 			flexDirection="column"
 			backgroundColor={row.selected() ? props.theme.selection : undefined}
-			paddingLeft={2}
-			paddingRight={1}
+			paddingX={1}
 			marginTop={1}
 		>
 			<box ref={row.ref} flexDirection="row" onMouseDown={row.activate}>
-				<text fg={props.theme.accent} flexShrink={0}>
-					{header()}
-				</text>
+				{row.selected() && (
+					<text fg={props.theme.accent} flexShrink={0}>
+						{"›"}
+					</text>
+				)}
 				<text fg={props.theme.surface} bg={props.theme.text} flexShrink={0}>
 					{` ${props.call()?.name ?? ""} `}
 				</text>
@@ -138,9 +136,9 @@ export function ToolCard(props: {
 				<text fg={color()} flexShrink={0}>{`  ${label()}${duration()}`}</text>
 			</box>
 			{shown() !== undefined && (
-				<text paddingTop={1} fg={props.theme.muted}>
-					{shown()}
-				</text>
+				<box backgroundColor={props.theme.raised} paddingX={1} marginTop={1}>
+					<text fg={props.theme.muted}>{shown()}</text>
+				</box>
 			)}
 		</box>
 	);

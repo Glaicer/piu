@@ -254,7 +254,7 @@ export default {
 			id: "current",
 			footer: true,
 			render: (context) => (
-				<box flexDirection="row" paddingX={1}>
+				<box flexDirection="row" paddingX={1} marginTop={1}>
 					<PickerLink
 						plain
 						context={context}

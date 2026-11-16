@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
 import { focusedPanels, glyphs, startPiu } from "./harness.ts";
 
-for (const [mode, surface, ink, accent] of [
-	["light", "#fbfafc", "#242936", "#3257b7"],
-	["dark", "#1c202b", "#e5e9f5", "#a9bfff"],
+for (const [mode, surface, raised, ink, accent] of [
+	["light", "#fbfafc", "#ffffff", "#242936", "#3257b7"],
+	["dark", "#1c202b", "#252b39", "#e5e9f5", "#a9bfff"],
 ] as const) {
 	test(`Panel outlines stay one neutral color when focus changes on a ${mode} terminal`, async () => {
 		await using piu = await startPiu({
@@ -58,7 +58,7 @@ for (const [mode, surface, ink, accent] of [
 		const prompt = spans.find((span) => span.text.trim() === "Visual prompt");
 		const badge = spans.find((span) => span.text.trim() === "bash");
 		expect(prompt?.fg.equals(RGBA.fromHex(ink))).toBe(true);
-		expect(prompt?.bg.equals(RGBA.fromHex(surface))).toBe(true);
+		expect(prompt?.bg.equals(RGBA.fromHex(raised))).toBe(true);
 		expect(badge?.fg.equals(RGBA.fromHex(surface))).toBe(true);
 		expect(badge?.bg.equals(RGBA.fromHex(ink))).toBe(true);
 		expect(frame.split("\n")[0]?.startsWith(glyphs.topLeft)).toBe(true);

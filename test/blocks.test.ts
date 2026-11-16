@@ -40,6 +40,22 @@ test("thinking is a collapsed label until it is clicked, and a second click hide
 	await piu.waitForFrame((f) => !f.includes("walrus"));
 });
 
+test("a thinking block with no text has no chevron and does not open", async () => {
+	await using piu = await startPiu({
+		script: { replies: [{ thinking: " ", text: "The answer" }] },
+	});
+
+	await send(piu, "Hmm");
+	const frame = await piu.waitForFrame((f) => f.includes("The answer"));
+	expect(frame).toContain("Thinking");
+	expect(frame).not.toContain("▸ Thinking");
+
+	await clickOn(piu, frame, "Thinking");
+	const after = await piu.waitForFrame((f) => f.includes("The answer"));
+	expect(after).not.toContain("▾ Thinking");
+	expect(after).not.toContain("▸ Thinking");
+});
+
 test("a tool call is a card that runs, finishes with a duration, and opens and closes on click", async () => {
 	await using piu = await startPiu({
 		script: {

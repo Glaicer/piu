@@ -147,9 +147,9 @@ test("clicking a tool card still expands it and leaves the focus in the input", 
 	piu.mockInput.pressEnter();
 	const done = await piu.waitForFrame((f) => f.includes("Card is done"));
 	const rows = done.split("\n");
-	const row = rows.findIndex((line) => line.includes("▸ bash"));
+	const row = rows.findIndex((line) => line.includes(" bash"));
 
-	await clickAndStay(piu, rows[row]?.indexOf("▸ bash") ?? 0, row);
+	await clickAndStay(piu, rows[row]?.indexOf(" bash") ?? 0, row);
 	await piu.waitForFrame((f) => f.includes("RESULT"));
 	await piu.mockInput.typeText("abc");
 

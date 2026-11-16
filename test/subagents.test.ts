@@ -119,14 +119,14 @@ test("clicking a card opens that subagent's messages and tool calls, and later o
 	await clickCard(piu, base, "max");
 
 	const open = await piu.waitForFrame(
-		(f) => f.includes("Reading the sources") && f.includes("▸ read"),
+		(f) => f.includes("Reading the sources") && f.includes(" read"),
 	);
 	expect(open).toMatch(/> Do: Audit the auth code/);
-	expect(open).toMatch(/▸ read .*src\/auth\.ts.* done/);
+	expect(open).toMatch(/ read .*src\/auth\.ts.* done/);
 	expect(open).not.toContain("[sending]");
 	expect(open).not.toContain("export const auth = 1");
 
-	await clickText(piu, open, "▸ read");
+	await clickText(piu, open, " read");
 	await piu.waitForFrame((f) => f.includes("export const auth = 1"));
 
 	control.say("max", "Found a second problem");
@@ -179,7 +179,7 @@ test("a card can be selected and opened by keyboard, and Esc closes the view wit
 	piu.mockInput.pressTab({ shift: true });
 	await piu.waitForFrame((f) => f.includes(panelTitle("agent")));
 	piu.mockInput.pressArrow("down");
-	await piu.waitForFrame((f) => f.includes("› ▸ agent_spawn"));
+	await piu.waitForFrame((f) => f.includes("› agent_spawn"));
 	piu.mockInput.pressArrow("down");
 	await piu.waitForFrame((f) => f.includes("› agent @max"));
 	piu.mockInput.pressEnter();
@@ -386,7 +386,7 @@ test("an open view shows the message the child is still streaming, before the ch
 	await piu.waitForFrame((f) => f.includes("Half a sent"));
 	control.live("max", 1000, "Half a sentence, then a tool", readCall("c1"));
 
-	const frame = await piu.waitForFrame((f) => /▸ read .*src\/auth\.ts/.test(f));
+	const frame = await piu.waitForFrame((f) => / read .*src\/auth\.ts/.test(f));
 	expect(frame).toContain("Half a sentence, then a tool");
 });
 
@@ -488,7 +488,7 @@ test("the view folds thinking and tool results like the main chat, and a click o
 	await clickCard(piu, base, "max");
 
 	const folded = await piu.waitForFrame(
-		(f) => f.includes("Here is my answer") && f.includes("▸ read"),
+		(f) => f.includes("Here is my answer") && f.includes(" read"),
 	);
 	expect(folded).toContain("▸ Thinking");
 	expect(folded).not.toContain("Weighing the options");
@@ -503,10 +503,10 @@ test("the view folds thinking and tool results like the main chat, and a click o
 	piu.mockInput.pressArrow("down");
 	await piu.waitForFrame((f) => f.includes("› ▾ Thinking"));
 	piu.mockInput.pressArrow("down");
-	await piu.waitForFrame((f) => f.includes("› ▸ read"));
+	await piu.waitForFrame((f) => f.includes("› read"));
 	piu.mockInput.pressEnter();
 	const open = await piu.waitForFrame((f) =>
 		f.includes("export const auth = 1"),
 	);
-	expect(open).toContain("› ▾ read");
+	expect(open).toContain("› read");
 });

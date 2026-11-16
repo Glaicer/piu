@@ -70,7 +70,7 @@ test("a command started in the background is pinned above the input with its job
 	expect(header).toBeGreaterThan(rows.findIndex((l) => l.includes("Launched")));
 	expect(header).toBeLessThan(inputTop(frame));
 	expect(agentPanel(frame)).not.toContain(HEADER);
-	expect(agentPanel(frame)).toMatch(/▸ bash .*bg-1 running/);
+	expect(agentPanel(frame)).toMatch(/ bash .*bg-1 running/);
 });
 
 test("when the process ends the pin goes away without a new message, and its card in the history keeps the final status", async () => {
@@ -86,7 +86,7 @@ test("when the process ends the pin goes away without a new message, and its car
 	const frame = await piu.waitForFrame((f) => !f.includes(HEADER));
 	const cards = agentPanel(frame)
 		.split("\n")
-		.filter((line) => line.includes("▸ bash"));
+		.filter((line) => line.includes(" bash"));
 	expect(cards).toHaveLength(1);
 	expect(cards[0]).toMatch(/bg-1 done/);
 });
@@ -188,7 +188,7 @@ test("a job that fails is unpinned and its card shows it failed", async () => {
 	await piu.waitForFrame((f) => pinnedRows(f, "exit 3").length === 1);
 
 	const frame = await piu.waitForFrame((f) => !f.includes(HEADER));
-	expect(agentPanel(frame)).toMatch(/▸ bash .*bg-1 failed/);
+	expect(agentPanel(frame)).toMatch(/ bash .*bg-1 failed/);
 });
 
 test("a new user message and its reply do not push the pinned job out", async () => {
@@ -260,7 +260,7 @@ test("the job's end is not waited for from a model turn: the delivery message an
 	const frame = await piu.waitForFrame((f) => !f.includes(HEADER));
 	const cards = agentPanel(frame)
 		.split("\n")
-		.filter((line) => line.includes("▸ bash"));
+		.filter((line) => line.includes(" bash"));
 	expect(cards).toHaveLength(1);
 	expect(cards[0]).toMatch(/bg-1 done/);
 });
