@@ -14,6 +14,8 @@ type Cells = Exclude<Size, "rest" | "content">;
 
 export const modalIdPrefix = "modal:";
 
+export type DismissReason = "escape" | "outside";
+
 export type ModalRequest = {
 	slot: Slot;
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
@@ -21,7 +23,8 @@ export type ModalRequest = {
 	height: Cells;
 	left?: number;
 	top?: number;
-	onDismiss?(): void;
+	/** Returning exactly false keeps the Modal open, so a Module can use a dismissal just to stop an action. */
+	onDismiss?(reason: DismissReason): unknown;
 };
 
 export function moduleModal(
@@ -56,9 +59,9 @@ export function createModals() {
 			setStack((entries) => [...entries, entry]);
 			return entry.close;
 		},
-		dismiss(entry: Entry) {
+		dismiss(entry: Entry, reason: DismissReason) {
 			if (!stack().includes(entry)) return;
-			entry.request.onDismiss?.();
+			if (entry.request.onDismiss?.(reason) === false) return;
 			entry.close();
 		},
 	};
@@ -79,7 +82,7 @@ export function ModalLayer(props: { modals: Modals; context: SharedContext }) {
 		const top = props.modals.stack().at(-1);
 		if (top && event.name === "escape") {
 			event.preventDefault();
-			props.modals.dismiss(top);
+			props.modals.dismiss(top, "escape");
 			return;
 		}
 		trap(event);
@@ -132,7 +135,7 @@ function ModalView(props: {
 			backgroundColor={RGBA.fromInts(0, 0, 0, 100)}
 			onMouseDown={(event) => {
 				event.preventDefault();
-				props.modals.dismiss(props.entry);
+				props.modals.dismiss(props.entry, "outside");
 			}}
 		>
 			<box

@@ -92,7 +92,7 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 	placement: {
 		agent: ["chat.messages"],
 		pinned: ["background.processes"],
-		input: ["ask-user-question.card", "input.prompt"],
+		input: ["ask-user-question.card", "btw.side", "input.prompt"],
 		status: ["status.line"],
 		side: [],
 		bottom: ["model.current", "input.dir", "status.working"],

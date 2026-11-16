@@ -13,6 +13,7 @@ import {
 	type BackgroundJob,
 	parseJobs,
 } from "./background.ts";
+import { BTW_STATUS_KEY, type BtwThread, parseBtwThread } from "./btw.ts";
 import { type ChannelPayload, parseChannelRequest } from "./channel.ts";
 import {
 	explicitSession,
@@ -117,6 +118,7 @@ export type PiState = {
 	readonly backgroundJobs: readonly BackgroundJob[];
 	readonly subagents: readonly Subagent[];
 	readonly subagentLogs: Readonly<Record<string, readonly SubagentEntry[]>>;
+	readonly btw: BtwThread | null;
 	readonly title: string | null;
 	readonly editorText: EditorText;
 };
@@ -169,6 +171,7 @@ export function createPiState(options: {
 		backgroundJobs: BackgroundJob[];
 		subagents: Subagent[];
 		subagentLogs: Record<string, SubagentEntry[]>;
+		btw: BtwThread | null;
 		title: string | null;
 		editorText: EditorText;
 	}>({
@@ -190,6 +193,7 @@ export function createPiState(options: {
 		backgroundJobs: [],
 		subagents: [],
 		subagentLogs: {},
+		btw: null,
 		title: null,
 		editorText: { seq: 0, text: "" },
 	});
@@ -244,6 +248,7 @@ export function createPiState(options: {
 		closeDialogs(() => true);
 		setState("statuses", reconcile({}));
 		setState("backgroundJobs", []);
+		setState("btw", null);
 		clearSubagents();
 	}
 
@@ -544,6 +549,13 @@ export function createPiState(options: {
 				}
 				if (record.statusKey === SUBAGENTS_STATUS_KEY) {
 					setState("subagents", reconcile(parseRoster(record.statusText)));
+					break;
+				}
+				if (record.statusKey === BTW_STATUS_KEY) {
+					setState(
+						"btw",
+						reconcile(parseBtwThread(record.statusText), { key: "n" }),
+					);
 					break;
 				}
 				const logOf = subagentIdOfLogKey(record.statusKey);

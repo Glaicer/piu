@@ -61,6 +61,12 @@ const modalFrame = {
 	paddingRight: 2,
 };
 export const modalFrameRows = modalFrame.paddingTop + modalFrame.paddingBottom;
+export const modalContentInsets = {
+	top: modalFrame.paddingTop,
+	bottom: modalFrame.paddingBottom,
+	left: modalFrame.paddingLeft,
+	right: modalFrame.paddingRight,
+} as const;
 // why: a Modal whose Module has no title (a Dialog, a subagent's window) gives its first row the title row under the heavy line, so the Module draws its own heading there and can wrap it; the heading keeps clear of the hint at the row's right end.
 const untitledPaddingTop = 1;
 const modalHint = "esc";

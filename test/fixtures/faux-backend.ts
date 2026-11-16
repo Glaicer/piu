@@ -122,7 +122,8 @@ export default function (pi: ExtensionAPI) {
 				: fauxAssistantMessage(blocks);
 		}),
 	);
-	pi.registerProvider(faux.provider);
+	// why: without a provider Pi falls back to its `unknown` model, so a side request fails at the provider and a test can check that the window shows an error rather than nothing.
+	if (!script.noModels) pi.registerProvider(faux.provider);
 	if (script.sameIdProvider) {
 		const other = fauxProvider({
 			provider: "other",

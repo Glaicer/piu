@@ -58,6 +58,7 @@ export type FauxScript = {
 	freshSessionCommand?: boolean;
 	echoCompactInstructions?: boolean;
 	uiTool?: boolean;
+	noModels?: boolean;
 	statusOnStart?: string;
 	tokensPerSecond?: number;
 	tokenSize?: number;
