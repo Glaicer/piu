@@ -3,7 +3,7 @@ import { RGBA } from "@opentui/core";
 import { focusedPanels, glyphs, startPiu } from "./harness.ts";
 
 for (const [mode, surface, raised, ink, accent] of [
-	["light", "#fbfafc", "#ffffff", "#242936", "#3257b7"],
+	["light", "#ffffff", "#f2f2f2", "#000000", "#000000"],
 	["dark", "#1c202b", "#252b39", "#e5e9f5", "#a9bfff"],
 ] as const) {
 	test(`Panel outlines stay one neutral color when focus changes on a ${mode} terminal`, async () => {
@@ -15,7 +15,7 @@ for (const [mode, surface, raised, ink, accent] of [
 			(frame) =>
 				frame.includes("faux-1") && frame.includes("/ commands · @ files"),
 		);
-		const border = RGBA.fromHex(mode === "light" ? "#c7cbd5" : "#46516b");
+		const border = RGBA.fromHex(mode === "light" ? "#e3e3e3" : "#46516b");
 		const checkBorders = () => {
 			const outlines = piu
 				.captureSpans()

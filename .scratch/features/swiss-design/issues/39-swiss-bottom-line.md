@@ -29,3 +29,7 @@
 - [ ] Тесты через `startPiu`: содержимое нижней строки (модель, `no reasoning`, имя папки, ветка в git-репозитории), клик по модели и по reasoning открывает нужные Modals, `working` появляется и исчезает.
 - [ ] Существующие тесты, которые читают модель как последнюю строку чата (`test/model-footer.test.ts`, пункт в `docs/agents/testing.md`) и папку в области ввода (`test/input-dir.test.ts`), переходят на новую строку. Хелпер в harness находит её по раскладке.
 - [ ] `pnpm check`.
+
+## Comments
+
+- From 37: `Working…` в поле ввода (`builtin/input/index.tsx`, `theme.accent`) остался цвета `accent`, который в светлой теме теперь чёрный. Переводя working в нижнюю строку, покрасить его `signal`.

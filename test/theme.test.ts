@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { RGBA } from "@opentui/core";
-import { darkTheme, lightTheme } from "../src/theme.ts";
+import { RGBA, TextAttributes } from "@opentui/core";
+import { darkTheme, lightTheme, type Theme } from "../src/theme.ts";
 import { startPiu } from "./harness.ts";
 
 const none = { replies: [] };
@@ -11,8 +11,12 @@ for (const mode of ["light", "dark"] as const) {
 			script: none,
 			terminalBackground: mode,
 		});
-		const initial = RGBA.fromHex(mode === "light" ? "#242936" : "#e5e9f5");
-		const changed = RGBA.fromHex(mode === "light" ? "#e5e9f5" : "#242936");
+		const initial = RGBA.fromHex(
+			mode === "light" ? lightTheme.text : darkTheme.text,
+		);
+		const changed = RGBA.fromHex(
+			mode === "light" ? darkTheme.text : lightTheme.text,
+		);
 		await piu.waitForFrame(
 			(frame) =>
 				frame.includes("faux-1") && frame.includes("/ commands · @ files"),
@@ -131,13 +135,13 @@ test("an override leaves the other tokens of the active theme alone", async () =
 	expect(span?.bg.equals(RGBA.fromHex(lightTheme.raised))).toBe(true);
 });
 
-test("a code keyword is drawn in the accent of the theme the terminal asked for", async () => {
+test("a code keyword is drawn in the text color of the theme the terminal asked for", async () => {
 	const reply = "```ts\nconst answer = 42;\n```";
 	await using piu = await startPiu({
 		script: { replies: [reply] },
 		terminalBackground: "light",
 	});
-	const keyword = RGBA.fromHex(lightTheme.accent);
+	const keyword = RGBA.fromHex(lightTheme.text);
 
 	await piu.mockInput.typeText("Code");
 	piu.mockInput.pressEnter();
@@ -147,7 +151,10 @@ test("a code keyword is drawn in the accent of the theme the terminal asked for"
 			.captureSpans()
 			.lines.some((line) =>
 				line.spans.some(
-					(span) => span.text.trim() === "const" && span.fg.equals(keyword),
+					(span) =>
+						span.text.trim() === "const" &&
+						span.fg.equals(keyword) &&
+						bold(span),
 				),
 			),
 	);
@@ -165,7 +172,7 @@ test("a token value that is not a hex color is a startup error with the field pa
 	).rejects.toThrow("theme.accent");
 });
 
-test("code already on screen is redrawn in the new accent when the terminal switches background", async () => {
+test("code already on screen is redrawn in the new colors when the terminal switches background", async () => {
 	const reply = "```ts\nconst answer = 42;\n```";
 	await using piu = await startPiu({
 		script: { replies: [reply] },
@@ -177,14 +184,132 @@ test("code already on screen is redrawn in the new accent when the terminal swit
 			.lines.some((line) =>
 				line.spans.some(
 					(span) =>
-						span.text.trim() === "const" && span.fg.equals(RGBA.fromHex(hex)),
+						span.text.trim() === "const" &&
+						span.fg.equals(RGBA.fromHex(hex)) &&
+						bold(span),
 				),
 			);
 
 	await piu.mockInput.typeText("Code");
 	piu.mockInput.pressEnter();
-	await piu.waitForFrame(keywordIs(darkTheme.accent));
+	await piu.waitForFrame(keywordIs(darkTheme.text));
 
 	piu.reportTerminalBackground("light");
-	await piu.waitForFrame(keywordIs(lightTheme.accent));
+	await piu.waitForFrame(keywordIs(lightTheme.text));
+});
+
+const swissReply = [
+	"## Plan",
+	"",
+	"- first with **strong** and `inline` words",
+	"",
+	"```ts",
+	"// note",
+	"function greet(name: string): number {",
+	'\treturn greet("x") + 42;',
+	"}",
+	"```",
+].join("\n");
+
+type Span = { text: string; fg: RGBA; bg: RGBA; attributes: number };
+
+const spansOf = (piu: Awaited<ReturnType<typeof startPiu>>): Span[] =>
+	piu.captureSpans().lines.flatMap((line) => line.spans);
+const spanAt = (spans: Span[], text: string) =>
+	spans.find((span) => span.text.trim() === text);
+const bold = (span: Span | undefined) =>
+	((span?.attributes ?? 0) & TextAttributes.BOLD) !== 0;
+const italic = (span: Span | undefined) =>
+	((span?.attributes ?? 0) & TextAttributes.ITALIC) !== 0;
+const fgIs = (span: Span | undefined, hex: string) =>
+	span?.fg.equals(RGBA.fromHex(hex)) === true;
+const bgIs = (span: Span | undefined, hex: string) =>
+	span?.bg.equals(RGBA.fromHex(hex)) === true;
+
+async function swissSpans(
+	piu: Awaited<ReturnType<typeof startPiu>>,
+	theme: Theme,
+) {
+	await piu.mockInput.typeText("Swiss");
+	piu.mockInput.pressEnter();
+	let spans: Span[] = [];
+	await piu.waitForFrame(() => {
+		spans = spansOf(piu);
+		return (
+			bold(spanAt(spans, "Plan")) &&
+			bgIs(spanAt(spans, "inline"), theme.code) &&
+			fgIs(spanAt(spans, "42"), theme.warning)
+		);
+	});
+	return spans;
+}
+
+for (const [mode, theme] of [
+	["light", lightTheme],
+	["dark", darkTheme],
+] as const) {
+	test(`markdown and code in a reply take the Swiss tokens on a ${mode} terminal`, async () => {
+		await using piu = await startPiu({
+			script: { replies: [swissReply] },
+			terminalBackground: mode,
+		});
+
+		const spans = await swissSpans(piu, theme);
+
+		const heading = spanAt(spans, "Plan");
+		expect(fgIs(heading, theme.text) && bold(heading)).toBe(true);
+		expect(fgIs(spanAt(spans, "-"), theme.signal)).toBe(true);
+		const strong = spanAt(spans, "strong");
+		expect(fgIs(strong, theme.text) && bold(strong)).toBe(true);
+		expect(bgIs(strong, theme.code)).toBe(false);
+		const inline = spanAt(spans, "inline");
+		expect(fgIs(inline, theme.secondary) && bgIs(inline, theme.code)).toBe(
+			true,
+		);
+		expect(bold(inline)).toBe(false);
+
+		const keyword = spanAt(spans, "function");
+		expect(fgIs(keyword, theme.text) && bold(keyword)).toBe(true);
+		expect(fgIs(spanAt(spans, "greet"), theme.secondary)).toBe(true);
+		expect(fgIs(spanAt(spans, "string"), theme.tertiary)).toBe(true);
+		expect(fgIs(spanAt(spans, '"x"'), theme.success)).toBe(true);
+		const comment = spanAt(spans, "// note");
+		expect(fgIs(comment, theme.faint) && italic(comment)).toBe(true);
+		expect(fgIs(spanAt(spans, "+"), theme.muted)).toBe(true);
+		expect(bgIs(keyword, theme.codeBlock)).toBe(true);
+		expect(bgIs(spanAt(spans, "words"), theme.codeBlock)).toBe(false);
+	});
+}
+
+test("a light terminal gets a white screen with black text and a red signal", async () => {
+	await using piu = await startPiu({
+		script: { replies: [swissReply] },
+		terminalBackground: "light",
+	});
+
+	const spans = await swissSpans(piu, lightTheme);
+
+	const words = spanAt(spans, "words");
+	expect(fgIs(words, "#000000") && bgIs(words, "#ffffff")).toBe(true);
+	expect(fgIs(spanAt(spans, "-"), "#e10600")).toBe(true);
+	expect(bgIs(spanAt(spans, "function"), "#f5f5f5")).toBe(true);
+	expect(bgIs(spanAt(spans, "inline"), "#f1f3f8")).toBe(true);
+});
+
+test("a signal override in config.json colors the list markers", async () => {
+	await using piu = await startPiu({
+		script: { replies: [swissReply] },
+		terminalBackground: "light",
+		config: { theme: { signal: "#123456" } },
+	});
+
+	const spans = await swissSpans(piu, lightTheme);
+
+	expect(fgIs(spanAt(spans, "-"), "#123456")).toBe(true);
+});
+
+test("a token the theme does not have is a startup error with the field path", async () => {
+	await expect(
+		startPiu({ script: none, config: { theme: { nope: "#ff00ff" } } }),
+	).rejects.toThrow("theme.nope");
 });

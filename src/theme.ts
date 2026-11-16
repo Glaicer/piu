@@ -15,6 +15,11 @@ export const themeTokens = [
 	"selection",
 	"secondary",
 	"border",
+	"signal",
+	"faint",
+	"code",
+	"codeBlock",
+	"tertiary",
 ] as const;
 
 export type ThemeToken = (typeof themeTokens)[number];
@@ -40,21 +45,31 @@ export const darkTheme: Theme = {
 	selection: "#29334c",
 	secondary: "#a9bfff",
 	border: "#46516b",
+	signal: "#ff453a",
+	faint: "#7c869c",
+	code: "#263049",
+	codeBlock: "#232836",
+	tertiary: "#c58af9",
 };
 
 export const lightTheme: Theme = {
-	text: "#242936",
-	muted: "#666d7d",
-	accent: "#3257b7",
-	success: "#3f704b",
-	warning: "#895d1c",
-	error: "#af3d51",
-	surface: "#fbfafc",
-	raised: "#ffffff",
-	background: "#eeedf0",
-	selection: "#e8edf9",
-	secondary: "#3257b7",
-	border: "#c7cbd5",
+	text: "#000000",
+	muted: "#555555",
+	accent: "#000000",
+	success: "#007a3d",
+	warning: "#b85400",
+	error: "#e10600",
+	surface: "#ffffff",
+	raised: "#f2f2f2",
+	background: "#ffffff",
+	selection: "#ebebeb",
+	secondary: "#0040c1",
+	border: "#e3e3e3",
+	signal: "#e10600",
+	faint: "#9a9a9a",
+	code: "#f1f3f8",
+	codeBlock: "#f5f5f5",
+	tertiary: "#7a1fa2",
 };
 
 const builtIn: Readonly<Record<ThemeMode, Theme>> = {

@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getTreeSitterClient, RGBA } from "@opentui/core";
+import { getTreeSitterClient, RGBA, TextAttributes } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
 import { panelText, startPiu } from "./harness.ts";
 
@@ -74,7 +74,7 @@ test("a reply with headings, lists, a table and code renders without raw Markdow
 
 test("a keyword in a code block is drawn in the keyword colour", async () => {
 	await using piu = await startPiu({ script: { replies: [formatted] } });
-	const keyword = RGBA.fromHex(darkTheme.accent);
+	const keyword = RGBA.fromHex(darkTheme.text);
 
 	await piu.mockInput.typeText("Notes");
 	piu.mockInput.pressEnter();
@@ -84,7 +84,10 @@ test("a keyword in a code block is drawn in the keyword colour", async () => {
 			.captureSpans()
 			.lines.some((line) =>
 				line.spans.some(
-					(span) => span.text.trim() === "const" && span.fg.equals(keyword),
+					(span) =>
+						span.text.trim() === "const" &&
+						span.fg.equals(keyword) &&
+						(span.attributes & TextAttributes.BOLD) !== 0,
 				),
 			),
 	);
