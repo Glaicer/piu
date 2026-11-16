@@ -12,6 +12,8 @@ import type { Module, PlacedModule } from "./module.ts";
 
 type Cells = Exclude<Size, "rest" | "content">;
 
+export const modalIdPrefix = "modal:";
+
 export type ModalRequest = {
 	slot: Slot;
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
@@ -134,6 +136,7 @@ function ModalView(props: {
 			}}
 		>
 			<box
+				id={`${modalIdPrefix}${props.index}`}
 				ref={(element: BoxRenderable) => {
 					props.entry.element = element;
 				}}

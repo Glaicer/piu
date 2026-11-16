@@ -170,7 +170,7 @@ for (const animations of [true, false]) {
 		await clickText(app.piu, "open inner");
 		const stacked = await app.frame();
 		expect(stacked).toContain("INNER");
-		expect(rowOf(stacked, "INNER")).toBe(5);
+		expect(rowOf(stacked, "INNER")).toBe(3);
 		expect(columnOf(stacked, "INNER")).toBe(7);
 		expect(onModalFill(app.piu, 4, 2)).toBe(true);
 		app.piu.mockInput.pressEscape();

@@ -6,7 +6,7 @@ import { startPiu } from "./harness.ts";
 const none = { replies: [] };
 
 for (const mode of ["light", "dark"] as const) {
-	test(`the cursor follows the ${mode} theme: Signal red in the prompt, text color in model search`, async () => {
+	test(`the cursor follows the ${mode} theme: Signal red in the prompt and in model search`, async () => {
 		await using piu = await startPiu({
 			script: none,
 			terminalBackground: mode,
@@ -22,15 +22,16 @@ for (const mode of ["light", "dark"] as const) {
 		expect(cursorIs(initial.signal)).toBe(true);
 		piu.mockInput.pressKey("l", { ctrl: true });
 		await piu.waitForFrame(
-			(frame) => frame.includes("Search:") && frame.includes("faux-2"),
+			(frame) => frame.includes("search models") && frame.includes("faux-2"),
 		);
-		expect(cursorIs(initial.text)).toBe(true);
+		expect(cursorIs(initial.signal)).toBe(true);
 		piu.reportTerminalBackground(mode === "light" ? "dark" : "light");
-		await piu.waitForFrame(() => cursorIs(changed.text));
+		await piu.waitForFrame(() => cursorIs(changed.signal));
 		piu.mockInput.pressKey("ESCAPE");
 		await piu.waitForFrame(
 			(frame) =>
-				!frame.includes("Search:") && frame.includes("/ commands   @ files"),
+				!frame.includes("tab search/list") &&
+				frame.includes("/ commands   @ files"),
 		);
 		expect(cursorIs(changed.signal)).toBe(true);
 	});

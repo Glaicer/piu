@@ -59,7 +59,7 @@ function backgroundAt(piu: Piu, column: number, row: number) {
 }
 
 const highlighted = (piu: Piu, column: number, row: number) =>
-	backgroundAt(piu, column, row)?.equals(RGBA.fromHex(darkTheme.selection));
+	backgroundAt(piu, column, row)?.equals(RGBA.fromHex(darkTheme.bar));
 
 test("/ lists the Backend's prompt templates and extension commands next to the app's own", async () => {
 	await using piu = await startPiu({ script, promptTemplates });

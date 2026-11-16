@@ -65,6 +65,58 @@ export function paintCard(colors: () => CardColors) {
 	};
 }
 
+export type SheetPaint = {
+	fill: string;
+	rule: string;
+	title?: string;
+	titleColor?: string;
+	hint?: string;
+	hintColor?: string;
+};
+
+// why: a floating surface (a Modal, the `/` list) has no contour, so the heavy line along its top row is what sets it apart from the Panel behind it.
+export function paintSheet(paint: () => SheetPaint) {
+	return function (this: Box, buffer: OptimizedBuffer) {
+		const { screenX: x, screenY: y, width, height } = this;
+		if (width < 2 || height < 2) return;
+		const {
+			fill: fillColor,
+			rule,
+			title,
+			titleColor,
+			hint,
+			hintColor,
+		} = paint();
+		const fill = parseColor(fillColor);
+		buffer.fillRect(x, y, width, height, fill);
+		const ruleColor = parseColor(rule);
+		for (let cx = x; cx < x + width; cx++)
+			buffer.setCellWithAlphaBlending(cx, y, "━", ruleColor, fill);
+		const hintWidth = hint ? hint.length + 1 : 0;
+		if (hint && hintColor)
+			buffer.drawText(
+				hint,
+				x + width - 2 - hint.length,
+				y + 1,
+				parseColor(hintColor),
+				fill,
+			);
+		if (title && titleColor) {
+			// why: drawTextFit takes no attributes, so the scissor cuts the bold title instead.
+			buffer.pushScissorRect(x + 3, y + 1, width - 5 - hintWidth, 1);
+			buffer.drawText(
+				` ${title} `,
+				x + 3,
+				y + 1,
+				parseColor(titleColor),
+				fill,
+				TextAttributes.BOLD,
+			);
+			buffer.popScissorRect();
+		}
+	};
+}
+
 export type PanelPaint = {
 	fill: string;
 	rule: string;

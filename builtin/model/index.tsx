@@ -1,6 +1,12 @@
-import type { BoxRenderable, InputRenderable, KeyEvent } from "@opentui/core";
+import {
+	type BoxRenderable,
+	type InputRenderable,
+	type KeyEvent,
+	RenderableEvents,
+	TextAttributes,
+} from "@opentui/core";
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
-import { modalFrameRows } from "../../src/layout.tsx";
+import { modalFrameColumns, modalFrameRows } from "../../src/layout.tsx";
 import { moduleModal } from "../../src/modal.tsx";
 import { sameModel } from "../../src/model.ts";
 import type { CommandContext, Extension } from "../../src/module.ts";
@@ -9,7 +15,13 @@ import { PickerLink } from "../../src/picker.tsx";
 import { openReasoningPicker } from "../../src/reasoning.ts";
 import { scrollIntoView } from "../../src/scroll.ts";
 
-type ModelTab = "Favorites" | "All";
+const tabs = ["Favorites", "All"] as const;
+type ModelTab = (typeof tabs)[number];
+const TAB_GAP = "   ";
+const WIDTH = 60;
+const CONTENT_WIDTH = WIDTH - modalFrameColumns;
+const tabsWidth =
+	1 + tabs.reduce((n, name) => n + name.length + TAB_GAP.length, 0);
 
 function ModelPicker(props: { context: CommandContext; close(): void }) {
 	const { pi, theme, actions, modelFavorites } = props.context;
@@ -18,6 +30,7 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 	);
 	const [query, setQuery] = createSignal("");
 	const [index, setIndex] = createSignal(0);
+	const [searching, setSearching] = createSignal(true);
 	const models = createMemo(() =>
 		pi.models.filter((model) => {
 			const needle = query().toLowerCase();
@@ -94,14 +107,15 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 		// why: a row created by the current filter has no ScrollBox parent until the next render, so scrolling now would see the previous tree.
 		queueMicrotask(() => scrollIntoView(model && rows.get(model)));
 	});
+	const tabRule = (name: ModelTab) =>
+		(name === tab() ? "━" : "─").repeat(name.length);
 	return (
 		<box flexDirection="column" height={18}>
-			<box flexDirection="row" marginBottom={1} flexShrink={0}>
-				<For each={["Favorites", "All"] as const}>
+			<box flexDirection="row" flexShrink={0}>
+				<text> </text>
+				<For each={tabs}>
 					{(name) => (
 						<box
-							backgroundColor={name === tab() ? theme.selection : undefined}
-							marginRight={1}
 							onMouseDown={(event) => {
 								event.preventDefault();
 								changeTab(name);
@@ -109,26 +123,52 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 						>
 							<text
 								fg={name === tab() ? theme.accent : theme.muted}
-							>{` ${name} `}</text>
+								attributes={name === tab() ? TextAttributes.BOLD : undefined}
+							>{`${name}${TAB_GAP}`}</text>
 						</box>
 					)}
 				</For>
 			</box>
+			<box flexDirection="row" flexShrink={0}>
+				<text fg={theme.border}> </text>
+				<For each={tabs}>
+					{(name) => (
+						<>
+							<text fg={name === tab() ? theme.accent : theme.border}>
+								{tabRule(name)}
+							</text>
+							<text fg={theme.border}>{"─".repeat(TAB_GAP.length)}</text>
+						</>
+					)}
+				</For>
+				<text fg={theme.border} wrapMode="none">
+					{"─".repeat(Math.max(0, CONTENT_WIDTH - tabsWidth))}
+				</text>
+			</box>
 			<box flexDirection="row" flexShrink={0} onMouseDown={() => input.focus()}>
-				<text fg={theme.muted}> Search: </text>
+				<text
+					fg={searching() ? theme.signal : theme.faint}
+					attributes={TextAttributes.BOLD}
+				>
+					{" › "}
+				</text>
 				<input
 					ref={(element: InputRenderable) => {
 						input = element;
+						setSearching(element.focused);
+						element.on(RenderableEvents.FOCUSED, () => setSearching(true));
+						element.on(RenderableEvents.BLURRED, () => setSearching(false));
 					}}
 					focused
 					flexGrow={1}
-					placeholder="Search models"
+					placeholder="search models"
 					textColor={theme.text}
-					cursorColor={theme.text}
+					cursorColor={theme.signal}
+					cursorStyle={{ style: "block" }}
 					focusedTextColor={theme.text}
 					backgroundColor={theme.surface}
 					focusedBackgroundColor={theme.surface}
-					placeholderColor={theme.muted}
+					placeholderColor={theme.faint}
 					onInput={(value: string) => {
 						updateModels(() => setQuery(value));
 					}}
@@ -142,7 +182,7 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 				contentOptions={{ flexDirection: "column" }}
 				scrollbarOptions={{
 					trackOptions: {
-						foregroundColor: theme.border,
+						foregroundColor: theme.text,
 						backgroundColor: theme.surface,
 					},
 				}}
@@ -163,22 +203,33 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 						</text>
 					)}
 					<For each={models()}>
-						{(model, at) => (
-							<box
-								ref={(element: BoxRenderable) => {
-									rows.set(model, element);
-								}}
-								flexDirection="column"
-								backgroundColor={at() === index() ? theme.selection : undefined}
-								onMouseOver={() => setIndex(at())}
-								onMouseDown={(event) => {
-									event.preventDefault();
-									pick(model);
-								}}
-							>
-								<box flexDirection="row" paddingRight={1}>
+						{(model, at) => {
+							const selected = () => at() === index();
+							const favorite = () => modelFavorites.has(model);
+							return (
+								<box
+									ref={(element: BoxRenderable) => {
+										rows.set(model, element);
+									}}
+									flexDirection="row"
+									paddingRight={1}
+									backgroundColor={selected() ? theme.bar : undefined}
+									onMouseOver={() => setIndex(at())}
+									onMouseDown={(event) => {
+										event.preventDefault();
+										pick(model);
+									}}
+								>
 									<text
-										fg={theme.accent}
+										fg={
+											selected()
+												? favorite()
+													? theme.barText
+													: theme.barMuted
+												: favorite()
+													? theme.text
+													: theme.faint
+										}
 										flexShrink={0}
 										onMouseDown={(event) => {
 											event.preventDefault();
@@ -186,39 +237,46 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 											toggle(model);
 										}}
 									>
-										{modelFavorites.has(model) ? " ★ " : " ☆ "}
+										{favorite() ? " ★ " : " ☆ "}
 									</text>
 									<text
-										fg={theme.text}
-										flexGrow={1}
+										fg={selected() ? theme.barText : theme.text}
+										attributes={selected() ? TextAttributes.BOLD : undefined}
 										flexShrink={1}
 										wrapMode="none"
 										truncate
 									>
-										{`${model.name}${sameModel(model, pi.model) ? " *" : ""}`}
+										{model.name}
 									</text>
 									<text
-										fg={theme.muted}
+										fg={selected() ? theme.barMuted : theme.faint}
+										flexGrow={1}
+										flexShrink={0}
+										wrapMode="none"
+									>
+										{sameModel(model, pi.model) ? "  current" : ""}
+									</text>
+									<text
+										fg={selected() ? theme.barMuted : theme.muted}
 										flexShrink={0}
 										maxWidth="35%"
 										wrapMode="none"
 										truncate
 									>{`  ${model.provider}`}</text>
 								</box>
-							</box>
-						)}
+							);
+						}}
 					</For>
 				</box>
 			</scrollbox>
 			<text
-				fg={theme.muted}
+				fg={theme.faint}
 				wrapMode="none"
 				truncate
 				marginTop={1}
 				flexShrink={0}
 			>
-				{" "}
-				Tab search/list · ←/→ tabs · F favorite · Esc close
+				{" tab search/list   ←/→ tabs   f favorite   ⏎ pick"}
 			</text>
 		</box>
 	);
@@ -232,7 +290,7 @@ function openModelPicker(context: CommandContext) {
 				title: "Models",
 				render: () => <ModelPicker context={context} close={() => close()} />,
 			},
-			{ width: 60, height: 18 + modalFrameRows },
+			{ width: WIDTH, height: 18 + modalFrameRows },
 		),
 	);
 }

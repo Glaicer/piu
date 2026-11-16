@@ -1,6 +1,11 @@
-import { type Renderable, ScrollBoxRenderable } from "@opentui/core";
+import {
+	type Renderable,
+	ScrollBoxRenderable,
+	TextAttributes,
+} from "@opentui/core";
 import { createMemo, For } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
+import { modalHintColumns } from "../../src/layout.tsx";
 import type { Module } from "../../src/module.ts";
 import type { PiState } from "../../src/pi-state.ts";
 import type { SubagentEntry } from "../../src/subagents.ts";
@@ -130,10 +135,10 @@ function SubagentView(props: {
 				if (scroll?.handleKeyPress(event)) event.preventDefault();
 			}}
 		>
-			<box flexDirection="row">
-				<text
-					fg={props.theme.accent}
-				>{`agent @${props.id}  ${agent()?.label ?? ""}`}</text>
+			<box flexDirection="row" paddingRight={modalHintColumns} marginBottom={1}>
+				<text fg={props.theme.accent} attributes={TextAttributes.BOLD}>
+					{`agent @${props.id}  ${agent()?.label ?? ""}`}
+				</text>
 				<text fg={statusColor(agent()?.status ?? "stopped", props.theme)}>
 					{`  ${agent()?.status ?? "gone"}`}
 				</text>

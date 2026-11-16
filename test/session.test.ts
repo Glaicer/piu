@@ -48,7 +48,7 @@ test("/new keeps the selected model and reasoning for the fresh conversation", a
 		(f) =>
 			f.includes("faux-2") &&
 			f.includes("Reasoning:") &&
-			!f.includes("Search:"),
+			!f.includes("tab search/list"),
 	);
 	const reasoning = locate(selected, "Reasoning:");
 	await piu.mockMouse.click(reasoning.x, reasoning.y);
@@ -90,7 +90,9 @@ test("a prompt immediately after /new waits for the selected model and fresh ses
 	const picker = await piu.waitForFrame((f) => f.includes("☆ faux-2"));
 	const choice = locate(picker, "faux-2");
 	await piu.mockMouse.click(choice.x, choice.y);
-	await piu.waitForFrame((f) => f.includes("faux-2") && !f.includes("Search:"));
+	await piu.waitForFrame(
+		(f) => f.includes("faux-2") && !f.includes("tab search/list"),
+	);
 
 	await send(piu, "/new");
 	await send(piu, "after");

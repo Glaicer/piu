@@ -1,6 +1,14 @@
-import type { KeyEvent, TextareaRenderable } from "@opentui/core";
+import {
+	type KeyEvent,
+	TextAttributes,
+	type TextareaRenderable,
+} from "@opentui/core";
 import { createEffect, createSignal, untrack } from "solid-js";
-import { modalFrameColumns, modalFrameRows } from "./layout.tsx";
+import {
+	modalFrameColumns,
+	modalHintColumns,
+	untitledModalFrameRows,
+} from "./layout.tsx";
 import { type ModalRequest, type Modals, moduleModal } from "./modal.tsx";
 import type { ModuleContext } from "./module.ts";
 import type { Dialog, DialogAnswer, PiActions, PiState } from "./pi-state.ts";
@@ -16,13 +24,16 @@ const editorKeys = [
 	{ name: "return", shift: true, action: "newline" as const },
 ];
 
-function lineCount(text: string) {
+function lineCount(text: string, indent = 0) {
 	return text
 		.split("\n")
 		.reduce(
 			(rows, line) =>
 				rows +
-				Math.max(1, Math.ceil(line.length / (WIDTH - modalFrameColumns))),
+				Math.max(
+					1,
+					Math.ceil(line.length / (WIDTH - modalFrameColumns - indent)),
+				),
 			0,
 		);
 }
@@ -56,7 +67,15 @@ function Body(props: {
 	};
 	return (
 		<box flexDirection="column">
-			<text fg={context.theme.accent}>{` ${dialog.title}`}</text>
+			<text
+				fg={context.theme.accent}
+				attributes={TextAttributes.BOLD}
+				paddingLeft={1}
+				paddingRight={modalHintColumns}
+				marginBottom={1}
+			>
+				{dialog.title}
+			</text>
 			{dialog.method === "select" && choice(dialog.options)}
 			{dialog.method === "confirm" && (
 				<>
@@ -98,20 +117,20 @@ function Body(props: {
 }
 
 function height(dialog: ModalDialog) {
-	const title = lineCount(` ${dialog.title}`);
+	const title = lineCount(dialog.title, 1 + modalHintColumns) + 1;
 	switch (dialog.method) {
 		case "select":
 			return (
 				title +
 				Math.min(dialog.options.length, MAX_VISIBLE_OPTIONS) +
-				modalFrameRows
+				untitledModalFrameRows
 			);
 		case "confirm":
-			return title + lineCount(dialog.message) + 2 + modalFrameRows;
+			return title + lineCount(dialog.message) + 2 + untitledModalFrameRows;
 		case "input":
-			return title + 1 + modalFrameRows;
+			return title + 1 + untitledModalFrameRows;
 		case "editor":
-			return title + 1 + EDITOR_ROWS + modalFrameRows;
+			return title + 1 + EDITOR_ROWS + untitledModalFrameRows;
 	}
 }
 

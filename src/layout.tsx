@@ -5,7 +5,7 @@ import {
 } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/solid";
 import { type Accessor, createSignal, For, onCleanup } from "solid-js";
-import { paintCard, paintPanel } from "./card.ts";
+import { paintPanel, paintSheet } from "./card.ts";
 import { channelFor } from "./channel.ts";
 import type { PanelFocus } from "./focus.ts";
 import type { ModuleContext, PlacedModule, Presence } from "./module.ts";
@@ -61,6 +61,12 @@ const modalFrame = {
 	paddingRight: 2,
 };
 export const modalFrameRows = modalFrame.paddingTop + modalFrame.paddingBottom;
+// why: a Modal whose Module has no title (a Dialog, a subagent's window) gives its first row the title row under the heavy line, so the Module draws its own heading there and can wrap it; the heading keeps clear of the hint at the row's right end.
+const untitledPaddingTop = 1;
+const modalHint = "esc";
+export const modalHintColumns = modalHint.length + 1;
+export const untitledModalFrameRows =
+	untitledPaddingTop + modalFrame.paddingBottom;
 export const modalFrameColumns =
 	modalFrame.paddingLeft + modalFrame.paddingRight;
 
@@ -153,7 +159,6 @@ export function SlotView(props: SlotProps) {
 		},
 	});
 	const focused = () => focus?.isFocused(slot.id) ?? false;
-	const fill = () => (props.modal ? shared.theme.raised : shared.theme.surface);
 	const title = () =>
 		focused()
 			? (slot.title ?? slot.id)
@@ -173,17 +178,21 @@ export function SlotView(props: SlotProps) {
 		: props.modal
 			? {
 					...modalFrame,
-					renderBefore: paintCard(() => ({
-						fill: fill(),
+					paddingTop: title() ? modalFrame.paddingTop : untitledPaddingTop,
+					renderBefore: paintSheet(() => ({
+						fill: shared.theme.surface,
+						rule: shared.theme.text,
 						title: title(),
-						titleColor: shared.theme.text,
+						titleColor: shared.theme.accent,
+						hint: modalHint,
+						hintColor: shared.theme.faint,
 					})),
 				}
 			: {
 					...panelFrame,
 					id: `${panelIdPrefix}${slot.id}`,
 					renderBefore: paintPanel(() => ({
-						fill: fill(),
+						fill: shared.theme.surface,
 						rule: shared.theme.border,
 						heavyRule: shared.theme.text,
 						title: title(),
@@ -278,7 +287,7 @@ export function SlotView(props: SlotProps) {
 				scrollbarOptions={{
 					trackOptions: {
 						foregroundColor: shared.theme.border,
-						backgroundColor: fill(),
+						backgroundColor: shared.theme.surface,
 					},
 				}}
 			>

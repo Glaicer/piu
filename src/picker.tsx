@@ -1,6 +1,6 @@
 import { type BoxRenderable, TextAttributes } from "@opentui/core";
 import { createEffect, createSignal, For } from "solid-js";
-import { modalFrameRows } from "./layout.tsx";
+import { modalFrameRows, untitledModalFrameRows } from "./layout.tsx";
 import { moduleModal } from "./modal.tsx";
 import type { CommandContext } from "./module.ts";
 import { scrollIntoView } from "./scroll.ts";
@@ -43,27 +43,31 @@ export function Picker<T>(props: {
 			}}
 		>
 			<For each={props.items}>
-				{(item, at) => (
-					<box
-						ref={(element: BoxRenderable) => {
-							rows[at()] = element;
-						}}
-						flexDirection="row"
-						backgroundColor={
-							at() === index() ? props.theme.selection : undefined
-						}
-						onMouseOver={() => setIndex(at())}
-						onMouseDown={(event) => {
-							event.preventDefault();
-							pick(at());
-						}}
-					>
-						<text fg={props.theme.text}>{` ${item.label}`}</text>
-						<text fg={props.theme.muted}>
-							{item.detail ? `  ${item.detail}` : ""}
-						</text>
-					</box>
-				)}
+				{(item, at) => {
+					const selected = () => at() === index();
+					return (
+						<box
+							ref={(element: BoxRenderable) => {
+								rows[at()] = element;
+							}}
+							flexDirection="row"
+							backgroundColor={selected() ? props.theme.bar : undefined}
+							onMouseOver={() => setIndex(at())}
+							onMouseDown={(event) => {
+								event.preventDefault();
+								pick(at());
+							}}
+						>
+							<text
+								fg={selected() ? props.theme.barText : props.theme.text}
+								attributes={selected() ? TextAttributes.BOLD : undefined}
+							>{` ${item.label}`}</text>
+							<text fg={selected() ? props.theme.barMuted : props.theme.muted}>
+								{item.detail ? `  ${item.detail}` : ""}
+							</text>
+						</box>
+					);
+				}}
 			</For>
 		</box>
 	);
@@ -104,7 +108,9 @@ export function openPicker<T>(
 			},
 			{
 				width: picker.width,
-				height: Math.min(items.length, MAX_VISIBLE_ROWS) + modalFrameRows,
+				height:
+					Math.min(items.length, MAX_VISIBLE_ROWS) +
+					(picker.title ? modalFrameRows : untitledModalFrameRows),
 			},
 		),
 	);

@@ -56,7 +56,7 @@ test("the model Modal filters available models as the user types", async () => {
 	);
 	await piu.mockInput.typeText("faux-2");
 	const filtered = await piu.waitForFrame(
-		(f) => f.includes("Search: faux-2") && count(f, "faux-1") === 1,
+		(f) => f.includes("› faux-2") && count(f, "faux-1") === 1,
 	);
 	expect(filtered).toContain("All");
 	expect(count(filtered, "faux-1")).toBe(1);
@@ -76,19 +76,21 @@ test("the model picker shows one line per model and searches names and ids", asy
 	await piu.mockInput.typeText("REASONER");
 	await piu.waitForFrame(
 		(f) =>
-			f.includes("Search: REASONER") &&
+			f.includes("› REASONER") &&
 			f.includes("Faux Reasoner") &&
 			!f.includes("☆ faux-1"),
 	);
 	for (let i = 0; i < "REASONER".length; i++) piu.mockInput.pressBackspace();
 	await piu.mockInput.typeText("faux-2");
 	await piu.waitForFrame(
-		(f) => f.includes("Search: faux-2") && f.includes("☆ Faux Reasoner"),
+		(f) => f.includes("› faux-2") && f.includes("☆ Faux Reasoner"),
 	);
 	piu.mockInput.pressEnter();
-	await piu.waitForFrame((f) => f.includes("faux-2") && !f.includes("Search:"));
+	await piu.waitForFrame(
+		(f) => f.includes("faux-2") && !f.includes("tab search/list"),
+	);
 	await clickText(piu, "faux-2");
-	await piu.waitForFrame((f) => f.includes("☆ Faux Reasoner *"));
+	await piu.waitForFrame((f) => f.includes("☆ Faux Reasoner  current"));
 });
 
 test("the model picker falls back to the id when the display name is empty", async () => {
@@ -96,7 +98,7 @@ test("the model picker falls back to the id when the display name is empty", asy
 	await clickText(piu, "faux-1");
 	const frame = await piu.waitForFrame((f) => f.includes("☆ faux-2"));
 	const row = frame.split("\n").find((line) => line.includes("☆ faux-1"));
-	expect(row).toContain("faux-1 *");
+	expect(row).toContain("faux-1  current");
 	expect(row).toContain("  faux");
 });
 
@@ -120,7 +122,7 @@ test("the model command opens the searchable model Modal", async () => {
 	piu.mockInput.pressEnter();
 	await piu.waitForFrame(
 		(f) =>
-			f.includes("Search models") &&
+			f.includes("search models") &&
 			f.includes("Favorites") &&
 			f.includes("faux-2"),
 	);
@@ -131,7 +133,7 @@ test("the configured model shortcut opens the searchable model Modal", async () 
 	piu.mockInput.pressKey("l", { ctrl: true });
 	await piu.waitForFrame(
 		(f) =>
-			f.includes("Search models") &&
+			f.includes("search models") &&
 			f.includes("Favorites") &&
 			f.includes("faux-2"),
 	);
@@ -146,28 +148,24 @@ test("the search query remains when switching model tabs", async () => {
 	await piu.mockInput.typeText("faux-");
 	await piu.waitForFrame(
 		(f) =>
-			f.includes("Search: faux-") &&
-			f.includes("☆ faux-1") &&
-			f.includes("★ faux-2"),
+			f.includes("› faux-") && f.includes("☆ faux-1") && f.includes("★ faux-2"),
 	);
 	await clickText(piu, "Favorites");
 	await piu.waitForFrame(
 		(f) =>
-			f.includes("Search: faux-") &&
+			f.includes("› faux-") &&
 			!f.includes("☆ faux-1") &&
 			f.includes("★ faux-2"),
 	);
 	await piu.mockInput.typeText("2");
 	await piu.waitForFrame(
-		(f) => f.includes("Search: faux-2") && f.includes("★ faux-2"),
+		(f) => f.includes("› faux-2") && f.includes("★ faux-2"),
 	);
 	await clickText(piu, "All");
 	await piu.mockInput.pressBackspace();
 	await piu.waitForFrame(
 		(f) =>
-			f.includes("Search: faux-") &&
-			f.includes("☆ faux-1") &&
-			f.includes("★ faux-2"),
+			f.includes("› faux-") && f.includes("☆ faux-1") && f.includes("★ faux-2"),
 	);
 });
 
@@ -179,22 +177,20 @@ test("keyboard tab switching keeps the search query", async () => {
 	await piu.waitForFrame((f) => f.includes("★ faux-2"));
 	await piu.mockInput.typeText("faux-");
 	await piu.waitForFrame(
-		(f) => f.includes("Search: faux-") && f.includes("☆ faux-1"),
+		(f) => f.includes("› faux-") && f.includes("☆ faux-1"),
 	);
 	piu.mockInput.pressTab();
 	piu.mockInput.pressArrow("right");
 	await piu.waitForFrame(
 		(f) =>
-			f.includes("Search: faux-") &&
+			f.includes("› faux-") &&
 			!f.includes("☆ faux-1") &&
 			f.includes("★ faux-2"),
 	);
 	piu.mockInput.pressArrow("left");
 	await piu.waitForFrame(
 		(f) =>
-			f.includes("Search: faux-") &&
-			f.includes("☆ faux-1") &&
-			f.includes("★ faux-2"),
+			f.includes("› faux-") && f.includes("☆ faux-1") && f.includes("★ faux-2"),
 	);
 });
 
@@ -202,12 +198,12 @@ test("clicking the search field after moving to the list returns typing to the s
 	await using piu = await start();
 	await clickText(piu, "faux-1");
 	await piu.waitForFrame(
-		(f) => f.includes("Search models") && f.includes("faux-2"),
+		(f) => f.includes("search models") && f.includes("faux-2"),
 	);
 	piu.mockInput.pressTab();
-	await clickText(piu, "Search models");
+	await clickText(piu, "search models");
 	await piu.mockInput.typeText("faux-2");
-	const frame = await piu.waitForFrame((f) => f.includes("Search: faux-2"));
+	const frame = await piu.waitForFrame((f) => f.includes("› faux-2"));
 	expect(count(frame, "faux-1")).toBe(1);
 });
 
@@ -215,12 +211,12 @@ test("clicking the search label returns focus to the search field", async () => 
 	await using piu = await start();
 	await clickText(piu, "faux-1");
 	await piu.waitForFrame(
-		(f) => f.includes("Search models") && f.includes("faux-2"),
+		(f) => f.includes("search models") && f.includes("faux-2"),
 	);
 	piu.mockInput.pressTab();
-	await clickText(piu, "Search:");
+	await clickText(piu, "› search models");
 	await piu.mockInput.typeText("faux-2");
-	const frame = await piu.waitForFrame((f) => f.includes("Search: faux-2"));
+	const frame = await piu.waitForFrame((f) => f.includes("› faux-2"));
 	expect(count(frame, "faux-1")).toBe(1);
 });
 
@@ -270,7 +266,7 @@ test("typing f in search filters without favoriting a model", async () => {
 	await piu.waitForFrame((f) => f.includes("☆ faux-2"));
 	await piu.mockInput.typeText("f");
 	const frame = await piu.waitForFrame(
-		(f) => f.includes("Search: f") && f.includes("☆ faux-2"),
+		(f) => f.includes("› f") && f.includes("☆ faux-2"),
 	);
 	expect(frame).not.toContain("★ faux-1");
 	expect(frame).not.toContain("★ faux-2");
@@ -341,8 +337,7 @@ test("empty favorites and no search matches have distinct messages", async () =>
 	piu.mockInput.pressEnter();
 	await piu.mockInput.typeText("x");
 	const frame = await piu.waitForFrame(
-		(f) =>
-			f.includes("Search: no-such-modelx") && f.includes("No matching models"),
+		(f) => f.includes("› no-such-modelx") && f.includes("No matching models"),
 	);
 	expect(frame).toContain("Favorites");
 });
@@ -363,7 +358,7 @@ test("a gap separates the provider from the model list's scrollbar", async () =>
 	await using piu = await start({ replies: [], manyModels: true });
 	await clickText(piu, "faux-1");
 	await piu.waitForFrame((f) => f.includes("extra-00"));
-	const selected = RGBA.fromHex(darkTheme.selection);
+	const selected = RGBA.fromHex(darkTheme.bar);
 	const highlights = piu.captureSpans().lines.map((line) =>
 		line.spans
 			.filter((span) => span.bg.equals(selected))
@@ -379,14 +374,14 @@ test("keyboard navigation scrolls the model list to the highlighted row", async 
 	await piu.waitForFrame((f) => f.includes("extra-00"));
 	await piu.mockInput.typeText("extra-");
 	await piu.waitForFrame(
-		(f) => f.includes("Search: extra-") && f.includes("extra-00"),
+		(f) => f.includes("› extra-") && f.includes("extra-00"),
 	);
 	piu.mockInput.pressTab();
 	for (let i = 0; i < 19; i++) piu.mockInput.pressArrow("down");
 	await piu.waitForFrame((f) => f.includes("extra-19"));
 	piu.mockInput.pressEnter();
 	await piu.waitForFrame(
-		(f) => f.includes("extra-19") && !f.includes("Search:"),
+		(f) => f.includes("extra-19") && !f.includes("tab search/list"),
 	);
 });
 
@@ -1133,7 +1128,7 @@ test("a corrupt favorites file is reported and not overwritten", async () => {
 			(f) => f.includes("Could not read favorites") && f.includes("faux-1"),
 		);
 		await clickText(piu, "faux-1");
-		await piu.waitForFrame((f) => f.includes("Search models"));
+		await piu.waitForFrame((f) => f.includes("search models"));
 		await clickText(piu, "☆ faux-1");
 		await piu.waitForFrame(
 			(f) => f.includes("Could not read favorites") && f.includes("☆ faux-1"),
@@ -1162,7 +1157,7 @@ test("a favorites entry of the wrong shape is reported and not overwritten", asy
 			(f) => f.includes("Could not read favorites") && f.includes("faux-1"),
 		);
 		await clickText(piu, "faux-1");
-		await piu.waitForFrame((f) => f.includes("Search models"));
+		await piu.waitForFrame((f) => f.includes("search models"));
 		await clickText(piu, "☆ faux-1");
 		await piu.waitForFrame(
 			(f) => f.includes("Could not read favorites") && f.includes("☆ faux-1"),
@@ -1176,13 +1171,13 @@ test("a favorites entry of the wrong shape is reported and not overwritten", asy
 test("search text stays out of the prompt and Esc returns the keyboard to it", async () => {
 	await using piu = await start();
 	await clickText(piu, "faux-1");
-	await piu.waitForFrame((f) => f.includes("Search models"));
+	await piu.waitForFrame((f) => f.includes("search models"));
 	await piu.mockInput.typeText("faux-2");
-	await piu.waitForFrame((f) => f.includes("Search: faux-2"));
+	await piu.waitForFrame((f) => f.includes("› faux-2"));
 	expect(inputArea(piu.captureCharFrame())).not.toContain("faux-2");
 
 	piu.mockInput.pressEscape();
-	await piu.waitForFrame((f) => !f.includes("Search models"));
+	await piu.waitForFrame((f) => !f.includes("search models"));
 	await piu.mockInput.typeText("after");
 	await piu.waitForFrame((f) => inputArea(f).includes("after"));
 });

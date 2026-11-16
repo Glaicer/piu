@@ -136,24 +136,26 @@ test("a compact tool row keeps its status visible next to a long command on a na
 	expect(rows[row + 1]).not.toContain(glyphs.bottomLeft);
 });
 
-test("the model picker is a raised Card with its name and a visible dismissal hint", async () => {
+test("the model picker is a Modal with its name under a heavy line and a visible dismissal hint", async () => {
 	await using piu = await startPiu({ script: { replies: [] } });
 	await piu.waitForFrame((frame) => frame.includes("faux-1"));
 	piu.mockInput.pressKey("l", { ctrl: true });
 	const frame = await piu.waitForFrame((frame) => frame.includes("faux-2"));
-	expect(frame).toContain(modalTitle("Models"));
-	expect(frame).toContain("Esc close");
 	const rows = frame.split("\n");
 	const top = rows.findIndex((line) => line.includes(modalTitle("Models")));
-	const left = (rows[top] ?? "").indexOf(modalTitle("Models")) - 2;
+	expect(rows[top]).toMatch(/ Models +esc/);
+	const left = (rows[top] ?? "").indexOf(modalTitle("Models")) - 3;
 	expect(onModalFill(piu, left, top)).toBe(true);
 	expect(onModalFill(piu, left, top - 1)).toBe(true);
-	expect(rows[top - 1]?.slice(left, left + 20).trim()).toBe("");
+	expect(onModalFill(piu, left - 1, top)).toBe(false);
+	expect(rows[top - 1]?.slice(left, left + 20)).toBe(
+		glyphs.heavyRule.repeat(20),
+	);
 	expect(rows[top]?.[left]).toBe(" ");
 	expect(rows[top + 1]?.[left]).toBe(" ");
 	const title = piu
 		.captureSpans()
 		.lines.flatMap((line) => line.spans)
 		.find((span) => span.text.includes("Models"));
-	expect(title?.bg.equals(RGBA.fromHex(darkTheme.raised))).toBe(true);
+	expect(title?.bg.equals(RGBA.fromHex(darkTheme.surface))).toBe(true);
 });

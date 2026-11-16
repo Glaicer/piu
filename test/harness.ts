@@ -23,6 +23,7 @@ import { promptFieldId } from "../builtin/input/index.tsx";
 import { createApp, type ExitRequest } from "../src/app.tsx";
 import type { UpdateCheckOptions } from "../src/backend-updates.ts";
 import { panelIdPrefix } from "../src/layout.tsx";
+import { modalIdPrefix } from "../src/modal.tsx";
 import { darkTheme } from "../src/theme.ts";
 import "./hooks.ts";
 
@@ -84,7 +85,7 @@ function cells(text: string, start: number, end: number) {
 	return result;
 }
 
-// why: tests find Modals, message bars and dividers by the glyphs that draw them, so a restyle changes this table and nothing else; Panels are found by layout (`panelBoxes`).
+// why: tests find titles, message bars and dividers by the glyphs that draw them, so a restyle changes this table and nothing else; Panels and Modals are found by layout (`panelBoxes`, `modalBoxes`).
 export const glyphs = {
 	topLeft: "┌",
 	topRight: "┐",
@@ -103,43 +104,50 @@ export function modalTitle(name: string) {
 	return ` ${name} `;
 }
 
-// why: a Modal has no contour, so tests find it by its fill, which no other surface uses.
-export function onModalFill(
-	piu: Awaited<ReturnType<typeof startPiu>>,
-	x: number,
-	y: number,
-) {
+function boxesWithPrefix(renderer: Piu["renderer"], prefix: string) {
+	const found: Renderable[] = [];
+	const walk = (node: Renderable) => {
+		if (!node.visible) return;
+		if (node.id.startsWith(prefix) && node.width > 0 && node.height > 0)
+			found.push(node);
+		for (const child of node.getChildren()) walk(child);
+	};
+	walk(renderer.root);
+	return found;
+}
+
+function modalBoxes(piu: Piu) {
+	return boxesWithPrefix(piu.renderer, modalIdPrefix);
+}
+
+// why: a Modal has no contour and its dark-Theme fill is the Panels' surface colour, so tests find it by layout and check that it is filled where they look.
+export function onModalFill(piu: Piu, x: number, y: number) {
+	const inside = modalBoxes(piu).some(
+		(box) =>
+			x >= box.screenX &&
+			x < box.screenX + box.width &&
+			y >= box.screenY &&
+			y < box.screenY + box.height,
+	);
 	const line = piu.captureSpans().lines[y];
 	let column = 0;
 	for (const span of line?.spans ?? []) {
 		if (x < column + span.width)
-			return span.bg.equals(RGBA.fromHex(darkTheme.raised));
+			return inside && span.bg.equals(RGBA.fromHex(darkTheme.surface));
 		column += span.width;
 	}
 	return false;
 }
 
-// why: finds the Modal by its dark-Theme fill; the dimmed Layout never has this colour.
-export function modalBounds(piu: Awaited<ReturnType<typeof startPiu>>) {
-	const raised = RGBA.fromHex(darkTheme.raised);
-	let left = Number.POSITIVE_INFINITY;
-	let right = -1;
-	let top = Number.POSITIVE_INFINITY;
-	let bottom = -1;
-	piu.captureSpans().lines.forEach((line, y) => {
-		let column = 0;
-		for (const span of line.spans) {
-			if (span.bg.equals(raised)) {
-				left = Math.min(left, column);
-				right = Math.max(right, column + span.width - 1);
-				top = Math.min(top, y);
-				bottom = Math.max(bottom, y);
-			}
-			column += span.width;
-		}
-	});
-	if (right < 0) return undefined;
-	return { left, top, width: right - left + 1, height: bottom - top + 1 };
+export function modalBounds(piu: Piu) {
+	const top = modalBoxes(piu).at(-1);
+	if (!top) return undefined;
+	return {
+		left: top.screenX,
+		top: top.screenY,
+		width: top.width,
+		height: top.height,
+	};
 }
 
 export function messageBar(text: string, width?: number) {
@@ -169,22 +177,16 @@ let current: Piu["renderer"] | undefined;
 export function panelBoxes(piu?: Piu) {
 	const renderer = piu?.renderer ?? current;
 	if (!renderer) throw new Error("No app is running");
-	const found: PanelBox[] = [];
-	const walk = (node: Renderable) => {
-		if (!node.visible) return;
-		if (node.id.startsWith(panelIdPrefix) && node.width > 0 && node.height > 0)
-			found.push({
-				id: node.id.slice(panelIdPrefix.length),
-				x: node.screenX,
-				y: node.screenY,
-				width: node.width,
-				height: node.height,
-				node,
-			});
-		for (const child of node.getChildren()) walk(child);
-	};
-	walk(renderer.root);
-	return found.sort((a, b) => a.y - b.y || a.x - b.x);
+	return boxesWithPrefix(renderer, panelIdPrefix)
+		.map((node) => ({
+			id: node.id.slice(panelIdPrefix.length),
+			x: node.screenX,
+			y: node.screenY,
+			width: node.width,
+			height: node.height,
+			node,
+		}))
+		.sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
 function panelAt(column: number, row: number, piu?: Piu) {

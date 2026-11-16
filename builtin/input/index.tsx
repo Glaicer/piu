@@ -17,7 +17,7 @@ import {
 	onCleanup,
 	Show,
 } from "solid-js";
-import { paintCard } from "../../src/card.ts";
+import { paintSheet } from "../../src/card.ts";
 import { defaultConfig } from "../../src/config.ts";
 import { formatChord, matches, parseChord } from "../../src/keybindings.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
@@ -176,6 +176,8 @@ function Prompt(props: { context: ModuleContext }) {
 		Math.min(windowStart(), Math.max(0, entries().length - MAX_LIST_ROWS));
 	const shown = () =>
 		entries().slice(firstShown(), firstShown() + MAX_LIST_ROWS);
+	const labelWidth = () =>
+		Math.max(0, ...shown().map((entry) => entry.label.length));
 
 	function reveal(at: number) {
 		const start = firstShown();
@@ -411,43 +413,53 @@ function Prompt(props: { context: ModuleContext }) {
 						zIndex={50}
 						flexDirection="column"
 						padding={1}
-						renderBefore={paintCard(() => ({
+						renderBefore={paintSheet(() => ({
 							fill: props.context.theme.raised,
-							edge: props.context.theme.border,
+							rule: props.context.theme.text,
 						}))}
 					>
 						<For each={shown()}>
-							{(entry, at) => (
-								<box
-									flexDirection="row"
-									height={1}
-									backgroundColor={
-										firstShown() + at() === selected()
-											? props.context.theme.selection
-											: undefined
-									}
-									// why: OpenTUI sends `over` to whatever lands under a resting pointer after each frame, which would select a row the user never pointed at.
-									onMouseMove={() => setSelected(firstShown() + at())}
-									onMouseDown={(event) => {
-										event.preventDefault();
-										accept(entry);
-									}}
-								>
-									<text
-										flexShrink={0}
-										wrapMode="none"
-										fg={props.context.theme.accent}
-									>{` ${entry.label}`}</text>
-									<text
-										flexShrink={1}
-										wrapMode="none"
-										truncate
-										fg={props.context.theme.muted}
+							{(entry, at) => {
+								const chosen = () => firstShown() + at() === selected();
+								return (
+									<box
+										flexDirection="row"
+										height={1}
+										backgroundColor={
+											chosen() ? props.context.theme.bar : undefined
+										}
+										// why: OpenTUI sends `over` to whatever lands under a resting pointer after each frame, which would select a row the user never pointed at.
+										onMouseMove={() => setSelected(firstShown() + at())}
+										onMouseDown={(event) => {
+											event.preventDefault();
+											accept(entry);
+										}}
 									>
-										{entry.detail ? `  ${entry.detail}` : ""}
-									</text>
-								</box>
-							)}
+										<text
+											flexShrink={0}
+											wrapMode="none"
+											attributes={TextAttributes.BOLD}
+											fg={
+												chosen()
+													? props.context.theme.barText
+													: props.context.theme.text
+											}
+										>{` ${entry.label.padEnd(labelWidth())}`}</text>
+										<text
+											flexShrink={1}
+											wrapMode="none"
+											truncate
+											fg={
+												chosen()
+													? props.context.theme.barMuted
+													: props.context.theme.muted
+											}
+										>
+											{entry.detail ? `  ${entry.detail}` : ""}
+										</text>
+									</box>
+								);
+							}}
 						</For>
 					</box>
 				</Portal>
