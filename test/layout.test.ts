@@ -1,6 +1,15 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { besidePanels, glyphs, startPiu } from "./harness.ts";
+import { RGBA, TextAttributes } from "@opentui/core";
+import { darkTheme } from "../src/theme.ts";
+import {
+	focusedPanels,
+	glyphs,
+	panelBoxes,
+	panelText,
+	sidePlacement,
+	startPiu,
+} from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
 const extensions = join(import.meta.dir, "fixtures/extensions");
@@ -10,27 +19,25 @@ function panel(id: string, size: unknown, extra: object = {}) {
 	return { kind: "panel", id, direction: "column", size, ...extra };
 }
 
-function cornerColumns(line: string) {
-	return [...line].flatMap((char, index) =>
-		char === glyphs.topLeft ? [index] : [],
-	);
-}
+type Piu = Awaited<ReturnType<typeof startPiu>>;
 
-function topBorder(frame: string) {
-	return frame.split("\n")[0] ?? "";
+function panelColumns(piu: Piu) {
+	return panelBoxes(piu)
+		.filter((box) => box.y === 0)
+		.map((box) => box.x);
 }
 
 function lineOf(frame: string, text: string) {
 	return frame.split("\n").findIndex((line) => line.includes(text));
 }
 
-function cornerRows(frame: string, column: number) {
-	return frame
-		.split("\n")
-		.flatMap((line, index) =>
-			[...line][column] === glyphs.topLeft ? [index] : [],
-		);
+function panelRows(piu: Piu, column: number) {
+	return panelBoxes(piu)
+		.filter((box) => box.x === column)
+		.map((box) => box.y);
 }
+
+const sideModule = { placement: sidePlacement };
 
 test("fixed, percentage, rest and minSize sizes divide the screen as written", async () => {
 	await using piu = await startPiu({
@@ -39,7 +46,14 @@ test("fixed, percentage, rest and minSize sizes divide the screen as written", a
 		width: 100,
 		height: 30,
 		config: {
-			placement: { c: ["greeter.hello"], f: ["greeter.bye"] },
+			placement: {
+				a: ["greeter.bye"],
+				b: ["greeter.bye"],
+				c: ["greeter.hello"],
+				d: ["greeter.bye"],
+				e: ["greeter.bye"],
+				f: ["greeter.bye"],
+			},
 			modules: {
 				"greeter.hello": { name: "a rather long name for a narrow Panel" },
 			},
@@ -68,29 +82,128 @@ test("fixed, percentage, rest and minSize sizes divide the screen as written", a
 		},
 	});
 
-	const frame = await piu.waitForFrame((f) => f.includes("Bye"));
-	expect(cornerColumns(topBorder(frame))).toEqual([0, 20, 50, 70]);
-	expect(cornerRows(frame, 0)).toEqual([0, 15, 19]);
+	await piu.waitForFrame((f) => f.includes("Bye"));
+	expect(panelColumns(piu)).toEqual([0, 20, 50, 70]);
+	expect(panelRows(piu, 0)).toEqual([0, 15, 19]);
 
 	piu.resize(200, 30);
-	const wide = await piu.waitForFrame(
-		(f) => topBorder(f).trimEnd().length === 200,
-	);
-	expect(cornerColumns(topBorder(wide))).toEqual([0, 20, 80, 140]);
+	await piu.waitForFrame(() => panelColumns(piu).at(-1) === 140);
+	expect(panelColumns(piu)).toEqual([0, 20, 80, 140]);
 });
 
 test("the default second column is absent below 120 columns and returns on resize", async () => {
-	await using piu = await startPiu({ script: none, width: 119 });
+	await using piu = await startPiu({
+		script: none,
+		width: 119,
+		config: sideModule,
+	});
 
-	const narrow = await piu.waitForFrame((f) => f.includes(glyphs.topLeft));
-	expect(topBorder(narrow)).not.toContain(besidePanels);
-	expect(topBorder(narrow).trimEnd()).toHaveLength(119);
+	await piu.waitForFrame((f) => f.includes("What would you like"));
+	expect(panelColumns(piu)).toEqual([0]);
+	expect(panelBoxes(piu)[0]?.width).toBe(119);
 
 	piu.resize(120, 30);
-	await piu.waitForFrame((f) => topBorder(f).includes(besidePanels));
+	await piu.waitForFrame(() => panelColumns(piu).length === 2);
 
 	piu.resize(119, 30);
-	await piu.waitForFrame((f) => !topBorder(f).includes(besidePanels));
+	await piu.waitForFrame(() => panelColumns(piu).length === 1);
+});
+
+test("an empty side Panel is hidden and the chat takes the whole width", async () => {
+	await using piu = await startPiu({ script: { replies: ["Wide reply"] } });
+	await piu.mockInput.typeText("Hello");
+	piu.mockInput.pressEnter();
+
+	const frame = await piu.waitForFrame((f) => f.includes("Wide reply"));
+	expect(panelColumns(piu)).toEqual([0]);
+	expect(panelBoxes(piu)[0]?.width).toBe(160);
+	for (const corner of [
+		glyphs.topLeft,
+		glyphs.topRight,
+		glyphs.bottomLeft,
+		glyphs.bottomRight,
+	])
+		expect(frame).not.toContain(corner);
+});
+
+test("a side Panel with a Module is set off by one thin divider", async () => {
+	await using piu = await startPiu({ script: none, config: sideModule });
+
+	const frame = await piu.waitForFrame((f) => f.includes("faux-1"));
+	const side = panelBoxes(piu).find((box) => box.id === "side");
+	expect(side?.x).toBeGreaterThan(0);
+	const column = side?.x ?? 0;
+	const rows = frame.split("\n").slice(0, side?.height);
+	expect(rows.every((row) => [...row][column] === glyphs.divider)).toBe(true);
+	expect(
+		rows.every(
+			(row) =>
+				[...row][column - 1] === " " ||
+				[...row][column - 1] === glyphs.heavyRule,
+		),
+	).toBe(true);
+	expect(panelText(frame, column + 5, 3)).toContain("faux-1");
+	const inputTop = panelRows(piu, 0).at(-1) ?? 0;
+	expect([...(rows[inputTop] ?? "")].slice(0, column).join("")).toBe(
+		glyphs.heavyRule.repeat(column),
+	);
+});
+
+test("Panels stacked in a column are set off by one thin line", async () => {
+	await using piu = await startPiu({
+		script: none,
+		extensions,
+		width: 60,
+		height: 12,
+		config: {
+			placement: { up: ["greeter.hello"], down: ["greeter.bye"] },
+			layout: {
+				kind: "container",
+				id: "root",
+				direction: "column",
+				size: "rest",
+				children: [panel("up", "rest"), panel("down", "rest")],
+			},
+		},
+	});
+
+	const frame = await piu.waitForFrame((f) => f.includes("Bye"));
+	const rows = frame.split("\n");
+	const down = panelRows(piu, 0)[1] ?? 0;
+	expect(down).toBeGreaterThan(0);
+	expect(rows[down]).toBe(glyphs.rule.repeat(60));
+	expect(
+		rows.filter(
+			(row) => row.includes(glyphs.rule) || row.includes(glyphs.heavyRule),
+		),
+	).toHaveLength(1);
+});
+
+test("a focused Panel shows its name in bold Signal red in its top row", async () => {
+	await using piu = await startPiu({
+		script: { replies: [] },
+		config: sideModule,
+	});
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+	const agentName = () =>
+		piu
+			.captureSpans()
+			.lines[0]?.spans.find((span) => span.text.trim() === "agent");
+
+	piu.mockInput.pressTab();
+	const focused = await piu.waitForFrame(
+		(f) => focusedPanels(piu, f).join() === "agent",
+	);
+	expect(focused.split("\n")[0]?.startsWith("  agent ")).toBe(true);
+	expect(agentName()?.fg.equals(RGBA.fromHex(darkTheme.signal))).toBe(true);
+	expect((agentName()?.attributes ?? 0) & TextAttributes.BOLD).toBeTruthy();
+
+	piu.mockInput.pressTab({ shift: true });
+	const back = await piu.waitForFrame(
+		(f) => focusedPanels(piu, f).join() === "input",
+	);
+	expect(back).not.toContain(" agent ");
+	expect(agentName()).toBeUndefined();
 });
 
 test("a row Panel shows its Modules side by side", async () => {
@@ -208,12 +321,12 @@ test("a content-sized Panel fits its shown Modules and takes no rows when they a
 		},
 	});
 
-	const hidden = await piu.waitForFrame((f) => f.includes("Bye"));
-	expect(cornerRows(hidden, 0)).toEqual([0, 27]);
+	await piu.waitForFrame((f) => f.includes("Bye"));
+	expect(panelRows(piu, 0)).toEqual([0, 27]);
 
 	hooks.setNote("shown");
-	const shown = await piu.waitForFrame((f) => f.includes("Note"));
-	expect(cornerRows(shown, 0)).toEqual([0, 3, 27]);
+	await piu.waitForFrame((f) => f.includes("Note"));
+	expect(panelRows(piu, 0)).toEqual([0, 3, 27]);
 });
 
 test("an exclusive Module hides its siblings until it stops claiming the Panel", async () => {

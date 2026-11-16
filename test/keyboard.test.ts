@@ -4,7 +4,6 @@ import {
 	inputArea,
 	messageBar,
 	panelText,
-	panelTitle,
 	startPiu,
 } from "./harness.ts";
 
@@ -17,7 +16,7 @@ async function send(piu: Piu, text: string) {
 
 async function focusAgent(piu: Piu) {
 	piu.mockInput.pressTab({ shift: true });
-	await piu.waitForFrame((f) => f.includes(panelTitle("agent")));
+	await piu.waitForFrame((f) => focusedPanels(piu, f).includes("agent"));
 }
 
 test("with the agent Panel focused the arrow keys scroll it", async () => {

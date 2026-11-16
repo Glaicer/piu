@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseLive } from "../src/subagents.ts";
-import { modalBounds, panelText, panelTitle, startPiu } from "./harness.ts";
+import { focusedPanels, modalBounds, panelText, startPiu } from "./harness.ts";
 import { subagentsControl } from "./subagents-control.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -177,7 +177,7 @@ test("a card can be selected and opened by keyboard, and Esc closes the view wit
 	control.say("max", "Reading the sources");
 
 	piu.mockInput.pressTab({ shift: true });
-	await piu.waitForFrame((f) => f.includes(panelTitle("agent")));
+	await piu.waitForFrame((f) => focusedPanels(piu, f).includes("agent"));
 	piu.mockInput.pressArrow("down");
 	await piu.waitForFrame((f) => f.includes("› agent_spawn"));
 	piu.mockInput.pressArrow("down");

@@ -5,7 +5,7 @@ import {
 } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/solid";
 import { type Accessor, createSignal, For, onCleanup } from "solid-js";
-import { paintCard } from "./card.ts";
+import { paintCard, paintPanel } from "./card.ts";
 import { channelFor } from "./channel.ts";
 import type { PanelFocus } from "./focus.ts";
 import type { ModuleContext, PlacedModule, Presence } from "./module.ts";
@@ -44,7 +44,9 @@ type SlotProps = {
 	context: SharedContext;
 };
 
-// why: the frame takes one cell on every side, and a blank column keeps text off its left edge; a Modal floats, so it gets a row and a column more of air on each side.
+export const panelIdPrefix = "panel:";
+
+// why: a Panel keeps a cell on every side for its dividers and title, and a blank column keeps text off its left divider; a Modal floats, so it gets a row and a column more of air on each side.
 const panelFrame = { padding: 1, paddingLeft: 2 };
 const modalFrame = {
 	paddingTop: 3,
@@ -152,19 +154,30 @@ export function SlotView(props: SlotProps) {
 			: props.modal
 				? entries[0]?.placed.module.title
 				: undefined;
-	const frame = {
-		...(props.modal ? modalFrame : panelFrame),
-		renderBefore: paintCard(() => ({
-			fill: fill(),
-			edge: props.modal ? undefined : shared.theme.border,
-			title: title(),
-			titleColor: props.modal ? shared.theme.text : shared.theme.accent,
-			joinedAt:
-				slot.joinAbove && props.parentDirection === "column"
-					? frameElement?.screenY
-					: props.joinedAt?.(),
-		})),
-	};
+	const frame = props.modal
+		? {
+				...modalFrame,
+				renderBefore: paintCard(() => ({
+					fill: fill(),
+					title: title(),
+					titleColor: shared.theme.text,
+				})),
+			}
+		: {
+				...panelFrame,
+				id: `${panelIdPrefix}${slot.id}`,
+				renderBefore: paintPanel(() => ({
+					fill: fill(),
+					rule: shared.theme.border,
+					heavyRule: shared.theme.text,
+					title: title(),
+					titleColor: shared.theme.signal,
+					joinedAt:
+						slot.joinAbove && props.parentDirection === "column"
+							? frameElement?.screenY
+							: props.joinedAt?.(),
+				})),
+			};
 	const routeKey = (event: KeyEvent) => {
 		for (const entry of entries) {
 			if (!shown(entry)) continue;
@@ -207,7 +220,7 @@ export function SlotView(props: SlotProps) {
 	onCleanup(smoothScroll.cancel);
 	const [awayFromBottom, setAwayFromBottom] = createSignal(false);
 	const [footerHeight, setFooterHeight] = createSignal(0);
-	// why: a footer Module shares the Panel border but stays outside the scrollbox, so it remains visible while the content scrolls.
+	// why: a footer Module sits inside the Panel's padding but stays outside the scrollbox, so it remains visible while the content scrolls.
 	const scrolled = entries.filter((entry) => !entry.placed.module.footer);
 	const footers = entries.filter((entry) => entry.placed.module.footer);
 	return (
@@ -216,7 +229,7 @@ export function SlotView(props: SlotProps) {
 				frameElement = node;
 			}}
 			{...sizing}
-			visible={visible()}
+			visible={visible() && (props.modal || entries.some(shown))}
 			{...frame}
 			flexDirection="column"
 		>
@@ -328,7 +341,7 @@ function sizeStyle(slot: Slot, parentDirection: Direction, inContent: boolean) {
 	return {
 		...flex,
 		[min]: slot.minSize,
-		// why: adjacent contours share one terminal row; only frame padding overlaps, never Module content.
+		// why: a joined Container shares one terminal row with the Slot above; only padding overlaps, never Module content.
 		marginTop: slot.joinAbove && parentDirection === "column" ? -1 : 0,
 	};
 }

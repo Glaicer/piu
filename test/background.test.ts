@@ -68,7 +68,7 @@ test("a command started in the background is pinned above the input with its job
 	const rows = frame.split("\n");
 	const header = rows.findIndex((line) => line.includes(HEADER));
 	expect(header).toBeGreaterThan(rows.findIndex((l) => l.includes("Launched")));
-	expect(header).toBeLessThan(inputTop(frame));
+	expect(header).toBeLessThan(inputTop());
 	expect(agentPanel(frame)).not.toContain(HEADER);
 	expect(agentPanel(frame)).toMatch(/ bash .*bg-1 running/);
 });

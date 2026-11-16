@@ -2,10 +2,9 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import {
 	focusedPanels,
-	glyphs,
 	inputArea,
+	panelBoxes,
 	panelText,
-	panelTitle,
 	startPiu,
 } from "./harness.ts";
 
@@ -133,7 +132,7 @@ test("Tab takes the focus away from the question card and a full cycle brings th
 	await piu.waitForFrame(showsCard);
 
 	piu.mockInput.pressTab();
-	await piu.waitForFrame((f) => f.includes(panelTitle("agent")));
+	await piu.waitForFrame((f) => focusedPanels(piu, f).includes("agent"));
 	piu.mockInput.pressArrow("down");
 	piu.mockInput.pressTab();
 	await piu.waitForFrame((f) => focusedPanels(piu, f).includes("input"));
@@ -551,34 +550,30 @@ test("clicking Dismiss gives the model a declined result", async () => {
 	await piu.waitForFrame((f) => agentPanel(f).includes(declined));
 });
 
-const cornerRows = (frame: string) =>
-	frame
-		.split("\n")
-		.flatMap((line, index) =>
-			line.startsWith(glyphs.topLeft) || line.startsWith(glyphs.joinLeft)
-				? [index]
-				: [],
-		);
+const panelRows = (piu: Piu) =>
+	panelBoxes(piu)
+		.filter((box) => box.x === 0)
+		.map((box) => box.y);
 
 test("the input Panel fits the card and restores the editor and directory after", async () => {
 	await using piu = await startPiu({
 		script: asking("Model got {toolResult}"),
 	});
-	const idle = await piu.waitForFrame(
+	await piu.waitForFrame(
 		(f) => f.includes("faux-1") && inputArea(f).includes(piu.dir),
 	);
-	expect(cornerRows(idle)).toEqual([0, 23]);
+	expect(panelRows(piu)).toEqual([0, 23]);
 	await send(piu, "go");
 	const asked = await piu.waitForFrame(showsCard);
-	expect(cornerRows(asked)).toEqual([0, 22]);
+	expect(panelRows(piu)).toEqual([0, 22]);
 	expect(inputArea(asked)).not.toContain(piu.dir);
 
 	piu.mockInput.pressEnter();
-	const answered = await piu.waitForFrame(
+	await piu.waitForFrame(
 		(f) =>
 			agentPanel(f).includes("Model got") && inputArea(f).includes(piu.dir),
 	);
-	expect(cornerRows(answered)).toEqual([0, 23]);
+	expect(panelRows(piu)).toEqual([0, 23]);
 });
 
 test("ask_user_question stays out after a tool call and in the next run", async () => {

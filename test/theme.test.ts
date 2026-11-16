@@ -6,37 +6,33 @@ import { startPiu } from "./harness.ts";
 const none = { replies: [] };
 
 for (const mode of ["light", "dark"] as const) {
-	test(`the cursor follows the ${mode} theme in the prompt and model search`, async () => {
+	test(`the cursor follows the ${mode} theme: Signal red in the prompt, text color in model search`, async () => {
 		await using piu = await startPiu({
 			script: none,
 			terminalBackground: mode,
 		});
-		const initial = RGBA.fromHex(
-			mode === "light" ? lightTheme.text : darkTheme.text,
-		);
-		const changed = RGBA.fromHex(
-			mode === "light" ? darkTheme.text : lightTheme.text,
-		);
+		const [initial, changed] =
+			mode === "light" ? [lightTheme, darkTheme] : [darkTheme, lightTheme];
+		const cursorIs = (color: string) =>
+			piu.renderer.getCursorState().color.equals(RGBA.fromHex(color));
 		await piu.waitForFrame(
 			(frame) =>
 				frame.includes("faux-1") && frame.includes("/ commands · @ files"),
 		);
-		expect(piu.renderer.getCursorState().color.equals(initial)).toBe(true);
+		expect(cursorIs(initial.signal)).toBe(true);
 		piu.mockInput.pressKey("l", { ctrl: true });
 		await piu.waitForFrame(
 			(frame) => frame.includes("Search:") && frame.includes("faux-2"),
 		);
-		expect(piu.renderer.getCursorState().color.equals(initial)).toBe(true);
+		expect(cursorIs(initial.text)).toBe(true);
 		piu.reportTerminalBackground(mode === "light" ? "dark" : "light");
-		await piu.waitForFrame(() =>
-			piu.renderer.getCursorState().color.equals(changed),
-		);
+		await piu.waitForFrame(() => cursorIs(changed.text));
 		piu.mockInput.pressKey("ESCAPE");
 		await piu.waitForFrame(
 			(frame) =>
 				!frame.includes("Search:") && frame.includes("/ commands · @ files"),
 		);
-		expect(piu.renderer.getCursorState().color.equals(changed)).toBe(true);
+		expect(cursorIs(changed.signal)).toBe(true);
 	});
 }
 

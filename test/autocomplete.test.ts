@@ -4,13 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { RGBA } from "@opentui/core";
 import { darkTheme } from "../src/theme.ts";
-import {
-	focusedPanels,
-	glyphs,
-	inputArea,
-	panelText,
-	startPiu,
-} from "./harness.ts";
+import { focusedPanels, inputArea, panelText, startPiu } from "./harness.ts";
 
 const agentPanel = (frame: string) => panelText(frame, 10, 0);
 
@@ -369,9 +363,7 @@ test("Tab on a selected command that takes no arguments runs it", async () => {
 	piu.mockInput.pressTab();
 
 	const frame = await piu.waitForFrame((f) =>
-		f
-			.split("\n")
-			.some((line) => new RegExp(`${glyphs.left}\\s+high `).test(line)),
+		f.split("\n").some((line) => /^\s+high /.test(line)),
 	);
 	expect(inputArea(frame)).not.toContain("/reas");
 

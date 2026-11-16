@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { besidePanels, glyphs, messageBar, startPiu } from "./harness.ts";
+import { messageBar, panelBoxes, sidePlacement, startPiu } from "./harness.ts";
 
 test("Enter sends the prompt and the agent Panel shows it with the full reply", async () => {
 	await using piu = await startPiu({
@@ -26,9 +26,7 @@ test("the reply grows across frames while it streams", async () => {
 
 	const seen = new Set<string>();
 	await piu.waitForFrame((frame) => {
-		const line = frame
-			.split("\n")
-			.find((l) => new RegExp(`${glyphs.left}\\s+one`).test(l));
+		const line = frame.split("\n").find((l) => /^\s+one/.test(l));
 		if (line) seen.add(line);
 		return frame.includes(reply);
 	});
@@ -48,12 +46,18 @@ test("arguments after piu reach the Backend", async () => {
 });
 
 test("a wide terminal splits into a 66% first column and a 33% second column", async () => {
-	await using piu = await startPiu({ script: { replies: [] }, width: 150 });
+	await using piu = await startPiu({
+		script: { replies: [] },
+		width: 150,
+		config: {
+			placement: sidePlacement,
+		},
+	});
 
-	const frame = await piu.waitForFrame((f) => f.includes(besidePanels));
-	const topBorder = frame.split("\n")[0] ?? "";
-	const secondColumnStart = topBorder.indexOf(besidePanels) + 1;
-	const secondColumnWidth = topBorder.trimEnd().length - secondColumnStart;
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+	const side = panelBoxes(piu).find((box) => box.id === "side");
+	const secondColumnStart = side?.x ?? 0;
+	const secondColumnWidth = side?.width ?? 0;
 
 	expect(Math.abs(secondColumnStart - 99)).toBeLessThanOrEqual(2);
 	expect(Math.abs(secondColumnWidth - 50)).toBeLessThanOrEqual(2);

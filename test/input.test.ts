@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { glyphs, inputArea, startPiu } from "./harness.ts";
+import { inputArea, panelBoxes, startPiu } from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -82,7 +82,9 @@ test("pasting overflowing lines keeps the last line and cursor in the input", as
 	const rows = frame.split("\n");
 	const fourthRow = rows.findIndex((row) => row.includes("fourth"));
 	expect(cursor.y - 1).toBe(fourthRow + 1);
-	expect(rows[cursor.y - 1]).toContain(glyphs.left);
+	const panel = panelBoxes(piu).find((box) => box.id === "input");
+	expect(cursor.y - 1).toBeGreaterThan(panel?.y ?? 0);
+	expect(cursor.y - 1).toBeLessThan((panel?.y ?? 0) + (panel?.height ?? 0) - 1);
 });
 
 test("four pasted lines remain visible and arrow keys move within the draft", async () => {

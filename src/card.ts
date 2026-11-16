@@ -3,6 +3,7 @@ import {
 	BorderChars,
 	type OptimizedBuffer,
 	parseColor,
+	TextAttributes,
 } from "@opentui/core";
 
 export type CardColors = {
@@ -10,24 +11,16 @@ export type CardColors = {
 	edge?: string;
 	title?: string;
 	titleColor?: string;
-	joinedAt?: number;
 };
+
+type Box = { screenX: number; screenY: number; width: number; height: number };
 
 // why: painting inside reserved padding keeps the frame from changing Yoga sizes or clipping the Panel's scrollbox and pinned footer.
 export function paintCard(colors: () => CardColors) {
-	return function (
-		this: { screenX: number; screenY: number; width: number; height: number },
-		buffer: OptimizedBuffer,
-	) {
+	return function (this: Box, buffer: OptimizedBuffer) {
 		const { screenX: x, screenY: y, width, height } = this;
 		if (width < 2 || height < 2) return;
-		const {
-			fill: fillColor,
-			edge: edgeColor,
-			title,
-			titleColor,
-			joinedAt,
-		} = colors();
+		const { fill: fillColor, edge: edgeColor, title, titleColor } = colors();
 		const fill = parseColor(fillColor);
 		if (edgeColor === undefined) {
 			buffer.fillRect(x, y, width, height, fill);
@@ -48,8 +41,8 @@ export function paintCard(colors: () => CardColors) {
 		buffer.fillRect(x + 1, y + 1, width - 2, height - 2, fill);
 		const cell = (cx: number, cy: number, char: string) =>
 			buffer.setCellWithAlphaBlending(cx, cy, char, edge, fill);
-		cell(x, y, joinedAt === y ? "├" : "┌");
-		cell(right, y, joinedAt === y ? "┤" : "┐");
+		cell(x, y, "┌");
+		cell(right, y, "┐");
 		cell(x, bottom, "└");
 		cell(right, bottom, "┘");
 		for (let cx = x + 1; cx < right; cx++) {
@@ -68,6 +61,53 @@ export function paintCard(colors: () => CardColors) {
 				width - 2,
 				parseColor(titleColor),
 				fill,
+			);
+	};
+}
+
+export type PanelPaint = {
+	fill: string;
+	rule: string;
+	heavyRule: string;
+	title?: string;
+	titleColor: string;
+	joinedAt?: number;
+};
+
+// why: Panels have no outer edge; a Panel draws only the line it shares with a neighbour, along its top row when something is above it and its left column when something is to its left. The row a joinAbove Container shares with the Slot above is the heavy line over the input area.
+export function paintPanel(paint: () => PanelPaint) {
+	return function (this: Box, buffer: OptimizedBuffer) {
+		const { screenX: x, screenY: y, width, height } = this;
+		if (width < 2 || height < 2) return;
+		const {
+			fill: fillColor,
+			rule,
+			heavyRule,
+			title,
+			titleColor,
+			joinedAt,
+		} = paint();
+		const fill = parseColor(fillColor);
+		buffer.fillRect(x, y, width, height, fill);
+		if (x > 0) {
+			const color = parseColor(rule);
+			for (let cy = y; cy < y + height; cy++)
+				buffer.setCellWithAlphaBlending(x, cy, "│", color, fill);
+		}
+		if (y > 0) {
+			const heavy = joinedAt === y;
+			const color = parseColor(heavy ? heavyRule : rule);
+			for (let cx = x; cx < x + width; cx++)
+				buffer.setCellWithAlphaBlending(cx, y, heavy ? "━" : "─", color, fill);
+		}
+		if (title)
+			buffer.drawText(
+				` ${title} `.slice(0, width - 1),
+				x + 1,
+				y,
+				parseColor(titleColor),
+				fill,
+				TextAttributes.BOLD,
 			);
 	};
 }

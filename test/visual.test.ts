@@ -1,15 +1,18 @@
 import { expect, test } from "bun:test";
 import { RGBA } from "@opentui/core";
-import { focusedPanels, glyphs, startPiu } from "./harness.ts";
+import { focusedPanels, glyphs, sidePlacement, startPiu } from "./harness.ts";
 
 for (const [mode, surface, raised, ink, accent] of [
 	["light", "#ffffff", "#f2f2f2", "#000000", "#000000"],
 	["dark", "#1c202b", "#252b39", "#e5e9f5", "#a9bfff"],
 ] as const) {
-	test(`Panel outlines stay one neutral color when focus changes on a ${mode} terminal`, async () => {
+	test(`thin Panel dividers stay one neutral color when focus changes on a ${mode} terminal`, async () => {
 		await using piu = await startPiu({
 			terminalBackground: mode,
 			script: { replies: [] },
+			config: {
+				placement: sidePlacement,
+			},
 		});
 		await piu.waitForFrame(
 			(frame) =>
@@ -22,7 +25,8 @@ for (const [mode, surface, raised, ink, accent] of [
 				.lines.flatMap((line) =>
 					line.spans.filter(
 						(span) =>
-							span.text.includes(glyphs.top) || span.text.includes(glyphs.left),
+							span.text.includes(glyphs.rule) ||
+							span.text.includes(glyphs.divider),
 					),
 				);
 			expect(outlines.length).toBeGreaterThan(0);
@@ -61,7 +65,7 @@ for (const [mode, surface, raised, ink, accent] of [
 		expect(prompt?.bg.equals(RGBA.fromHex(raised))).toBe(true);
 		expect(badge?.fg.equals(RGBA.fromHex(surface))).toBe(true);
 		expect(badge?.bg.equals(RGBA.fromHex(ink))).toBe(true);
-		expect(frame.split("\n")[0]?.startsWith(glyphs.topLeft)).toBe(true);
+		expect(frame).not.toContain(glyphs.topLeft);
 		expect(frame).not.toContain("YOU");
 		expect(frame).toContain("Thinking");
 		expect(frame).not.toContain("Private reasoning");

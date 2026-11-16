@@ -7,18 +7,19 @@ import {
 	messageBar,
 	modalTitle,
 	onModalFill,
+	panelBoxes,
 	panelText,
 	startPiu,
 } from "./harness.ts";
 
-test("the default side Panel is empty while the chat shows its welcome", async () => {
+test("the default side Panel is hidden while the chat shows its welcome", async () => {
 	await using piu = await startPiu({ script: { replies: [] } });
 	const frame = await piu.waitForFrame(
 		(frame) =>
 			frame.includes("faux-1") &&
 			frame.includes("What would you like to build?"),
 	);
-	expect(panelText(frame, 150).trim()).toBe("");
+	expect(panelBoxes(piu).map((box) => box.id)).not.toContain("side");
 	const rows = panelText(frame, 10).split("\n");
 	const heading = rows.findIndex((line) =>
 		line.includes("What would you like to build?"),

@@ -351,7 +351,7 @@ function Prompt(props: { context: ModuleContext }) {
 					height="100%"
 					flexGrow={1}
 					textColor={props.context.theme.text}
-					cursorColor={props.context.theme.text}
+					cursorColor={props.context.theme.signal}
 					focusedTextColor={props.context.theme.text}
 					backgroundColor="transparent"
 					focusedBackgroundColor="transparent"

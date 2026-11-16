@@ -12,6 +12,7 @@ import type { JsonObject } from "@earendil-works/pi-ai";
 import {
 	type ClipboardService,
 	type ClipboardWriteOptions,
+	type Renderable,
 	RGBA,
 	type ThemeMode,
 } from "@opentui/core";
@@ -20,6 +21,7 @@ import { testRender } from "@opentui/solid";
 import { stringWidth } from "bun";
 import { createApp, type ExitRequest } from "../src/app.tsx";
 import type { UpdateCheckOptions } from "../src/backend-updates.ts";
+import { panelIdPrefix } from "../src/layout.tsx";
 import { darkTheme } from "../src/theme.ts";
 import "./hooks.ts";
 
@@ -81,29 +83,20 @@ function cells(text: string, start: number, end: number) {
 	return result;
 }
 
-// why: tests find Panels, Modals and message bars by the glyphs that draw them, so a restyle changes this table and nothing else.
+// why: tests find Modals, message bars and dividers by the glyphs that draw them, so a restyle changes this table and nothing else; Panels are found by layout (`panelBoxes`).
 export const glyphs = {
 	topLeft: "┌",
 	topRight: "┐",
 	bottomLeft: "└",
-	top: "─",
-	left: "│",
-	right: "│",
+	bottomRight: "┘",
+	rule: "─",
+	heavyRule: "━",
+	divider: "│",
 	bar: "▌",
-	joinLeft: "├",
-	joinRight: "┤",
 };
 
-// why: a Panel's left edge is followed by one blank column before its content.
+// why: a Panel's left divider column is followed by one blank column before its content.
 const frameLeft = 2;
-
-export const besidePanels = `${glyphs.topRight}${glyphs.topLeft}`;
-
-const titlePrefix = `${glyphs.topLeft} `;
-
-export function panelTitle(name: string) {
-	return `${titlePrefix}${name} `;
-}
 
 export function modalTitle(name: string) {
 	return ` ${name} `;
@@ -153,74 +146,100 @@ export function messageBar(text: string) {
 	return `   ${text}`;
 }
 
+type Piu = Awaited<ReturnType<typeof startPiu>>;
+export type PanelBox = {
+	id: string;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	node: Renderable;
+};
+
+export const sidePlacement = {
+	agent: ["chat.messages"],
+	side: ["model.current"],
+};
+
+// why: frame helpers take only the frame, so they read the layout of the app the running test started last; tests in a file run one at a time.
+let current: Piu["renderer"] | undefined;
+
+export function panelBoxes(piu?: Piu) {
+	const renderer = piu?.renderer ?? current;
+	if (!renderer) throw new Error("No app is running");
+	const found: PanelBox[] = [];
+	const walk = (node: Renderable) => {
+		if (!node.visible) return;
+		if (node.id.startsWith(panelIdPrefix) && node.width > 0 && node.height > 0)
+			found.push({
+				id: node.id.slice(panelIdPrefix.length),
+				x: node.screenX,
+				y: node.screenY,
+				width: node.width,
+				height: node.height,
+				node,
+			});
+		for (const child of node.getChildren()) walk(child);
+	};
+	walk(renderer.root);
+	return found.sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
+function panelAt(column: number, row: number, piu?: Piu) {
+	// why: a joined Container overlaps the Slot above by one row, and the later Panel is painted on top.
+	return panelBoxes(piu).findLast(
+		(box) =>
+			column >= box.x &&
+			column < box.x + box.width &&
+			row >= box.y &&
+			row < box.y + box.height,
+	);
+}
+
 export function panelText(frame: string, column: number, row = 0) {
-	const rows = frame.split("\n");
-	const isTop = (char: string | undefined) =>
-		char === glyphs.topLeft || char === glyphs.joinLeft;
-	let top = row;
-	while (top > 0 && ![...(rows[top] ?? "").slice(0, column + 1)].some(isTop))
-		top--;
-	const border = rows[top] ?? "";
-	const left = Math.max(
-		border.lastIndexOf(glyphs.topLeft, column),
-		border.lastIndexOf(glyphs.joinLeft, column),
-	);
-	const right = border.indexOf(
-		border[left] === glyphs.joinLeft ? glyphs.joinRight : glyphs.topRight,
-		column,
-	);
-	const bottom = rows.findIndex(
-		(text, index) =>
-			index > top &&
-			[glyphs.bottomLeft, glyphs.joinLeft].includes(
-				cells(text, left, left + 1),
-			),
-	);
-	return rows
-		.slice(top + 1, bottom)
-		.map((text) => cells(text, left + frameLeft, right - 1))
+	const box = panelAt(column, row);
+	if (!box) return "";
+	return frame
+		.split("\n")
+		.slice(box.y + 1, box.y + box.height - 1)
+		.map((text) => cells(text, box.x + frameLeft, box.x + box.width - 2))
 		.join("\n");
 }
 
 // why: the chat repeats every prompt, so history is asserted on the last Panel in the main column, not the whole frame.
-export function inputTop(frame: string) {
-	return frame
-		.split("\n")
-		.findLastIndex(
-			(line) =>
-				line.startsWith(glyphs.topLeft) || line.startsWith(glyphs.joinLeft),
-		);
+export function inputTop() {
+	return Math.max(
+		...panelBoxes()
+			.filter((box) => box.x === 0)
+			.map((box) => box.y),
+	);
 }
 
 export function inputArea(frame: string) {
-	return panelText(frame, 10, inputTop(frame) + 1);
+	return panelText(frame, 10, inputTop() + 1);
 }
 
 export function statusArea(frame: string) {
-	return panelText(frame, 10, inputTop(frame) - 1);
+	return panelText(frame, 10, inputTop() - 1);
 }
 
-export function focusedPanels(
-	piu: Awaited<ReturnType<typeof startPiu>>,
-	frame: string,
-) {
-	const named = [
-		...frame.matchAll(
-			new RegExp(`[${glyphs.topLeft}${glyphs.joinLeft}] ([\\w-]+) `, "g"),
-		),
-	].map((match) => match[1]);
-	const top = inputTop(frame);
-	const border = frame.split("\n")[top] ?? "";
-	const width =
-		border.indexOf(
-			border.startsWith(glyphs.joinLeft) ? glyphs.joinRight : glyphs.topRight,
-		) + 1;
+export function focusedPanels(piu: Piu, frame: string) {
+	const rows = frame.split("\n");
+	const boxes = panelBoxes(piu);
+	const named = boxes.flatMap((box) => {
+		const name = cells(rows[box.y] ?? "", box.x + 1, box.x + box.width).match(
+			/^ ([\w-]+) /,
+		)?.[1];
+		return name ? [name] : [];
+	});
+	const top = inputTop();
+	const input = boxes.find((box) => box.x === 0 && box.y === top);
 	for (
 		let node = piu.renderer.currentFocusedRenderable;
 		node;
 		node = node.parent
 	) {
-		if (node.screenX === 0 && node.screenY === top && node.width === width) {
+		if (node === input?.node) {
 			if (!named.includes("input")) named.push("input");
 			break;
 		}
@@ -406,6 +425,8 @@ export async function startPiu(
 		clock: options.clock,
 	});
 
+	current = setup.renderer;
+
 	if (options.terminalBackground) {
 		reportTerminalBackground(setup.renderer, options.terminalBackground);
 	}
@@ -436,6 +457,7 @@ export async function startPiu(
 			reportTerminalBackground(setup.renderer, mode),
 		async [Symbol.asyncDispose]() {
 			await setup.dispose();
+			if (current === setup.renderer) current = undefined;
 			removeDir();
 		},
 	};

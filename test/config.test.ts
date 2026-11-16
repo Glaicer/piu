@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { besidePanels, startPiu } from "./harness.ts";
+import { panelBoxes, startPiu } from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
 const extensions = join(import.meta.dir, "fixtures/extensions");
@@ -39,8 +39,8 @@ test("a config that replaces layout replaces the whole tree", async () => {
 	await piu.mockInput.typeText("Anyone?");
 	piu.mockInput.pressEnter();
 
-	const frame = await piu.waitForFrame((f) => f.includes("Solo reply"));
-	expect(frame.split("\n")[0]).not.toContain(besidePanels);
+	await piu.waitForFrame((f) => f.includes("Solo reply"));
+	expect(panelBoxes(piu).map((box) => box.id)).toEqual(["solo"]);
 });
 
 test("backend.command in the config decides which program is started", async () => {
