@@ -3,7 +3,6 @@ import {
 	type Renderable,
 	ScrollBoxRenderable,
 } from "@opentui/core";
-import { useTerminalDimensions } from "@opentui/solid";
 import { type Accessor, createSignal, For, onCleanup } from "solid-js";
 import { paintPanel, paintSheet } from "./card.ts";
 import { channelFor } from "./channel.ts";
@@ -35,6 +34,7 @@ export type SharedContext = Omit<
 	"reportPresence" | "onKey" | "bar"
 > & {
 	focus?: PanelFocus;
+	terminal: Accessor<{ width: number; height: number }>;
 };
 
 type SlotProps = {
@@ -72,13 +72,12 @@ export const modalFrameColumns =
 
 export function SlotView(props: SlotProps) {
 	const slot = props.slot;
-	const { focus, ...shared } = props.context;
+	const { focus, terminal, ...shared } = props.context;
 	const sizing = sizeStyle(
 		slot,
 		props.parentDirection,
 		props.inContent ?? false,
 	);
-	const terminal = useTerminalDimensions();
 	// why: a "content" slot never takes the last two cells of the screen, so a "rest" Panel next to it keeps its frame; Yoga then shrinks the one Panel inside it that may shrink (a tall card) instead of letting the slot push the rest off screen. Yoga's shrink shares of two flexible siblings turn out unreliable, so the cap is explicit.
 	const limit = (): { maxWidth?: number; maxHeight?: number } => {
 		if (slot.size !== "content") return {};
@@ -166,6 +165,10 @@ export function SlotView(props: SlotProps) {
 				? entries[0]?.placed.module.title
 				: undefined;
 	const bar = slot.bar ?? false;
+	// why: a Modal that follows live output gains a scrollbar mid-read; the scrollbar is drawn over a column kept empty for it, so the text never rewraps, and it sits right of the esc hint instead of over it.
+	const reservesScrollbar =
+		props.modal === true &&
+		entries.some((entry) => entry.placed.module.followsOutput);
 	const frame = bar
 		? {
 				id: `${panelIdPrefix}${slot.id}`,
@@ -179,6 +182,9 @@ export function SlotView(props: SlotProps) {
 			? {
 					...modalFrame,
 					paddingTop: title() ? modalFrame.paddingTop : untitledPaddingTop,
+					paddingRight: reservesScrollbar
+						? modalFrame.paddingRight - 1
+						: modalFrame.paddingRight,
 					renderBefore: paintSheet(() => ({
 						fill: shared.theme.surface,
 						rule: shared.theme.text,
@@ -283,8 +289,12 @@ export function SlotView(props: SlotProps) {
 				onMouseScroll={smoothScroll.wheel}
 				stickyScroll={followsOutput()}
 				stickyStart="bottom"
-				contentOptions={{ flexDirection: slot.direction }}
+				contentOptions={{
+					flexDirection: slot.direction,
+					paddingRight: reservesScrollbar ? 3 : 0,
+				}}
 				scrollbarOptions={{
+					position: reservesScrollbar ? "absolute" : "relative",
 					trackOptions: {
 						foregroundColor: shared.theme.border,
 						backgroundColor: shared.theme.surface,

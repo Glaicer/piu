@@ -68,6 +68,40 @@ test("a background subagent has a card with its id, task and status that stays r
 	expect(cards(frame)[0]).toMatch(/agent @max +Audit the auth code +running/);
 });
 
+test("subagent cards come back when the session is opened again by a new Backend, as after a restart", async () => {
+	using control = subagentsControl();
+	const dir = mkdtempSync(join(tmpdir(), "piu-session-"));
+	try {
+		{
+			await using first = await start(
+				control,
+				{ replies: [spawn("Audit the auth code"), "Spawned it"] },
+				{ dir, persistSession: true },
+			);
+			await send(first, "Go");
+			await first.waitForFrame(
+				(f) => spawned(f, "max") && f.includes("Spawned it") && !working(f),
+			);
+			control.status("max", "done", "all good");
+			await first.waitForFrame((f) =>
+				/@max +Audit the auth code +done/.test(f),
+			);
+		}
+
+		await using again = await start(
+			control,
+			{ replies: [] },
+			{ dir, persistSession: true, args: ["--model", "faux/faux-1", "-c"] },
+		);
+		const frame = await again.waitForFrame(
+			(f) => f.includes("Spawned it") && spawned(f, "max"),
+		);
+		expect(cards(frame)[0]).toMatch(/agent @max +Audit the auth code +done/);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
 test("a foreground subagent has a card while the spawn call is still blocked, and the card shows the end", async () => {
 	using control = subagentsControl();
 	await using piu = await start(control, {
@@ -171,6 +205,54 @@ test("the subagent view fills the middle three quarters of the terminal and foll
 		(f) => modalBounds(piu)?.width === 75 && f.includes("Reading the sources"),
 	);
 	expect(modalBounds(piu)).toEqual({ left: 13, top: 5, width: 75, height: 30 });
+});
+
+test("text in the subagent view keeps its wrapping when the scrollbar appears, the scrollbar clears the esc hint, and two blank rows end the log", async () => {
+	using control = subagentsControl();
+	await using piu = await start(control, {
+		replies: [spawn("Audit the auth code"), "Spawned it"],
+	});
+	await send(piu, "Go");
+	const base = await piu.waitForFrame(
+		(f) => spawned(f, "max") && f.includes("Spawned it"),
+	);
+	const long = (letter: string) => letter.repeat(300);
+	const inModal = (frame: string) => {
+		const box = modalBounds(piu);
+		if (!box) throw new Error("no Modal");
+		return frame
+			.split("\n")
+			.slice(box.top, box.top + box.height)
+			.map((row) => row.slice(box.left, box.left + box.width));
+	};
+	const wrapped = (frame: string, letter: string) =>
+		inModal(frame).flatMap((row) => {
+			const run = row.match(new RegExp(`${letter}{5,}`));
+			return run ? [{ at: run.index, width: run[0].length }] : [];
+		});
+	control.say("max", long("q"));
+	await clickCard(piu, base, "max");
+	const before = await piu.waitForFrame((f) => f.includes("q".repeat(20)));
+
+	control.say(
+		"max",
+		Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n"),
+	);
+	control.say("max", long("z"));
+	const after = await piu.waitForFrame((f) => f.includes("z".repeat(20)));
+
+	expect(wrapped(after, "z")).toEqual(wrapped(before, "q"));
+	const rows = inModal(after);
+	const width = rows[0]?.length ?? 0;
+	expect(rows.some((row) => row.slice(width - 5, width - 2) === "esc")).toBe(
+		true,
+	);
+	const last = rows.findLastIndex((row) => row.includes("zzzzz"));
+	expect(rows.length - 1 - last).toBe(3);
+	expect(
+		rows.slice(last + 1).every((row) => row.slice(0, width - 2).trim() === ""),
+	).toBe(true);
+	expect(rows.slice(1).some((row) => row[width - 2] !== " ")).toBe(true);
 });
 
 test("a card can be selected and opened by keyboard, and Esc closes the view without touching the subagent", async () => {

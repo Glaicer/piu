@@ -159,6 +159,12 @@ export default function (pi: ExtensionAPI) {
 		} catch {}
 	});
 
+	// why: a new Backend (Restart, -c, a resumed session) starts with no subagent tool call to arm the polling, so the saved roster is published once at the start.
+	pi.on("session_start", (_event, context) => {
+		if (!context.hasUI) return;
+		ctx = context;
+		refresh();
+	});
 	pi.on("tool_call", (event, context) => {
 		if (SUBAGENT_TOOL.test(event.toolName)) arm(context);
 	});

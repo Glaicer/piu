@@ -48,6 +48,15 @@ async function start(script: FauxScript = none) {
 	return piu;
 }
 
+test("Panels and Modals share one terminal resize listener", async () => {
+	await using piu = await start();
+	const before = piu.renderer.listenerCount("resize");
+	await clickText(piu, "faux-1");
+	await piu.waitForFrame((f) => f.includes("Favorites"));
+	expect(piu.renderer.listenerCount("resize")).toBe(before);
+	expect(before).toBeLessThan(5);
+});
+
 test("the model Modal filters available models as the user types", async () => {
 	await using piu = await start();
 	await clickText(piu, "faux-1");

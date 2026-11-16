@@ -4,7 +4,11 @@ import {
 	EditBufferRenderable,
 	type MouseEvent,
 } from "@opentui/core";
-import { useKeyboard, useRenderer } from "@opentui/solid";
+import {
+	useKeyboard,
+	useRenderer,
+	useTerminalDimensions,
+} from "@opentui/solid";
 import { createEffect, createSignal, onCleanup, Show } from "solid-js";
 import { createAnimate } from "./animate.ts";
 import { startBackend } from "./backend.ts";
@@ -281,6 +285,7 @@ function App(props: {
 		keybindings: props.config.keybindings,
 		animate,
 		focus,
+		terminal: useTerminalDimensions(),
 	};
 	useKeyboard((event) => {
 		if (modals.stack().length > 0) return;

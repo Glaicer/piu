@@ -119,6 +119,7 @@ function SubagentView(props: {
 				box = node;
 			}}
 			flexDirection="column"
+			paddingBottom={2}
 			focusable
 			focused
 			onKeyDown={(event) => {

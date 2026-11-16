@@ -28,7 +28,7 @@
 
 ## После приёмки (вручную)
 
-- [ ] Удалить `agent-view-window.ts` из agent dir и его строку `-extensions/agent-view-window.ts` из Pi settings.
+- [x] Удалить `agent-view-window.ts` из agent dir и его строку `-extensions/agent-view-window.ts` из Pi settings.
 
 ## Ticket plan
 
