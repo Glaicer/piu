@@ -1,4 +1,5 @@
 import { channelTitle } from "./channel.ts";
+import { isRecord } from "./json.ts";
 
 export const BTW_EXTENSION = "btw";
 export const BTW_CHANNEL = "side";
@@ -36,10 +37,6 @@ export type BtwReply =
 
 export function serializeBtwThread(thread: BtwThread): string {
 	return JSON.stringify({ v: 1, ...thread });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function parsePending(value: unknown): BtwPending | null | undefined {

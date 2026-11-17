@@ -74,11 +74,11 @@ export default function contextUsage(pi: ExtensionAPI): void {
 		]);
 	}
 
-	function snapshot(ctx: ExtensionContext): ContextUsageSnapshot | string {
+	function snapshot(ctx: ExtensionContext): ContextUsageSnapshot | null {
 		const model = modelId(ctx);
 		const usage = ctx.getContextUsage();
 		const contextWindow = usage?.contextWindow ?? ctx.model?.contextWindow ?? 0;
-		if (!model || contextWindow <= 0) return UNAVAILABLE;
+		if (!model || contextWindow <= 0) return null;
 		const recorded = captured?.model === model ? captured : undefined;
 		const weights = recorded?.categories ?? sessionEstimate(ctx);
 		const reported = usage?.tokens;
@@ -97,8 +97,7 @@ export default function contextUsage(pi: ExtensionAPI): void {
 	function view(ctx: ExtensionContext): ContextUsageView {
 		if (compacting) return { open, kind: "compacting" };
 		const current = snapshot(ctx);
-		if (typeof current === "string")
-			return { open, kind: "unavailable", reason: current };
+		if (!current) return { open, kind: "unavailable", reason: UNAVAILABLE };
 		return { open, kind: "ready", snapshot: current };
 	}
 

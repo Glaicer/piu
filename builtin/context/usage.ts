@@ -17,9 +17,17 @@ import {
 const SKILLS = "skills";
 const SKILLS_BLOCK = /<skills>[\s\S]*?<\/skills>/g;
 
-const NAMED = CONTEXT_CATEGORIES.map(({ id }) => id).filter(
+const namedCategories = CONTEXT_CATEGORIES.map(({ id }) => id).filter(
 	(id): id is Exclude<ContextCategory, "other"> => id !== "other",
 );
+
+const empty: ContextBreakdown = {
+	system: 0,
+	tools: 0,
+	skills: 0,
+	messages: 0,
+	other: 0,
+};
 
 function takeSkillBlocks(text: string) {
 	let chars = 0;
@@ -81,11 +89,9 @@ export function alignContextBreakdown(
 	weights: ContextBreakdown,
 	used: number,
 ): ContextBreakdown {
-	const named = NAMED.map((id) => weights[id]);
+	const named = namedCategories.map((id) => weights[id]);
 	const sum = named.reduce((total, value) => total + value, 0);
-	if (sum === 0) {
-		return { system: 0, tools: 0, skills: 0, messages: 0, other: used };
-	}
+	if (sum === 0) return { ...empty, other: used };
 	if (sum <= used) return { ...weights, other: used - sum };
 	const exact = named.map((value) => (value * used) / sum);
 	const floors = exact.map(Math.floor);
@@ -98,13 +104,8 @@ export function alignContextBreakdown(
 		floors[index] = (floors[index] ?? 0) + 1;
 		rest -= 1;
 	}
-	const aligned: Record<ContextCategory, number> = {
-		system: 0,
-		tools: 0,
-		skills: 0,
-		messages: 0,
-		other: 0,
-	};
-	for (const [index, id] of NAMED.entries()) aligned[id] = floors[index] ?? 0;
+	const aligned: Record<ContextCategory, number> = { ...empty };
+	for (const [index, id] of namedCategories.entries())
+		aligned[id] = floors[index] ?? 0;
 	return aligned;
 }

@@ -9,8 +9,8 @@ import { contextUsageModal } from "./modal.tsx";
 function ContextHost(props: { context: ModuleContext }) {
 	const { context } = props;
 	let close: (() => void) | undefined;
-	let shown = -1;
-	const forget = () => {
+	let lastOpen = -1;
+	const forgetClose = () => {
 		close = undefined;
 	};
 	const closeModal = () => {
@@ -21,18 +21,18 @@ function ContextHost(props: { context: ModuleContext }) {
 	createEffect(() => {
 		const view = context.pi.contextUsage;
 		if (!view) {
-			shown = -1;
+			lastOpen = -1;
 			closeModal();
 			return;
 		}
 		if (close) {
-			shown = view.open;
+			lastOpen = view.open;
 			return;
 		}
 		// why: dismissal forgets the close function but keeps the number, so a later push that refreshes the same request never reopens a Modal the user closed.
-		if (view.open === shown) return;
-		shown = view.open;
-		close = context.actions.openModal(contextUsageModal(forget));
+		if (view.open === lastOpen) return;
+		lastOpen = view.open;
+		close = context.actions.openModal(contextUsageModal(forgetClose));
 	});
 	onCleanup(closeModal);
 	context.reportPresence(() => "hidden");

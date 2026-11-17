@@ -1,3 +1,5 @@
+import { isRecord } from "./json.ts";
+
 export const CONTEXT_USAGE_COMMAND = "piu-context-usage";
 export const CONTEXT_USAGE_DESCRIPTION =
 	"Show how much of the model's context window is in use";
@@ -38,10 +40,6 @@ export type ContextUsageView = { readonly open: number } & (
 
 export function serializeContextUsage(view: ContextUsageView): string {
 	return JSON.stringify({ v: 1, ...view });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isCount(value: unknown): value is number {
