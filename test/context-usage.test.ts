@@ -16,6 +16,7 @@ import {
 import {
 	CONTEXT_CATEGORIES,
 	type ContextCategory,
+	formatTokens,
 } from "../src/context-usage.ts";
 import { lightTheme } from "../src/theme.ts";
 import {
@@ -33,10 +34,12 @@ import { hooks } from "./hooks.ts";
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
 type UsageFrame = {
-	window: number;
-	used: number;
-	free: number;
-	rows: Record<ContextCategory, { tokens: number; percent: number }>;
+	window: string;
+	used: string;
+	free: string;
+	usedPercent: number;
+	freePercent: number;
+	rows: Record<ContextCategory, { tokens: string; percent: number }>;
 };
 
 const agentPanel = (frame: string) => panelText(frame, 10, 0);
@@ -65,32 +68,57 @@ async function openContext(piu: Piu): Promise<string> {
 	);
 }
 
+const TOKENS = "([\\d.]+[kM]?)";
+
 function readUsage(piu: Piu, frame: string): UsageFrame {
 	const text = modalText(piu, frame);
 	const count = (pattern: RegExp, label: string) => {
 		const found = pattern.exec(text);
 		if (!found) throw new Error(`No ${label} in the Modal:\n${text}`);
-		return Number(found[1]);
+		return found[1] ?? "";
 	};
 	const rows = Object.fromEntries(
 		CONTEXT_CATEGORIES.map(({ id, label }) => {
-			const found = new RegExp(`${label}\\s+(\\d+) tokens\\s+([\\d.]+)%`).exec(
-				text,
-			);
+			const found = new RegExp(
+				`${label}\\s+${TOKENS} tokens\\s+([\\d.]+)%`,
+			).exec(text);
 			if (!found) throw new Error(`No ${label} row in the Modal:\n${text}`);
-			return [id, { tokens: Number(found[1]), percent: Number(found[2]) }];
+			return [id, { tokens: found[1] ?? "", percent: Number(found[2]) }];
 		}),
 	) as UsageFrame["rows"];
+	const share = (pattern: RegExp, label: string) => {
+		const found = pattern.exec(text);
+		if (!found) throw new Error(`No ${label} share in the Modal:\n${text}`);
+		return Number(found[2]);
+	};
 	return {
-		window: count(/Window: (\d+) tokens/, "window"),
-		used: count(/Used: (\d+) tokens/, "used"),
-		free: count(/Free: (\d+) tokens/, "free"),
+		window: count(new RegExp(`Window: ${TOKENS} tokens`), "window"),
+		used: count(new RegExp(`Used: ${TOKENS} tokens`), "used"),
+		free: count(new RegExp(`Free: ${TOKENS} tokens`), "free"),
+		usedPercent: share(
+			new RegExp(`Used: ${TOKENS} tokens \\(([\\d.]+)%\\)`),
+			"used",
+		),
+		freePercent: share(
+			new RegExp(`Free: ${TOKENS} tokens \\(([\\d.]+)%\\)`),
+			"free",
+		),
 		rows,
 	};
 }
 
-function total(rows: UsageFrame["rows"]): number {
-	return CONTEXT_CATEGORIES.reduce((sum, { id }) => sum + rows[id].tokens, 0);
+// why: the frame shows the shortened form, so a test compares it with the same formatter and only asserts exact numbers where they stay under a thousand.
+const shown = (tokens: string): number => {
+	const suffix = tokens.at(-1);
+	if (suffix === "k") return Number(tokens.slice(0, -1)) * 1000;
+	if (suffix === "M") return Number(tokens.slice(0, -1)) * 1_000_000;
+	return Number(tokens);
+};
+
+function total(rows: UsageFrame["rows"]): string {
+	return formatTokens(
+		CONTEXT_CATEGORIES.reduce((sum, { id }) => sum + shown(rows[id].tokens), 0),
+	);
 }
 
 async function oracle(piu: Piu): Promise<{
@@ -121,19 +149,12 @@ test("context before the first turn is an estimate and does not call the model",
 	const frame = await openContext(piu);
 	const usage = readUsage(piu, frame);
 	const text = modalText(piu, frame);
-	expect(usage.window).toBe(128000);
+	expect(usage.window).toBe(formatTokens(128000));
 	expect(text).toContain("Session estimate");
 	expect(text).toContain("Total estimated from the session");
-	expect(usage.rows.system.tokens).toBeGreaterThan(0);
-	expect(usage.rows.tools.tokens).toBeGreaterThan(0);
-	expect(usage.rows.messages.tokens).toBe(0);
-	expect(usage.used).toBe(
-		usage.rows.system.tokens +
-			usage.rows.tools.tokens +
-			usage.rows.skills.tokens +
-			usage.rows.messages.tokens +
-			usage.rows.other.tokens,
-	);
+	expect(shown(usage.rows.system.tokens)).toBeGreaterThan(0);
+	expect(shown(usage.rows.tools.tokens)).toBeGreaterThan(0);
+	expect(usage.rows.messages.tokens).toBe("0");
 
 	piu.mockInput.pressEscape();
 	await piu.waitForFrame((f) => !modalText(piu, f).includes("Window:"));
@@ -161,18 +182,23 @@ test("context after a turn agrees with Pi including cached and output tokens", a
 	const text = modalText(piu, frame);
 	const pi = await oracle(piu);
 	expect(pi.tokens).toBeNumber();
-	expect(usage.window).toBe(pi.contextWindow);
-	expect(usage.used).toBe(pi.tokens ?? 0);
+	expect(usage.window).toBe(formatTokens(pi.contextWindow));
+	expect(usage.used).toBe(formatTokens(pi.tokens ?? 0));
 	for (const id of ["system", "tools", "messages", "other"] as const) {
-		expect(usage.rows[id].tokens).toBeGreaterThan(0);
+		expect(shown(usage.rows[id].tokens)).toBeGreaterThan(0);
 	}
-	expect(total(usage.rows)).toBe(usage.used);
-	expect(usage.free).toBe(usage.window - usage.used);
-	for (const { id } of CONTEXT_CATEGORIES) {
-		expect(usage.rows[id].percent).toBe(
-			Number(((usage.rows[id].tokens / usage.window) * 100).toFixed(1)),
-		);
-	}
+	expect(usage.free).toBe(formatTokens(pi.contextWindow - (pi.tokens ?? 0)));
+	expect(usage.usedPercent).toBe(
+		Number((((pi.tokens ?? 0) / pi.contextWindow) * 100).toFixed(1)),
+	);
+	expect(usage.freePercent).toBe(
+		Number(
+			(
+				((pi.contextWindow - (pi.tokens ?? 0)) / pi.contextWindow) *
+				100
+			).toFixed(1),
+		),
+	);
 	expect(text).toContain("Last request");
 	expect(text).toContain("Total from Pi");
 	expect(text).toContain("estimated");
@@ -198,15 +224,12 @@ test("skills are separate from the system prompt", async () => {
 		const plain = await turn(false);
 		const withSkills = await turn(true);
 		expect(withSkills.rows.skills.tokens).toBe(
-			Math.ceil((4096 + "<skills>\n".length + "\n</skills>".length) / 4),
+			formatTokens(
+				Math.ceil((4096 + "<skills>\n".length + "\n</skills>".length) / 4),
+			),
 		);
-		for (const usage of [plain, withSkills]) {
-			expect(total(usage.rows)).toBe(usage.used);
-		}
+		expect(plain.rows.skills.tokens).toBe("0");
 		expect(withSkills.rows.system.tokens).toBe(plain.rows.system.tokens);
-		expect(withSkills.rows.skills.tokens).toBeGreaterThan(
-			plain.rows.skills.tokens,
-		);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
@@ -226,8 +249,8 @@ test("context includes request-only messages absent from the saved session", asy
 
 	const pi = await oracle(piu);
 	const usage = readUsage(piu, await openContext(piu));
-	expect(usage.rows.messages.tokens).toBeGreaterThan(2048);
-	expect(usage.used).toBe(pi.tokens ?? 0);
+	expect(shown(usage.rows.messages.tokens)).toBeGreaterThan(2048);
+	expect(usage.used).toBe(formatTokens(pi.tokens ?? 0));
 
 	const sessions = join(piu.dir, "agent", "sessions");
 	const saved = [...new Bun.Glob("**/*.jsonl").scanSync({ cwd: sessions })]
@@ -255,18 +278,48 @@ test("category estimates scale to a smaller Pi total without losing tokens", asy
 	const frame = await openContext(piu);
 	const usage = readUsage(piu, frame);
 	expect(pi.tokens).toBe(7);
-	expect(usage.used).toBe(7);
-	expect(usage.rows.tools.tokens).toBe(0);
-	expect(total(usage.rows)).toBe(7);
+	expect(usage.used).toBe("7");
+	expect(usage.rows.tools.tokens).toBe("0");
+	expect(total(usage.rows)).toBe("7");
 	for (const { id } of CONTEXT_CATEGORIES) {
-		expect(usage.rows[id].tokens).toBeGreaterThanOrEqual(0);
+		expect(shown(usage.rows[id].tokens)).toBeGreaterThanOrEqual(0);
 		expect(usage.rows[id].percent).toBe(
-			Number(((usage.rows[id].tokens / usage.window) * 100).toFixed(1)),
+			Number(((shown(usage.rows[id].tokens) / 128000) * 100).toFixed(1)),
 		);
 	}
-	expect(usage.free).toBe(usage.window - 7);
+	expect(usage.free).toBe(formatTokens(128000 - 7));
 	expect(modalText(piu, frame)).toContain("Total from Pi");
 }, 20000);
+
+test("token counts shorten above a thousand", () => {
+	expect(formatTokens(0)).toBe("0");
+	expect(formatTokens(999)).toBe("999");
+	expect(formatTokens(1000)).toBe("1k");
+	expect(formatTokens(5858)).toBe("5.9k");
+	expect(formatTokens(200_000)).toBe("200k");
+	expect(formatTokens(405_254)).toBe("405k");
+	expect(formatTokens(1_000_000)).toBe("1M");
+	expect(formatTokens(1_234_567)).toBe("1.2M");
+});
+
+test("a skills section is counted apart from the rest of the system prompt", () => {
+	const wrapped = `<skills>\n${"k".repeat(4096)}\n</skills>`;
+	const breakdown = estimateContext([
+		{
+			role: "system",
+			content: "",
+			sections: { skills: wrapped },
+			timestamp: 0,
+		},
+	]);
+	expect(breakdown).toEqual({
+		system: 0,
+		tools: 0,
+		skills: Math.ceil(wrapped.length / 4),
+		messages: 0,
+		other: 0,
+	});
+});
 
 test("an opaque system prompt keeps its skills block out of the system estimate", () => {
 	const breakdown = estimateContext([
@@ -349,8 +402,8 @@ test("context describes the final request after a tool result", async () => {
 
 	const pi = await oracle(piu);
 	const usage = readUsage(piu, await openContext(piu));
-	expect(usage.rows.messages.tokens).toBeGreaterThan(2048);
-	expect(usage.used).toBe(pi.tokens ?? 0);
+	expect(shown(usage.rows.messages.tokens)).toBeGreaterThan(2048);
+	expect(usage.used).toBe(formatTokens(pi.tokens ?? 0));
 }, 20000);
 
 test("btw does not replace the main context snapshot", async () => {
@@ -378,7 +431,7 @@ test("btw does not replace the main context snapshot", async () => {
 	const after = readUsage(piu, piu.captureCharFrame());
 	expect(after).toEqual(before);
 	const pi = await oracle(piu);
-	expect(after.used).toBe(pi.tokens ?? 0);
+	expect(after.used).toBe(formatTokens(pi.tokens ?? 0));
 }, 20000);
 
 test("piu context wins over an installed command and hides its transport command", async () => {
@@ -466,7 +519,7 @@ test("manual compaction hides numbers then shows a fresh session estimate", asyn
 	);
 	const usage = readUsage(piu, await openContext(piu));
 	const after = await oracle(piu);
-	expect(usage.used).toBe(after.tokens ?? 0);
+	expect(usage.used).toBe(formatTokens(after.tokens ?? 0));
 	expect(modalText(piu, piu.captureCharFrame())).toContain("Last request");
 }, 20000);
 
@@ -549,7 +602,7 @@ test("failed compaction restores the last request instead of staying busy", asyn
 	);
 	expect(readUsage(piu, restored)).toEqual(before);
 	const pi = await oracle(piu);
-	expect(before.used).toBe(pi.tokens ?? 0);
+	expect(before.used).toBe(formatTokens(pi.tokens ?? 0));
 }, 20000);
 
 test("a new session closes context and forgets the old request", async () => {
@@ -575,7 +628,7 @@ test("a new session closes context and forgets the old request", async () => {
 	const frame = await openContext(piu);
 	const usage = readUsage(piu, frame);
 	expect(modalText(piu, frame)).toContain("Session estimate");
-	expect(usage.rows.messages.tokens).toBe(0);
+	expect(usage.rows.messages.tokens).toBe("0");
 
 	piu.mockInput.pressEscape();
 	await piu.waitForFrame((f) => !modalText(piu, f).includes("Window:"));
@@ -612,8 +665,8 @@ test("resuming a session estimates its current projection until a new request", 
 		const usage = readUsage(piu, frame);
 		const pi = await oracle(piu);
 		expect(modalText(piu, frame)).toContain("Session estimate");
-		expect(usage.rows.messages.tokens).toBeGreaterThan(0);
-		expect(usage.used).toBe(pi.tokens ?? 0);
+		expect(shown(usage.rows.messages.tokens)).toBeGreaterThan(0);
+		expect(usage.used).toBe(formatTokens(pi.tokens ?? 0));
 
 		piu.mockInput.pressEscape();
 		await piu.waitForFrame(
@@ -626,7 +679,7 @@ test("resuming a session estimates its current projection until a new request", 
 		const resumed = await openContext(piu);
 		const after = await oracle(piu);
 		expect(modalText(piu, resumed)).toContain("Last request");
-		expect(readUsage(piu, resumed).used).toBe(after.tokens ?? 0);
+		expect(readUsage(piu, resumed).used).toBe(formatTokens(after.tokens ?? 0));
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
@@ -646,7 +699,7 @@ test("changing the model refreshes context without reopening it", async () => {
 		(frame) => agentPanel(frame).includes("First answer") && !working(frame),
 	);
 	const before = readUsage(piu, await openContext(piu));
-	expect(before.window).toBe(10000);
+	expect(before.window).toBe(formatTokens(10000));
 	const bounds = modalBounds(piu);
 
 	const actions = hooks.probe.actions;
@@ -657,7 +710,7 @@ test("changing the model refreshes context without reopening it", async () => {
 	);
 	const pi = await oracle(piu);
 	const usage = readUsage(piu, frame);
-	expect(usage.window).toBe(pi.contextWindow);
+	expect(usage.window).toBe(formatTokens(pi.contextWindow));
 	expect(usage.window).not.toBe(before.window);
 	expect(modalBounds(piu)).toEqual(bounds);
 	expect(modalText(piu, frame)).toContain("Session estimate");
@@ -945,5 +998,5 @@ test("a malformed context status is neither shown nor opened", async () => {
 	await piu.waitForFrame((f) => !inputArea(f).includes("TYPING"));
 
 	const frame = await openContext(piu);
-	expect(readUsage(piu, frame).window).toBeGreaterThan(0);
+	expect(shown(readUsage(piu, frame).window)).toBeGreaterThan(0);
 }, 20000);

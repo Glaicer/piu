@@ -19,6 +19,20 @@ export type ContextCategory = (typeof CONTEXT_CATEGORIES)[number]["id"];
 
 export type ContextBreakdown = Readonly<Record<ContextCategory, number>>;
 
+// why: a context window is read at a glance, so the long counts lose their trailing digits the way Pi's own footer writes them; a count under a thousand stays exact.
+export function formatTokens(tokens: number): string {
+	if (tokens < 1000) return String(tokens);
+	if (tokens < 10_000)
+		return `${(tokens / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+	if (tokens < 1_000_000) return `${Math.round(tokens / 1000)}k`;
+	const millions = tokens / 1_000_000;
+	const shown =
+		millions < 10
+			? millions.toFixed(1).replace(/\.0$/, "")
+			: String(Math.round(millions));
+	return `${shown}M`;
+}
+
 export function contextTotal(breakdown: ContextBreakdown): number {
 	return CONTEXT_CATEGORIES.reduce((total, { id }) => total + breakdown[id], 0);
 }

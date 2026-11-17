@@ -4,6 +4,7 @@ import {
 	CONTEXT_CATEGORIES,
 	type ContextUsageSnapshot,
 	type ContextUsageView,
+	formatTokens,
 } from "../../src/context-usage.ts";
 import type { ModalRequest } from "../../src/modal.tsx";
 import type { Module, ModuleContext } from "../../src/module.ts";
@@ -38,7 +39,7 @@ function breakdown(snapshot: ContextUsageSnapshot): Row[] {
 		const tokens = snapshot.categories[id];
 		return row(
 			cell(label.padEnd(LABEL_WIDTH)),
-			cell(`${tokens} tokens`),
+			cell(`${formatTokens(tokens).padStart(6)} tokens`),
 			cell(`   ${percent(tokens, snapshot.contextWindow)}`, "muted"),
 		);
 	});
@@ -54,14 +55,16 @@ function summary(snapshot: ContextUsageSnapshot): Row[] {
 			: "Total estimated from the session";
 	return [
 		row(cell(`Model: ${snapshot.model}`)),
-		row(cell(`Window: ${snapshot.contextWindow} tokens`)),
+		row(cell(`Window: ${formatTokens(snapshot.contextWindow)} tokens`)),
 		row(
 			cell(
-				`Used: ${snapshot.used} tokens (${percent(snapshot.used, snapshot.contextWindow)})`,
+				`Used: ${formatTokens(snapshot.used)} tokens (${percent(snapshot.used, snapshot.contextWindow)})`,
 			),
 		),
 		row(
-			cell(`Free: ${free} tokens (${percent(free, snapshot.contextWindow)})`),
+			cell(
+				`Free: ${formatTokens(free)} tokens (${percent(free, snapshot.contextWindow)})`,
+			),
 		),
 		row(cell(`${source} · ${total}`, "faint")),
 	];
