@@ -13,6 +13,26 @@ export default function contextUsageFixture(pi: ExtensionAPI): void {
 		// why: Pi applies a before_agent_start `systemPrompt` after `context_with_system`, so only the tool set can be emptied for the snapshot; no tool declarations leave a known zero weight.
 		if (process.env.PIU_CONTEXT_MINIMAL === "1")
 			event.systemPromptOptions.selectedTools = [];
+		const section = process.env.PIU_CONTEXT_SECTION;
+		if (section) event.systemPromptOptions.sections.probe_notes = section;
+		const result: {
+			message?: {
+				customType: string;
+				content: string;
+				display: boolean;
+			};
+			systemPrompt?: string;
+		} = {};
+		const message = process.env.PIU_CONTEXT_MESSAGE;
+		if (message)
+			result.message = {
+				customType: "probe-note",
+				content: message,
+				display: false,
+			};
+		const forced = process.env.PIU_CONTEXT_FORCED;
+		if (forced) result.systemPrompt = `${event.systemPrompt}\n\n${forced}`;
+		return result;
 	});
 
 	// why: a compaction that waits for a file lets the test open `/context` while it is in progress instead of racing a fixed delay.

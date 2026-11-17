@@ -265,7 +265,13 @@ export function SlotView(props: SlotProps) {
 	const [awayFromBottom, setAwayFromBottom] = createSignal(false);
 	const [footerHeight, setFooterHeight] = createSignal(0);
 	// why: a footer Module sits inside the Panel's padding but stays outside the scrollbox, so it remains visible while the content scrolls.
-	const scrolled = entries.filter((entry) => !entry.placed.module.footer);
+	// why: a header Module stays outside the scrollbox for the same reason, at the top.
+	const scrolled = entries.filter(
+		(entry) => !entry.placed.module.footer && !entry.placed.module.header,
+	);
+	const headers = entries.filter(
+		(entry) => entry.placed.module.header && !entry.placed.module.footer,
+	);
 	const footers = entries.filter((entry) => entry.placed.module.footer);
 	return (
 		<box
@@ -277,6 +283,9 @@ export function SlotView(props: SlotProps) {
 			{...frame}
 			flexDirection="column"
 		>
+			<box flexDirection="column" flexShrink={0}>
+				<For each={headers}>{(entry) => moduleView(entry)}</For>
+			</box>
 			<scrollbox
 				ref={(node: ScrollBoxRenderable) => {
 					element = node;

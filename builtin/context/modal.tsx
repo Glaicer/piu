@@ -2,20 +2,28 @@ import type { Renderable } from "@opentui/core";
 import { For, Show } from "solid-js";
 import {
 	CONTEXT_CATEGORIES,
+	CONTEXT_TABS,
+	type ContextTab,
 	type ContextUsageSnapshot,
 	type ContextUsageView,
 	formatTokens,
 } from "../../src/context-usage.ts";
-import type { ModalRequest } from "../../src/modal.tsx";
+import type { DismissReason, ModalRequest } from "../../src/modal.tsx";
 import type { Module, ModuleContext } from "../../src/module.ts";
 import { scrollKeys } from "../../src/scroll.ts";
+import { Tabs } from "../../src/tabs.tsx";
 import type { ThemeToken } from "../../src/theme.ts";
+import { InjectionsContent } from "./injections-view.tsx";
+import { type ContextModalState, switchTabKey } from "./state.ts";
 
-const PANEL = "context-usage";
-const USAGE = "context.usage";
+const PANEL = "context";
+const VIEW = "context.view";
+const TABS = "context.tabs";
 const HINTS = "context.hints";
 const LABEL_WIDTH = 17;
-const HINTS_TEXT = "↑↓ / PgUp PgDn scroll   esc close";
+const USAGE_HINTS = "←→ tabs   ↑↓ / PgUp PgDn scroll   esc close";
+const LIST_HINTS = "←→ tabs   ↑↓ select   ⏎ open   esc close";
+const DETAIL_HINTS = "←→ tabs   ↑↓ / PgUp PgDn scroll   esc back";
 const NOTES = [
 	"Categories estimate Pi's transcript, not the final provider payload.",
 	"Skills counts the catalogue; loaded skill bodies remain Messages.",
@@ -33,6 +41,13 @@ const blank = (): Row => row(cell(" "));
 
 const percent = (tokens: number, window: number) =>
 	`${((tokens / window) * 100).toFixed(1)}%`;
+
+const TAB_LABELS: Record<ContextTab, string> = {
+	usage: "Usage",
+	injections: "Injections",
+};
+
+const tabLabel = (tab: ContextTab) => TAB_LABELS[tab];
 
 function breakdown(snapshot: ContextUsageSnapshot): Row[] {
 	return CONTEXT_CATEGORIES.map(({ id, label }) => {
@@ -85,8 +100,11 @@ function usageRows(view: ContextUsageView | null, working: boolean): Row[] {
 	];
 }
 
-function UsageContent(props: { context: ModuleContext }) {
-	const { context } = props;
+function UsageContent(props: {
+	context: ModuleContext;
+	state: ContextModalState;
+}) {
+	const { context, state } = props;
 	const theme = context.theme;
 	const view = () => context.pi.contextUsage;
 	const compacting = () =>
@@ -106,6 +124,7 @@ function UsageContent(props: { context: ModuleContext }) {
 			focusable
 			focused
 			onKeyDown={(event) => {
+				if (switchTabKey(event, state)) return;
 				if (scrollKeys(event, node)) event.preventDefault();
 			}}
 		>
@@ -125,27 +144,64 @@ function UsageContent(props: { context: ModuleContext }) {
 	);
 }
 
-function UsageFooter(props: { context: ModuleContext }) {
+function ContentView(props: {
+	context: ModuleContext;
+	state: ContextModalState;
+}) {
+	return (
+		<Show
+			when={props.state.tab() === "usage"}
+			fallback={
+				<InjectionsContent context={props.context} state={props.state} />
+			}
+		>
+			<UsageContent context={props.context} state={props.state} />
+		</Show>
+	);
+}
+
+function Hints(props: { context: ModuleContext; state: ContextModalState }) {
+	const text = () => {
+		if (props.state.tab() === "usage") return USAGE_HINTS;
+		return props.state.detail() ? DETAIL_HINTS : LIST_HINTS;
+	};
 	return (
 		<box flexDirection="row" justifyContent="flex-end">
 			<text fg={props.context.theme.faint} wrapMode="none" truncate>
-				{HINTS_TEXT}
+				{text()}
 			</text>
 		</box>
 	);
 }
 
-export function contextUsageModal(onDismiss: () => void): ModalRequest {
-	const usage: Module = {
-		id: USAGE,
+export function contextModal(
+	state: ContextModalState,
+	onDismiss: () => void,
+): ModalRequest {
+	const view: Module = {
+		id: VIEW,
 		title: "Context",
-		render: (context) => <UsageContent context={context} />,
+		render: (context) => <ContentView context={context} state={state} />,
+	};
+	const tabs: Module = {
+		id: TABS,
+		header: true,
+		minHeight: 2,
+		render: (context) => (
+			<Tabs
+				tabs={CONTEXT_TABS}
+				active={state.tab()}
+				theme={context.theme}
+				label={tabLabel}
+				onSelect={(tab) => state.setTab(tab)}
+			/>
+		),
 	};
 	const hints: Module = {
 		id: HINTS,
 		footer: true,
 		minHeight: 1,
-		render: (context) => <UsageFooter context={context} />,
+		render: (context) => <Hints context={context} state={state} />,
 	};
 	return {
 		slot: { kind: "panel", id: PANEL, direction: "column", size: "rest" },
@@ -153,14 +209,19 @@ export function contextUsageModal(onDismiss: () => void): ModalRequest {
 			[
 				PANEL,
 				[
-					{ id: USAGE, module: usage, settings: {} },
+					{ id: VIEW, module: view, settings: {} },
+					{ id: TABS, module: tabs, settings: {} },
 					{ id: HINTS, module: hints, settings: {} },
 				],
 			],
 		]),
 		width: "75%",
 		height: "75%",
-		onDismiss: () => {
+		onDismiss: (reason: DismissReason) => {
+			if (reason === "escape" && state.detail()) {
+				state.setDetail(undefined);
+				return false;
+			}
 			onDismiss();
 		},
 	};

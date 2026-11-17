@@ -12,6 +12,7 @@ import {
 	CONTEXT_CATEGORIES,
 	type ContextBreakdown,
 	type ContextCategory,
+	charsToTokens,
 } from "../../src/context-usage.ts";
 
 const SKILLS = "skills";
@@ -76,9 +77,9 @@ export function estimateContext(
 		if (message.role !== "system") messagesTokens += estimateTokens(message);
 	}
 	return {
-		system: Math.ceil(systemChars / 4),
-		tools: Math.ceil(toolsChars / 4),
-		skills: Math.ceil(skillsChars / 4),
+		system: charsToTokens(systemChars),
+		tools: charsToTokens(toolsChars),
+		skills: charsToTokens(skillsChars),
 		messages: messagesTokens,
 		other: 0,
 	};

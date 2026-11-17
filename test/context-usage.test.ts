@@ -841,7 +841,7 @@ test("the wheel scrolls context instead of the chat", async () => {
 	await openContext(piu);
 	const bounds = modalBounds(piu);
 	if (!bounds) throw new Error("The Context Modal is not open.");
-	for (let index = 0; index < 6; index++)
+	for (let index = 0; index < 8; index++)
 		await piu.mockMouse.scroll(bounds.left + 5, bounds.top + 5, "down");
 	await piu.waitForFrame((frame) =>
 		modalText(piu, frame).includes("unassigned overhead"),

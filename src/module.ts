@@ -57,6 +57,7 @@ export type Module = {
 	readonly title?: string;
 	readonly minHeight?: number;
 	readonly footer?: boolean;
+	readonly header?: boolean;
 	readonly followsOutput?: boolean;
 	readonly grow?: boolean;
 	render(context: ModuleContext): JSX.Element;

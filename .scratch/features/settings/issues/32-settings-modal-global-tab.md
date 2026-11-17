@@ -44,3 +44,7 @@
 - `writeJson` (`src/json-file.ts`) уже пишет атомарно, но в одну строку. Для личного Config, который человек правит руками, нужны отступы.
 - Сейчас `animations` читается один раз при старте (`createAnimate` в `src/app.tsx`), а тема собирается в `createTheme` (`src/theme.ts`) из режима терминала и замен цветов. Обе настройки надо сделать изменяемыми во время работы.
 - Выбор модели в Settings не входит: `/model` остаётся отдельной Modal.
+
+## Comments
+
+**From 27:** вкладки выбора модели уже вынесены в общий `src/tabs.tsx` (`Tabs<T extends string>`: `tabs`, `active`, `theme`, `label`, `onSelect`), а у `Module` появился флаг `header`; Module с ним рисуется над scrollbox прокручиваемой Panel и не прокручивается вместе с содержимым (`src/layout.tsx`).

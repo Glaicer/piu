@@ -42,6 +42,10 @@ _Avoid_: Widget (that is Pi's word for an extension's text lines), plugin, compo
 A Module pinned to the bottom of its Panel: it sits inside the Panel's padding, above the divider below it, but stays outside the scrolling content.
 _Avoid_: Bottom line (that is a Panel of its own)
 
+**Header**:
+A Module pinned to the top of its Panel: it sits inside the Panel's padding, above the scrollbox, and stays outside the scrolling content.
+_Avoid_: Top bar
+
 **Bottom line**:
 The dark row across the bottom of the screen that shows the model, the reasoning level, the folder and branch, and `working` while the agent runs; the default Panel `bottom`, drawn as a bar.
 _Avoid_: Status bar, bottom bar, footer

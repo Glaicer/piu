@@ -6,15 +6,20 @@ import {
 	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import {
+	CONTEXT_INJECTIONS_STATUS_KEY,
 	CONTEXT_USAGE_COMMAND,
 	CONTEXT_USAGE_DESCRIPTION,
 	CONTEXT_USAGE_STATUS_KEY,
 	type ContextBreakdown,
+	type ContextInjections,
+	type ContextTab,
 	type ContextUsageSnapshot,
 	type ContextUsageView,
 	contextTotal,
+	serializeContextInjections,
 	serializeContextUsage,
 } from "../../src/context-usage.ts";
+import { collectInjections } from "./injections.ts";
 import { alignContextBreakdown, estimateContext } from "./usage.ts";
 
 type CapturedRequest = {
@@ -26,8 +31,10 @@ const UNAVAILABLE = "Context window unavailable.";
 
 export default function contextUsage(pi: ExtensionAPI): void {
 	let captured: CapturedRequest | undefined;
+	let injections: ContextInjections | undefined;
 	let hiddenTools: readonly string[] = [];
 	let open = 0;
+	let tab: ContextTab = "usage";
 	let compacting = false;
 	let compactSignal: AbortSignal | undefined;
 	let compactAbort: (() => void) | undefined;
@@ -95,47 +102,63 @@ export default function contextUsage(pi: ExtensionAPI): void {
 	}
 
 	function view(ctx: ExtensionContext): ContextUsageView {
-		if (compacting) return { open, kind: "compacting" };
+		if (compacting) return { open, tab, kind: "compacting" };
 		const current = snapshot(ctx);
-		if (!current) return { open, kind: "unavailable", reason: UNAVAILABLE };
-		return { open, kind: "ready", snapshot: current };
+		if (!current)
+			return { open, tab, kind: "unavailable", reason: UNAVAILABLE };
+		return { open, tab, kind: "ready", snapshot: current };
 	}
 
-	function publish(ctx: ExtensionContext) {
-		if (open === 0) return;
+	function trySetStatus(
+		ctx: ExtensionContext,
+		key: string,
+		value: () => string | undefined,
+	) {
 		// why: a replaced session leaves the captured context stale, and Pi throws on it; the session events end that view anyway.
 		try {
-			ctx.ui.setStatus(
-				CONTEXT_USAGE_STATUS_KEY,
-				serializeContextUsage(view(ctx)),
-			);
+			ctx.ui.setStatus(key, value());
 		} catch {
 			// why: see above.
 		}
 	}
 
-	function clearStatus(ctx: ExtensionContext) {
-		try {
-			ctx.ui.setStatus(CONTEXT_USAGE_STATUS_KEY, undefined);
-		} catch {
-			// why: the same stale context as in publish.
-		}
+	function publish(ctx: ExtensionContext) {
+		if (open === 0) return;
+		trySetStatus(ctx, CONTEXT_USAGE_STATUS_KEY, () =>
+			serializeContextUsage(view(ctx)),
+		);
+	}
+
+	function publishInjections(ctx: ExtensionContext) {
+		if (open === 0) return;
+		trySetStatus(ctx, CONTEXT_INJECTIONS_STATUS_KEY, () =>
+			injections ? serializeContextInjections(injections) : undefined,
+		);
+	}
+
+	function clearStatuses(ctx: ExtensionContext) {
+		trySetStatus(ctx, CONTEXT_USAGE_STATUS_KEY, () => undefined);
+		trySetStatus(ctx, CONTEXT_INJECTIONS_STATUS_KEY, () => undefined);
 	}
 
 	function reset(_event: unknown, ctx: ExtensionContext) {
 		forgetCompaction();
 		compacting = false;
 		captured = undefined;
+		injections = undefined;
+		tab = "usage";
 		open = 0;
-		clearStatus(ctx);
+		clearStatuses(ctx);
 	}
 
-	async function openUsage(
-		_args: string,
+	async function openContext(
+		args: string,
 		ctx: ExtensionCommandContext,
 	): Promise<void> {
 		hiddenTools = ctx.getSystemPromptOptions().hiddenTools ?? [];
+		tab = args.trim() === "injections" ? "injections" : "usage";
 		open += 1;
+		publishInjections(ctx);
 		publish(ctx);
 	}
 
@@ -155,6 +178,17 @@ export default function contextUsage(pi: ExtensionAPI): void {
 				model,
 				categories: estimateContext(convertToLlm(event.messages)),
 			};
+		// why: everything is read synchronously here, because later handlers share and can change these objects, and only strings and numbers are kept.
+		injections = {
+			items: collectInjections({
+				request: event.messages,
+				session: ctx.sessionManager.buildSessionProjection().messages,
+				effectivePrompt: ctx.getSystemPrompt(),
+				hiddenTools,
+				tools: pi.getAllTools(),
+			}),
+		};
+		publishInjections(ctx);
 		publish(ctx);
 	});
 
@@ -198,6 +232,6 @@ export default function contextUsage(pi: ExtensionAPI): void {
 
 	pi.registerCommand(CONTEXT_USAGE_COMMAND, {
 		description: CONTEXT_USAGE_DESCRIPTION,
-		handler: openUsage,
+		handler: openContext,
 	});
 }

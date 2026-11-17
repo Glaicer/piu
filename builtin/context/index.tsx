@@ -4,11 +4,13 @@ import {
 	CONTEXT_USAGE_DESCRIPTION,
 } from "../../src/context-usage.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
-import { contextUsageModal } from "./modal.tsx";
+import { contextModal } from "./modal.tsx";
+import { createContextModalState } from "./state.ts";
 
 function ContextHost(props: { context: ModuleContext }) {
 	const { context } = props;
 	let close: (() => void) | undefined;
+	let state: ReturnType<typeof createContextModalState> | undefined;
 	let lastOpen = -1;
 	const forgetClose = () => {
 		close = undefined;
@@ -26,13 +28,16 @@ function ContextHost(props: { context: ModuleContext }) {
 			return;
 		}
 		if (close) {
+			if (view.open === lastOpen) return;
 			lastOpen = view.open;
+			state?.setTab(view.tab);
 			return;
 		}
 		// why: dismissal forgets the close function but keeps the number, so a later push that refreshes the same request never reopens a Modal the user closed.
 		if (view.open === lastOpen) return;
 		lastOpen = view.open;
-		close = context.actions.openModal(contextUsageModal(forgetClose));
+		state = createContextModalState(view.tab);
+		close = context.actions.openModal(contextModal(state, forgetClose));
 	});
 	onCleanup(closeModal);
 	context.reportPresence(() => "hidden");
@@ -51,8 +56,18 @@ export default {
 			name: "context",
 			description: CONTEXT_USAGE_DESCRIPTION,
 			takesArguments: false,
-			run: (context) => {
-				void context.actions.prompt(`/${CONTEXT_USAGE_COMMAND}`);
+			run: (context, args) => {
+				const view = args.trim();
+				const target =
+					view === "" ? "" : view === "injections" ? " injections" : undefined;
+				if (target === undefined) {
+					context.actions.showToast(
+						`Unknown /context view "${view}". Use /context or /context injections.`,
+						"error",
+					);
+					return;
+				}
+				void context.actions.prompt(`/${CONTEXT_USAGE_COMMAND}${target}`);
 			},
 		},
 	],

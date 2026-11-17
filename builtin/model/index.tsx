@@ -6,7 +6,7 @@ import {
 	TextAttributes,
 } from "@opentui/core";
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
-import { modalFrameColumns, modalFrameRows } from "../../src/layout.tsx";
+import { modalFrameRows } from "../../src/layout.tsx";
 import { moduleModal } from "../../src/modal.tsx";
 import { sameModel } from "../../src/model.ts";
 import type { CommandContext, Extension } from "../../src/module.ts";
@@ -14,14 +14,11 @@ import type { ModelInfo } from "../../src/pi-state.ts";
 import { PickerLink } from "../../src/picker.tsx";
 import { openReasoningPicker } from "../../src/reasoning.ts";
 import { scrollIntoView } from "../../src/scroll.ts";
+import { Tabs } from "../../src/tabs.tsx";
 
 const tabs = ["Favorites", "All"] as const;
 type ModelTab = (typeof tabs)[number];
-const TAB_GAP = "   ";
 const WIDTH = 60;
-const CONTENT_WIDTH = WIDTH - modalFrameColumns;
-const tabsWidth =
-	1 + tabs.reduce((n, name) => n + name.length + TAB_GAP.length, 0);
 
 function ModelPicker(props: { context: CommandContext; close(): void }) {
 	const { pi, theme, actions, modelFavorites } = props.context;
@@ -107,44 +104,9 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 		// why: a row created by the current filter has no ScrollBox parent until the next render, so scrolling now would see the previous tree.
 		queueMicrotask(() => scrollIntoView(model && rows.get(model)));
 	});
-	const tabRule = (name: ModelTab) =>
-		(name === tab() ? "━" : "─").repeat(name.length);
 	return (
 		<box flexDirection="column" height={18}>
-			<box flexDirection="row" flexShrink={0}>
-				<text> </text>
-				<For each={tabs}>
-					{(name) => (
-						<box
-							onMouseDown={(event) => {
-								event.preventDefault();
-								changeTab(name);
-							}}
-						>
-							<text
-								fg={name === tab() ? theme.accent : theme.muted}
-								attributes={name === tab() ? TextAttributes.BOLD : undefined}
-							>{`${name}${TAB_GAP}`}</text>
-						</box>
-					)}
-				</For>
-			</box>
-			<box flexDirection="row" flexShrink={0}>
-				<text fg={theme.border}> </text>
-				<For each={tabs}>
-					{(name) => (
-						<>
-							<text fg={name === tab() ? theme.accent : theme.border}>
-								{tabRule(name)}
-							</text>
-							<text fg={theme.border}>{"─".repeat(TAB_GAP.length)}</text>
-						</>
-					)}
-				</For>
-				<text fg={theme.border} wrapMode="none">
-					{"─".repeat(Math.max(0, CONTENT_WIDTH - tabsWidth))}
-				</text>
-			</box>
+			<Tabs tabs={tabs} active={tab()} theme={theme} onSelect={changeTab} />
 			<box flexDirection="row" flexShrink={0} onMouseDown={() => input.focus()}>
 				<text
 					fg={searching() ? theme.signal : theme.faint}

@@ -2,10 +2,16 @@ import { isRecord } from "./json.ts";
 
 export const CONTEXT_USAGE_COMMAND = "piu-context-usage";
 export const CONTEXT_USAGE_DESCRIPTION =
-	"Show how much of the model's context window is in use";
+	"Show context window usage and the last request's injections";
 
 // why: RPC has no push channel but setStatus, so the snapshot travels as a reserved status key and never reaches the status line.
 export const CONTEXT_USAGE_STATUS_KEY = "opentui:context/state";
+
+export const CONTEXT_INJECTIONS_STATUS_KEY = "opentui:context/injections";
+
+export const CONTEXT_TABS = ["usage", "injections"] as const;
+
+export type ContextTab = (typeof CONTEXT_TABS)[number];
 
 export const CONTEXT_CATEGORIES = [
 	{ id: "system", label: "System prompt" },
@@ -46,11 +52,98 @@ export type ContextUsageSnapshot = {
 	readonly categories: ContextBreakdown;
 };
 
-export type ContextUsageView = { readonly open: number } & (
+export type ContextUsageView = {
+	readonly open: number;
+	readonly tab: ContextTab;
+} & (
 	| { readonly kind: "ready"; readonly snapshot: ContextUsageSnapshot }
 	| { readonly kind: "compacting" }
 	| { readonly kind: "unavailable"; readonly reason: string }
 );
+
+export const CONTEXT_INJECTION_GROUPS = [
+	{ id: "system", label: "System prompt" },
+	{ id: "tools", label: "Tools" },
+	{ id: "messages", label: "Messages" },
+] as const;
+
+export type InjectionGroup = (typeof CONTEXT_INJECTION_GROUPS)[number]["id"];
+
+export const REQUEST_ONLY_CHANGES = [
+	"added",
+	"changed",
+	"removed",
+	"forced",
+] as const;
+
+export type RequestOnlyChange = (typeof REQUEST_ONLY_CHANGES)[number];
+
+export type ContextInjection = {
+	readonly group: InjectionGroup;
+	readonly name: string;
+	readonly origin: string;
+	readonly tokens: number;
+	readonly text: string;
+	readonly requestOnly?: RequestOnlyChange;
+};
+
+export type ContextInjections = { readonly items: readonly ContextInjection[] };
+
+// why: Pi estimates four characters per token, so every number in the Modal is computed the same way.
+export function charsToTokens(chars: number): number {
+	return Math.ceil(chars / 4);
+}
+
+function isInjectionGroup(value: unknown): value is InjectionGroup {
+	return CONTEXT_INJECTION_GROUPS.some((group) => group.id === value);
+}
+
+function isRequestOnlyChange(value: unknown): value is RequestOnlyChange {
+	return REQUEST_ONLY_CHANGES.some((change) => change === value);
+}
+
+function isContextTab(value: unknown): value is ContextTab {
+	return CONTEXT_TABS.some((tab) => tab === value);
+}
+
+export function serializeContextInjections(value: ContextInjections): string {
+	return JSON.stringify({ v: 1, items: value.items });
+}
+
+export function parseContextInjections(
+	text: string | undefined,
+): ContextInjections | null {
+	if (!text) return null;
+	let value: unknown;
+	try {
+		value = JSON.parse(text);
+	} catch {
+		return null;
+	}
+	if (!isRecord(value) || value.v !== 1 || !Array.isArray(value.items))
+		return null;
+	const items: ContextInjection[] = [];
+	for (const entry of value.items) {
+		if (!isRecord(entry)) return null;
+		const { group, name, origin, tokens, text: body, requestOnly } = entry;
+		if (!isInjectionGroup(group)) return null;
+		if (typeof name !== "string" || name.length === 0) return null;
+		if (typeof origin !== "string") return null;
+		if (!isCount(tokens)) return null;
+		if (typeof body !== "string") return null;
+		if (requestOnly !== undefined && !isRequestOnlyChange(requestOnly))
+			return null;
+		items.push({
+			group,
+			name,
+			origin,
+			tokens,
+			text: body,
+			...(requestOnly === undefined ? {} : { requestOnly }),
+		});
+	}
+	return { items };
+}
 
 export function serializeContextUsage(view: ContextUsageView): string {
 	return JSON.stringify({ v: 1, ...view });
@@ -99,15 +192,16 @@ export function parseContextUsage(
 		return null;
 	}
 	if (!isRecord(value) || value.v !== 1) return null;
-	const { open, kind } = value;
+	const { open, tab, kind } = value;
 	if (!isCount(open) || open === 0) return null;
-	if (kind === "compacting") return { open, kind };
+	if (!isContextTab(tab)) return null;
+	if (kind === "compacting") return { open, tab, kind };
 	if (kind === "unavailable") {
 		const reason = value.reason;
 		if (typeof reason !== "string" || reason.length === 0) return null;
-		return { open, kind, reason };
+		return { open, tab, kind, reason };
 	}
 	if (kind !== "ready") return null;
 	const snapshot = parseSnapshot(value.snapshot);
-	return snapshot ? { open, kind, snapshot } : null;
+	return snapshot ? { open, tab, kind, snapshot } : null;
 }

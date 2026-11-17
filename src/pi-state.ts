@@ -23,9 +23,12 @@ import {
 	optionValue,
 } from "./cli-args.ts";
 import {
+	CONTEXT_INJECTIONS_STATUS_KEY,
 	CONTEXT_USAGE_COMMAND,
 	CONTEXT_USAGE_STATUS_KEY,
+	type ContextInjections,
 	type ContextUsageView,
+	parseContextInjections,
 	parseContextUsage,
 } from "./context-usage.ts";
 import {
@@ -126,6 +129,7 @@ export type PiState = {
 	readonly subagentLogs: Readonly<Record<string, readonly SubagentEntry[]>>;
 	readonly btw: BtwThread | null;
 	readonly contextUsage: ContextUsageView | null;
+	readonly contextInjections: ContextInjections | null;
 	readonly title: string | null;
 	readonly editorText: EditorText;
 };
@@ -180,6 +184,7 @@ export function createPiState(options: {
 		subagentLogs: Record<string, SubagentEntry[]>;
 		btw: BtwThread | null;
 		contextUsage: ContextUsageView | null;
+		contextInjections: ContextInjections | null;
 		title: string | null;
 		editorText: EditorText;
 	}>({
@@ -203,6 +208,7 @@ export function createPiState(options: {
 		subagentLogs: {},
 		btw: null,
 		contextUsage: null,
+		contextInjections: null,
 		title: null,
 		editorText: { seq: 0, text: "" },
 	});
@@ -259,6 +265,7 @@ export function createPiState(options: {
 		setState("backgroundJobs", []);
 		setState("btw", null);
 		setState("contextUsage", null);
+		setState("contextInjections", null);
 		clearSubagents();
 	}
 
@@ -294,7 +301,10 @@ export function createPiState(options: {
 			clearSubagents();
 			clearPending(() => true);
 			// why: a dead Backend can never refresh its context snapshot, so stale numbers must not stay behind a restart's new window.
-			if (health.status !== "running") setState("contextUsage", null);
+			if (health.status !== "running") {
+				setState("contextUsage", null);
+				setState("contextInjections", null);
+			}
 		});
 		detach = () => {
 			offRecords();
@@ -558,6 +568,13 @@ export function createPiState(options: {
 					setState(
 						"contextUsage",
 						reconcile(parseContextUsage(record.statusText)),
+					);
+					break;
+				}
+				if (record.statusKey === CONTEXT_INJECTIONS_STATUS_KEY) {
+					setState(
+						"contextInjections",
+						reconcile(parseContextInjections(record.statusText)),
 					);
 					break;
 				}
