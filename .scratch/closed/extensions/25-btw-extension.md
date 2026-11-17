@@ -42,7 +42,7 @@
 
 ## После приёмки (вручную)
 
-- [ ] Удалить `btw.ts` из agent dir и его строку `-extensions/btw.ts` из Pi settings.
+- [x] Удалить `btw.ts` из agent dir и его строку `-extensions/btw.ts` из Pi settings.
 
 ## Comments
 
@@ -58,4 +58,5 @@
 - Esc при `streaming`, но без висящего диалога (Backend умер посреди ответа), закрывает Modal, а не возвращает `false` навсегда. Второй `/btw` при открытой ветке показывает Toast «already open», а не молчит.
 - Заголовок `btw · <model>` — модель, которой уходят побочные вопросы; она фиксируется на окно, поэтому смена модели основного диалога его не меняет.
 - `modalContentInsets` (`src/layout.tsx`) и `modalText` (`test/harness.ts`) — общий способ читать текст Modal в тестах; `scrollBoxOf` вынесен в `src/scroll.ts` и переиспользуется чатом и changelog.
+- После ручной проверки: рассуждения модели показываются блоком `Thinking` чата (свёрнут, раскрывается кликом) перед текстом ответа, для этого `BtwExchange` и `BtwPending` получили поле `thinking`, а Pi extension читает `thinking_delta`; плейсхолдер при ответе — `answering.` → `answering..` → `answering...` раз в 0,5 с через `context.animate` (при `animations: false` остаются три точки); подсказки `⏎ ask   esc close` / `esc stop` выровнены по правому краю.
 - Живую проверку `## После приёмки (вручную)` делает пользователь: удалить `btw.ts` из agent dir, его строку `-extensions/btw.ts` из Pi settings (иначе два обработчика `/btw` затеняют друг друга).

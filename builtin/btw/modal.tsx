@@ -5,17 +5,30 @@ import {
 	type SyntaxStyle,
 	TextAttributes,
 } from "@opentui/core";
-import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import {
+	createEffect,
+	createMemo,
+	createSignal,
+	For,
+	onCleanup,
+	Show,
+} from "solid-js";
+import type { Animate } from "../../src/animate.ts";
 import type { BtwExchange, BtwPending } from "../../src/btw.ts";
 import type { ModalRequest } from "../../src/modal.tsx";
 import type { Module, ModuleContext } from "../../src/module.ts";
 import { scrollBoxOf } from "../../src/scroll.ts";
 import type { Theme } from "../../src/theme.ts";
 import { createSyntaxStyle, Markdown } from "../chat/markdown.tsx";
+import { createSelection, type Selection } from "../chat/selection.ts";
+import { Thinking } from "../chat/thinking.tsx";
 
 const PANEL = "btw-side";
 const TRANSCRIPT = "btw.transcript";
 const COMPOSER = "btw.composer";
+const DOTS = 3;
+const DOTS_CYCLE_MS = 1500;
+const DOTS_FPS = 2;
 const EMPTY_HINT =
 	"Ask a side question. It sees the whole session and stays out of its context.";
 
@@ -32,14 +45,25 @@ function Question(props: { text: string; theme: Theme }) {
 }
 
 function Answer(props: {
+	thinking: string;
 	text: string;
 	streaming: boolean;
 	error?: string;
 	syntaxStyle: SyntaxStyle;
 	theme: Theme;
+	animate: Animate;
+	selection: Selection;
 }) {
 	return (
 		<>
+			<Show when={props.thinking}>
+				<Thinking
+					text={props.thinking}
+					animate={props.animate}
+					selection={props.selection}
+					theme={props.theme}
+				/>
+			</Show>
 			<Show when={props.text}>
 				<box paddingX={1} marginTop={1}>
 					<Markdown
@@ -64,6 +88,7 @@ function Transcript(props: { context: ModuleContext; scroll: ScrollBridge }) {
 	const side = () => context.pi.btw;
 	const thread = (): readonly BtwExchange[] => side()?.thread ?? [];
 	const pending = (): BtwPending | undefined => side()?.pending;
+	const selection = createSelection();
 	const syntaxStyle = createMemo(() => {
 		const style = createSyntaxStyle(context.theme);
 		onCleanup(() => style.destroy());
@@ -82,10 +107,13 @@ function Transcript(props: { context: ModuleContext; scroll: ScrollBridge }) {
 					<box flexDirection="column">
 						<Question text={exchange.question} theme={context.theme} />
 						<Answer
+							thinking={exchange.thinking}
 							text={exchange.answer}
 							streaming={false}
 							syntaxStyle={syntaxStyle()}
 							theme={context.theme}
+							animate={context.animate}
+							selection={selection}
 						/>
 					</box>
 				)}
@@ -97,11 +125,14 @@ function Transcript(props: { context: ModuleContext; scroll: ScrollBridge }) {
 						<box flexDirection="column">
 							<Question text={current.question} theme={context.theme} />
 							<Answer
+								thinking={current.thinking}
 								text={current.text}
 								streaming={side()?.streaming ?? false}
 								error={current.error}
 								syntaxStyle={syntaxStyle()}
 								theme={context.theme}
+								animate={context.animate}
+								selection={selection}
 							/>
 						</box>
 					)
@@ -139,6 +170,23 @@ function Composer(props: { context: ModuleContext; scroll: ScrollBridge }) {
 	const [typed, setTyped] = createSignal("");
 	let field: InputRenderable | undefined;
 	const streaming = () => context.pi.btw?.streaming ?? false;
+	const [dots, setDots] = createSignal(DOTS);
+	// why: with animations off a loop never runs, so the placeholder keeps all its dots instead of freezing on one.
+	createEffect(() => {
+		if (!streaming()) return;
+		const stop = context.animate({
+			from: 0,
+			to: DOTS,
+			duration: DOTS_CYCLE_MS,
+			loop: true,
+			frameRate: DOTS_FPS,
+			onUpdate: (value) => setDots((Math.floor(value) % DOTS) + 1),
+		});
+		onCleanup(() => {
+			stop();
+			setDots(DOTS);
+		});
+	});
 	const submit = () => {
 		const question = typed().trim();
 		const request = context.channel.requests[0];
@@ -159,7 +207,11 @@ function Composer(props: { context: ModuleContext; scroll: ScrollBridge }) {
 					}}
 					focused
 					flexGrow={1}
-					placeholder={streaming() ? "answering…" : "ask a side question"}
+					placeholder={
+						streaming()
+							? `answering${".".repeat(dots())}`
+							: "ask a side question"
+					}
 					textColor={context.theme.text}
 					focusedTextColor={context.theme.text}
 					cursorColor={context.theme.signal}
@@ -175,9 +227,11 @@ function Composer(props: { context: ModuleContext; scroll: ScrollBridge }) {
 					}}
 				/>
 			</box>
-			<text fg={context.theme.faint} wrapMode="none" truncate>
-				{streaming() ? " esc stop" : " ⏎ ask   esc close"}
-			</text>
+			<box flexDirection="row" justifyContent="flex-end">
+				<text fg={context.theme.faint} wrapMode="none" truncate>
+					{streaming() ? "esc stop" : "⏎ ask   esc close"}
+				</text>
+			</box>
 		</box>
 	);
 }

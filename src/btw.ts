@@ -12,11 +12,13 @@ export const BTW_STATUS_KEY = `opentui:${BTW_EXTENSION}/state`;
 export type BtwExchange = {
 	readonly n: number;
 	readonly question: string;
+	readonly thinking: string;
 	readonly answer: string;
 };
 
 export type BtwPending = {
 	question: string;
+	thinking: string;
 	text: string;
 	error?: string;
 };
@@ -43,10 +45,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parsePending(value: unknown): BtwPending | null | undefined {
 	if (value === undefined) return undefined;
 	if (!isRecord(value)) return null;
-	const { question, text, error } = value;
-	if (typeof question !== "string" || typeof text !== "string") return null;
+	const { question, thinking, text, error } = value;
+	if (
+		typeof question !== "string" ||
+		typeof thinking !== "string" ||
+		typeof text !== "string"
+	)
+		return null;
 	if (error !== undefined && typeof error !== "string") return null;
-	return { question, text, ...(error === undefined ? {} : { error }) };
+	return {
+		question,
+		thinking,
+		text,
+		...(error === undefined ? {} : { error }),
+	};
 }
 
 function parseJson(text: string | undefined): unknown {
@@ -67,14 +79,15 @@ export function parseBtwThread(text: string | undefined): BtwThread | null {
 	const exchanges: BtwExchange[] = [];
 	for (const entry of thread) {
 		if (!isRecord(entry)) return null;
-		const { n, question, answer } = entry;
+		const { n, question, thinking, answer } = entry;
 		if (
 			typeof n !== "number" ||
 			typeof question !== "string" ||
+			typeof thinking !== "string" ||
 			typeof answer !== "string"
 		)
 			return null;
-		exchanges.push({ n, question, answer });
+		exchanges.push({ n, question, thinking, answer });
 	}
 	const pending = parsePending(value.pending);
 	if (pending === null) return null;

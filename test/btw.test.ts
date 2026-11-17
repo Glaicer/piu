@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RGBA, TextAttributes } from "@opentui/core";
+import { ManualClock } from "@opentui/core/testing";
 import { darkTheme } from "../src/theme.ts";
 import {
 	modalBounds,
@@ -460,3 +461,104 @@ test("the Modal scrolls with the arrow and paging keys and holds new output at t
 	for (let step = 0; step < 4; step++) piu.mockInput.pressKey("\u001b[6~");
 	await piu.waitForFrame((f) => modalText(piu, f).includes("Line 079"));
 }, 20_000);
+
+test("the reasoning of a side answer is a Thinking block that opens on a click", async () => {
+	await using piu = await startPiu({
+		script: {
+			replies: [
+				"Main reply",
+				{ thinking: "Weighing the widget options", text: "Side answer" },
+			],
+		},
+	});
+	await send(piu, "Hello");
+	await piu.waitForFrame((frame) => agentPanel(frame).includes("Main reply"));
+
+	await send(piu, "/btw think first");
+	const closed = await piu.waitForFrame(
+		(f) => f.includes("Side answer") && f.includes("▸ Thinking"),
+	);
+	expect(modalText(piu, closed)).not.toContain("Weighing the widget options");
+	expect(modalText(piu, closed).indexOf("Thinking")).toBeLessThan(
+		modalText(piu, closed).indexOf("Side answer"),
+	);
+
+	const rows = closed.split("\n");
+	const y = rows.findIndex((line) => line.includes("▸ Thinking"));
+	await piu.mockMouse.click((rows[y] ?? "").indexOf("▸ Thinking") + 1, y);
+	await piu.waitForFrame((f) =>
+		modalText(piu, f).includes("Weighing the widget options"),
+	);
+});
+
+test("reasoning that arrives before the answer text is shown while the answer streams", async () => {
+	await using piu = await startPiu({
+		script: {
+			replies: [
+				"Main reply",
+				{ thinking: "Weighing the widget options", text: "Side answer" },
+			],
+			tokensPerSecond: 20,
+			tokenSize: 3,
+		},
+	});
+	await send(piu, "Hello");
+	await piu.waitForFrame((frame) => agentPanel(frame).includes("Main reply"));
+
+	await send(piu, "/btw think first");
+	await piu.waitForFrame(
+		(f) => f.includes("esc stop") && f.includes("Thinking"),
+	);
+});
+
+test("while answering, the placeholder dots change every half second", async () => {
+	const answer = `Start of the side answer. ${"More text that keeps going. ".repeat(60)}`;
+	const clock = new ManualClock();
+	await using piu = await startPiu({
+		clock,
+		config: { animations: true },
+		script: {
+			replies: ["Main reply", answer],
+			tokensPerSecond: 40,
+			tokenSize: 3,
+		},
+	});
+	await send(piu, "Hello");
+	await piu.waitForFrame((frame) => agentPanel(frame).includes("Main reply"));
+
+	await send(piu, "/btw tell me slowly");
+	await piu.waitForFrame((f) => f.includes("answering"));
+	const dots = async (ms: number) => {
+		clock.advance(ms);
+		await piu.renderOnce();
+		return /answering(\.+|…)/.exec(piu.captureCharFrame())?.[1];
+	};
+	// why: the loop starts at an unknown phase of the manual clock, so the first sample only warms it up.
+	await dots(510);
+	const seen: (string | undefined)[] = [];
+	for (let step = 0; step < 6; step++) seen.push(await dots(510));
+	const counts = seen.map((value) => value?.length);
+	for (let at = 1; at < counts.length; at++)
+		expect(counts[at]).toBe(((counts[at - 1] ?? 0) % 3) + 1);
+	expect(new Set(counts)).toEqual(new Set([1, 2, 3]));
+});
+
+test("the key hints sit in the bottom right corner of the Modal", async () => {
+	await using piu = await startPiu({
+		script: { replies: ["Main reply", "Side answer"] },
+	});
+	await send(piu, "Hello");
+	await piu.waitForFrame((frame) => agentPanel(frame).includes("Main reply"));
+
+	await send(piu, "/btw hints");
+	const frame = await piu.waitForFrame((f) => f.includes("Side answer"));
+	const bounds = modalBounds(piu);
+	const row = frame.split("\n").find((line) => line.includes("⏎ ask"));
+	expect(bounds).toBeDefined();
+	expect(row).toBeDefined();
+	if (!bounds || !row) return;
+	const start = row.indexOf("⏎ ask");
+	const end = row.indexOf("esc close") + "esc close".length;
+	expect(start).toBeGreaterThan(bounds.left + bounds.width / 2);
+	expect(bounds.left + bounds.width - end).toBeLessThanOrEqual(3);
+});

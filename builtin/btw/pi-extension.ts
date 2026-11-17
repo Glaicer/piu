@@ -56,6 +56,12 @@ const textOf = (message: AssistantMessage) =>
 		.join("\n")
 		.trim();
 
+const thinkingOf = (message: AssistantMessage) =>
+	message.content
+		.flatMap((part) => (part.type === "thinking" ? [part.thinking] : []))
+		.join("\n\n")
+		.trim();
+
 const threadMessages = (thread: Exchange[]): Message[] =>
 	thread.flatMap(({ question, answer }) => [
 		{
@@ -72,6 +78,7 @@ const sideState = (side: SideThread): BtwThread => ({
 	thread: side.exchanges.map(({ question, answer }, n) => ({
 		n,
 		question,
+		thinking: thinkingOf(answer),
 		answer: textOf(answer),
 	})),
 	...(side.pending ? { pending: side.pending } : {}),
@@ -171,7 +178,7 @@ export default function btw(pi: ExtensionAPI): void {
 		ctx: ExtensionContext,
 		publish: () => void,
 	) {
-		const pending: BtwPending = { question, text: "" };
+		const pending: BtwPending = { question, thinking: "", text: "" };
 		side.pending = pending;
 		side.streaming = true;
 		const main = recorded(ctx);
@@ -213,7 +220,9 @@ export default function btw(pi: ExtensionAPI): void {
 				},
 			);
 			for await (const event of stream) {
-				if (event.type !== "text_delta") continue;
+				if (event.type !== "text_delta" && event.type !== "thinking_delta")
+					continue;
+				pending.thinking = thinkingOf(event.partial);
 				pending.text = textOf(event.partial);
 				publish();
 			}
