@@ -8,21 +8,23 @@ function BtwHost(props: { context: ModuleContext }) {
 	const { context } = props;
 	let close: (() => void) | undefined;
 	let dismissed = false;
-	const closeModal = () => {
-		dismissed = true;
+	const takeOpen = () => {
 		const opened = close;
 		close = undefined;
-		opened?.();
+		return opened;
 	};
-	// why: Esc during an answer stops it and leaves the Modal open, while closing by any means during an answer interrupts it; a dismissal before the next question is answered still has to cancel that question's claim on the side thread.
+	const closeModal = () => {
+		dismissed = true;
+		takeOpen()?.();
+	};
+	// why: Esc during an answer stops it and leaves the Modal open; any other close cancels the pending dialog, which aborts the stream and ends the side thread. A close before the next dialog exists still sets `dismissed`, so that dialog is cancelled when it arrives.
 	const dismiss = (reason: DismissReason) => {
 		const request = context.channel.requests[0];
-		if (context.pi.btw?.streaming && request) {
+		if (context.pi.btw?.streaming && reason === "escape" && request) {
 			context.channel.answer(request.id, { v: 1, stop: true });
-			if (reason === "escape") return false;
-		} else if (request) {
-			context.channel.cancel(request.id);
+			return false;
 		}
+		if (request) context.channel.cancel(request.id);
 		closeModal();
 	};
 	createEffect(() => {
@@ -30,9 +32,7 @@ function BtwHost(props: { context: ModuleContext }) {
 		const request = context.channel.requests[0];
 		if (!side) {
 			dismissed = false;
-			const opened = close;
-			close = undefined;
-			opened?.();
+			takeOpen()?.();
 			// why: a question dialog whose side thread Pi has already dropped must not wait forever.
 			if (request) context.channel.cancel(request.id);
 			return;

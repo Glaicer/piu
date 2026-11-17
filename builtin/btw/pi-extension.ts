@@ -15,6 +15,7 @@ import {
 	BTW_CHANNEL_TITLE,
 	BTW_DESCRIPTION,
 	BTW_STATUS_KEY,
+	type BtwPending,
 	type BtwThread,
 	parseBtwReply,
 	serializeBtwThread,
@@ -31,11 +32,10 @@ type MainRequest = {
 };
 
 type Exchange = { question: string; answer: AssistantMessage };
-type Pending = { question: string; text: string; error?: string };
 
 type SideThread = {
 	exchanges: Exchange[];
-	pending?: Pending;
+	pending?: BtwPending;
 	controller?: AbortController;
 	streaming: boolean;
 	model: string;
@@ -171,7 +171,7 @@ export default function btw(pi: ExtensionAPI): void {
 		ctx: ExtensionContext,
 		publish: () => void,
 	) {
-		const pending: Pending = { question, text: "" };
+		const pending: BtwPending = { question, text: "" };
 		side.pending = pending;
 		side.streaming = true;
 		const main = recorded(ctx);
@@ -349,7 +349,7 @@ export default function btw(pi: ExtensionAPI): void {
 		handler: async (args, ctx) => {
 			if (!ctx.hasUI)
 				return ctx.ui.notify("/btw needs the interactive UI.", "warning");
-			if (openSide) return;
+			if (openSide) return ctx.ui.notify("/btw is already open.", "warning");
 			void runSide(args, ctx);
 		},
 	});

@@ -23,8 +23,7 @@ export type ModalRequest = {
 	height: Cells;
 	left?: number;
 	top?: number;
-	/** Returning exactly false keeps the Modal open, so a Module can use a dismissal just to stop an action. */
-	onDismiss?(reason: DismissReason): unknown;
+	onDismiss?(reason: DismissReason): boolean | undefined;
 };
 
 export function moduleModal(
@@ -61,6 +60,7 @@ export function createModals() {
 		},
 		dismiss(entry: Entry, reason: DismissReason) {
 			if (!stack().includes(entry)) return;
+			// why: false means the Module only used the dismissal to stop an action, so the Modal stays open.
 			if (entry.request.onDismiss?.(reason) === false) return;
 			entry.close();
 		},

@@ -22,7 +22,7 @@ import { stringWidth } from "bun";
 import { promptFieldId } from "../builtin/input/index.tsx";
 import { createApp, type ExitRequest } from "../src/app.tsx";
 import type { UpdateCheckOptions } from "../src/backend-updates.ts";
-import { panelIdPrefix } from "../src/layout.tsx";
+import { modalContentInsets, panelIdPrefix } from "../src/layout.tsx";
 import { modalIdPrefix } from "../src/modal.tsx";
 import { darkTheme } from "../src/theme.ts";
 import "./hooks.ts";
@@ -149,6 +149,25 @@ export function modalBounds(piu: Piu) {
 		width: top.width,
 		height: top.height,
 	};
+}
+
+// why: a Modal floats over the Panels, so its text is read from its own box; this assumes a titled Modal, the shape `moduleModal` gives one.
+export function modalText(piu: Piu, frame: string) {
+	const bounds = modalBounds(piu);
+	if (!bounds) return "";
+	return frame
+		.split("\n")
+		.slice(
+			bounds.top + modalContentInsets.top,
+			bounds.top + bounds.height - modalContentInsets.bottom,
+		)
+		.map((row) =>
+			row.slice(
+				bounds.left + modalContentInsets.left,
+				bounds.left + bounds.width - modalContentInsets.right,
+			),
+		)
+		.join("\n");
 }
 
 export function messageBar(text: string, width?: number) {

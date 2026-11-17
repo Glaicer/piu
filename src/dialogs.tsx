@@ -151,7 +151,9 @@ function dialogModal(
 			},
 			{ width: WIDTH, height: Math.min(height(dialog), screenRows) },
 		),
-		onDismiss: () => answer({ cancelled: true }),
+		onDismiss: () => {
+			answer({ cancelled: true });
+		},
 	};
 }
 

@@ -16,9 +16,9 @@ export type BtwExchange = {
 };
 
 export type BtwPending = {
-	readonly question: string;
-	readonly text: string;
-	readonly error?: string;
+	question: string;
+	text: string;
+	error?: string;
 };
 
 export type BtwThread = {

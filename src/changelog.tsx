@@ -1,12 +1,7 @@
-import { type Renderable, ScrollBoxRenderable } from "@opentui/core";
+import type { Renderable } from "@opentui/core";
 import { createSyntaxStyle, Markdown } from "../builtin/chat/markdown.tsx";
 import { type ModalRequest, moduleModal } from "./modal.tsx";
-
-function scrollBoxOf(node: Renderable) {
-	for (let next = node.parent; next; next = next.parent) {
-		if (next instanceof ScrollBoxRenderable) return next;
-	}
-}
+import { scrollBoxOf } from "./scroll.ts";
 
 export function changelogModal(
 	markdown: string,
@@ -45,6 +40,8 @@ export function changelogModal(
 			},
 			{ width: "80%", height: "80%" },
 		),
-		onDismiss,
+		onDismiss: () => {
+			onDismiss();
+		},
 	};
 }

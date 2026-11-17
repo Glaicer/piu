@@ -1,17 +1,11 @@
 import type { Renderable } from "@opentui/core";
-import { ScrollBoxRenderable } from "@opentui/core";
 import { createSignal, onCleanup } from "solid-js";
+import { scrollBoxOf } from "../../src/scroll.ts";
 
 export type Selectable = {
 	element(): Renderable | undefined;
 	activate(): void;
 };
-
-function scrollBoxOf(node: Renderable) {
-	for (let next = node.parent; next; next = next.parent) {
-		if (next instanceof ScrollBoxRenderable) return next;
-	}
-}
 
 function inView(item: Selectable) {
 	const element = item.element();

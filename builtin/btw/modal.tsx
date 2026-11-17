@@ -2,7 +2,6 @@ import {
 	type InputRenderable,
 	type KeyEvent,
 	type Renderable,
-	ScrollBoxRenderable,
 	type SyntaxStyle,
 	TextAttributes,
 } from "@opentui/core";
@@ -10,20 +9,17 @@ import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import type { BtwExchange, BtwPending } from "../../src/btw.ts";
 import type { ModalRequest } from "../../src/modal.tsx";
 import type { Module, ModuleContext } from "../../src/module.ts";
+import { scrollBoxOf } from "../../src/scroll.ts";
 import type { Theme } from "../../src/theme.ts";
 import { createSyntaxStyle, Markdown } from "../chat/markdown.tsx";
 
 const PANEL = "btw-side";
+const TRANSCRIPT = "btw.transcript";
+const COMPOSER = "btw.composer";
 const EMPTY_HINT =
 	"Ask a side question. It sees the whole session and stays out of its context.";
 
 type ScrollBridge = { node?: Renderable };
-
-function scrollBoxOf(node: Renderable) {
-	for (let next = node.parent; next; next = next.parent) {
-		if (next instanceof ScrollBoxRenderable) return next;
-	}
-}
 
 function Question(props: { text: string; theme: Theme }) {
 	return (
@@ -188,7 +184,7 @@ function Composer(props: { context: ModuleContext; scroll: ScrollBridge }) {
 
 function transcriptModule(model: string, scroll: ScrollBridge): Module {
 	return {
-		id: "btw.transcript",
+		id: TRANSCRIPT,
 		title: model ? `btw · ${model}` : "btw",
 		followsOutput: true,
 		render: (context) => <Transcript context={context} scroll={scroll} />,
@@ -197,7 +193,7 @@ function transcriptModule(model: string, scroll: ScrollBridge): Module {
 
 function composerModule(scroll: ScrollBridge): Module {
 	return {
-		id: "btw.composer",
+		id: COMPOSER,
 		footer: true,
 		render: (context) => <Composer context={context} scroll={scroll} />,
 	};
@@ -215,12 +211,12 @@ export function btwModal(
 				PANEL,
 				[
 					{
-						id: "btw.transcript",
+						id: TRANSCRIPT,
 						module: transcriptModule(model, scroll),
 						settings: {},
 					},
 					{
-						id: "btw.composer",
+						id: COMPOSER,
 						module: composerModule(scroll),
 						settings: {},
 					},

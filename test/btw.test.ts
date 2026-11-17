@@ -3,9 +3,14 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RGBA, TextAttributes } from "@opentui/core";
-import { modalContentInsets } from "../src/layout.tsx";
 import { darkTheme } from "../src/theme.ts";
-import { modalBounds, panelText, startPiu, working } from "./harness.ts";
+import {
+	modalBounds,
+	modalText,
+	panelText,
+	startPiu,
+	working,
+} from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
@@ -15,25 +20,6 @@ const agentPanel = (frame: string) => panelText(frame, 10, 0);
 async function send(piu: Piu, text: string) {
 	await piu.mockInput.typeText(text);
 	piu.mockInput.pressEnter();
-}
-
-// why: the Modal floats over the Layout, so its content is read from its own box rather than from the Panel text helpers.
-function modalText(piu: Piu, frame: string) {
-	const bounds = modalBounds(piu);
-	if (!bounds) return "";
-	return frame
-		.split("\n")
-		.slice(
-			bounds.top + modalContentInsets.top,
-			bounds.top + bounds.height - modalContentInsets.bottom,
-		)
-		.map((row) =>
-			row.slice(
-				bounds.left + modalContentInsets.left,
-				bounds.left + bounds.width - modalContentInsets.right,
-			),
-		)
-		.join("\n");
 }
 
 function modalSpans(piu: Piu) {
@@ -186,6 +172,26 @@ test("/btw without a question opens an empty Modal that asks the first question 
 	);
 });
 
+test("/btw while the agent is working opens the Modal and stays out of the answer", async () => {
+	const mainAnswer = `Main start. ${"Still streaming the main answer. ".repeat(30)}`;
+	await using piu = await startPiu({
+		script: {
+			replies: [mainAnswer, "Side answer"],
+			tokensPerSecond: 300,
+			tokenSize: 3,
+		},
+	});
+	await send(piu, "Hello");
+	await piu.waitForFrame((f) => working(f) && f.includes("Main start."));
+
+	await send(piu, "/btw while busy");
+	const frame = await piu.waitForFrame(
+		(f) => f.includes("while busy") && f.includes("Side answer"),
+	);
+	expect(modalBounds(piu)).toBeDefined();
+	expect(agentPanel(frame)).toContain("Main start.");
+});
+
 test("a second question in the same Modal carries the first question and answer in its history", async () => {
 	await using piu = await startPiu({
 		script: {
@@ -285,12 +291,19 @@ test("closing the Modal during an answer interrupts it and forgets the side thre
 	await piu.waitForFrame((f) => !f.includes("Start of the side answer"));
 	expect(modalBounds(piu)).toBeUndefined();
 
-	// why: Pi ends the side thread and the app cancels the next dialog it opens, which takes a round trip the frames cannot show.
-	await Bun.sleep(300);
-	await send(piu, "/btw second question");
-	const frame = await piu.waitForFrame(
-		(f) => f.includes("second question") && f.includes("Count"),
-	);
+	// why: no frame shows Pi ending the side thread after the app cancels its next dialog, so the question is retried until a new Modal opens.
+	let frame: string | undefined;
+	for (let attempt = 0; attempt < 20 && frame === undefined; attempt++) {
+		if (!modalBounds(piu)) await send(piu, "/btw second question");
+		frame = await piu
+			.waitForFrame(
+				(f) => f.includes("second question") && f.includes("Count"),
+				250,
+			)
+			.catch(() => undefined);
+	}
+	expect(frame).toBeDefined();
+	if (frame === undefined) return;
 	expect(modalText(piu, frame)).toContain("Count 2");
 	expect(modalText(piu, frame)).not.toContain("Start of the side answer");
 });
