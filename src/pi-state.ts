@@ -23,6 +23,12 @@ import {
 	optionValue,
 } from "./cli-args.ts";
 import {
+	CONTEXT_USAGE_COMMAND,
+	CONTEXT_USAGE_STATUS_KEY,
+	type ContextUsageView,
+	parseContextUsage,
+} from "./context-usage.ts";
+import {
 	type createModelSelection,
 	isThinkingLevel,
 } from "./model-selection.ts";
@@ -119,6 +125,7 @@ export type PiState = {
 	readonly subagents: readonly Subagent[];
 	readonly subagentLogs: Readonly<Record<string, readonly SubagentEntry[]>>;
 	readonly btw: BtwThread | null;
+	readonly contextUsage: ContextUsageView | null;
 	readonly title: string | null;
 	readonly editorText: EditorText;
 };
@@ -172,6 +179,7 @@ export function createPiState(options: {
 		subagents: Subagent[];
 		subagentLogs: Record<string, SubagentEntry[]>;
 		btw: BtwThread | null;
+		contextUsage: ContextUsageView | null;
 		title: string | null;
 		editorText: EditorText;
 	}>({
@@ -194,6 +202,7 @@ export function createPiState(options: {
 		subagents: [],
 		subagentLogs: {},
 		btw: null,
+		contextUsage: null,
 		title: null,
 		editorText: { seq: 0, text: "" },
 	});
@@ -249,6 +258,7 @@ export function createPiState(options: {
 		setState("statuses", reconcile({}));
 		setState("backgroundJobs", []);
 		setState("btw", null);
+		setState("contextUsage", null);
 		clearSubagents();
 	}
 
@@ -283,6 +293,8 @@ export function createPiState(options: {
 			setState("backgroundJobs", []);
 			clearSubagents();
 			clearPending(() => true);
+			// why: a dead Backend can never refresh its context snapshot, so stale numbers must not stay behind a restart's new window.
+			if (health.status !== "running") setState("contextUsage", null);
 		});
 		detach = () => {
 			offRecords();
@@ -339,10 +351,9 @@ export function createPiState(options: {
 				setState(
 					"commands",
 					reconcile(
-						response.data.commands.map(({ name, description }) => ({
-							name,
-							description,
-						})),
+						response.data.commands
+							.filter(({ name }) => name !== CONTEXT_USAGE_COMMAND)
+							.map(({ name, description }) => ({ name, description })),
 					),
 				);
 			}
@@ -543,6 +554,13 @@ export function createPiState(options: {
 				notify(record.message, record.notifyType ?? "info");
 				break;
 			case "setStatus": {
+				if (record.statusKey === CONTEXT_USAGE_STATUS_KEY) {
+					setState(
+						"contextUsage",
+						reconcile(parseContextUsage(record.statusText)),
+					);
+					break;
+				}
 				if (record.statusKey === BACKGROUND_STATUS_KEY) {
 					setState("backgroundJobs", reconcile(parseJobs(record.statusText)));
 					break;

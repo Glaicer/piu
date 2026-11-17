@@ -1,6 +1,5 @@
 import {
 	type InputRenderable,
-	type KeyEvent,
 	type Renderable,
 	type SyntaxStyle,
 	TextAttributes,
@@ -17,7 +16,7 @@ import type { Animate } from "../../src/animate.ts";
 import type { BtwExchange, BtwPending } from "../../src/btw.ts";
 import type { ModalRequest } from "../../src/modal.tsx";
 import type { Module, ModuleContext } from "../../src/module.ts";
-import { scrollBoxOf } from "../../src/scroll.ts";
+import { scrollKeys } from "../../src/scroll.ts";
 import type { Theme } from "../../src/theme.ts";
 import { createSyntaxStyle, Markdown } from "../chat/markdown.tsx";
 import { createSelection, type Selection } from "../chat/selection.ts";
@@ -147,24 +146,6 @@ function Transcript(props: { context: ModuleContext; scroll: ScrollBridge }) {
 	);
 }
 
-// why: a ref runs before Solid attaches its element to the Panel, so the scrollbox is looked up on each key instead of once at creation.
-function scrollKeys(event: KeyEvent, scroll: ScrollBridge) {
-	const box = scroll.node && scrollBoxOf(scroll.node);
-	if (!box) return false;
-	if (event.ctrl && (event.name === "home" || event.name === "end")) {
-		box.scrollTo(event.name === "end" ? Infinity : 0);
-		return true;
-	}
-	if (
-		event.name === "up" ||
-		event.name === "down" ||
-		event.name === "pageup" ||
-		event.name === "pagedown"
-	)
-		return box.handleKeyPress(event);
-	return false;
-}
-
 function Composer(props: { context: ModuleContext; scroll: ScrollBridge }) {
 	const { context } = props;
 	const [typed, setTyped] = createSignal("");
@@ -222,7 +203,7 @@ function Composer(props: { context: ModuleContext; scroll: ScrollBridge }) {
 					onInput={setTyped}
 					onSubmit={() => submit()}
 					onKeyDown={(event) => {
-						if (!scrollKeys(event, props.scroll)) return;
+						if (!scrollKeys(event, props.scroll.node)) return;
 						event.preventDefault();
 					}}
 				/>
