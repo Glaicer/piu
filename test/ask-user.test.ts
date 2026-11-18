@@ -495,7 +495,6 @@ test("a custom answer stays with its own question when switching tabs", async ()
 	await piu.waitForFrame(pointsAt("Type your own answer"));
 	await piu.mockInput.typeText("Pear");
 	await piu.waitForFrame((f) => inputPanel(f).includes("Pear"));
-	piu.mockInput.pressArrow("up");
 	piu.mockInput.pressArrow("right");
 
 	const colors = await piu.waitForFrame(
@@ -576,7 +575,10 @@ test("the input Panel fits the card and restores the editor after", async () => 
 	expect(panelRows(piu)).toEqual([0, 21]);
 	await send(piu, "go");
 	const asked = await piu.waitForFrame(showsCard);
-	expect(panelRows(piu)).toEqual([0, 19]);
+	expect(panelRows(piu)).toEqual([0, 18]);
+	const rows = inputPanel(asked).split("\n");
+	const dismiss = rows.findIndex((line) => line.includes("Dismiss (Esc)"));
+	expect(rows[dismiss - 1]?.trim()).toBe("");
 	expect(inputPanel(asked)).not.toContain(hints);
 
 	piu.mockInput.pressEnter();

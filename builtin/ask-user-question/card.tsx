@@ -108,8 +108,8 @@ export function Card(props: {
 		if (name === "escape") dismiss();
 		else if (name === "up") move(-1);
 		else if (name === "down") move(1);
-		else if (!typing() && name === "left") goTo(tab() - 1);
-		else if (!typing() && name === "right") goTo(tab() + 1);
+		else if (several && name === "left") goTo(tab() - 1);
+		else if (several && name === "right") goTo(tab() + 1);
 		else if (tab() === review) {
 			if (name === "return") {
 				if (row() < review) edit(row());
@@ -361,6 +361,7 @@ export function Card(props: {
 			</box>
 			<box
 				flexShrink={0}
+				marginTop={1}
 				onMouseDown={(event) => {
 					event.preventDefault();
 					dismiss();

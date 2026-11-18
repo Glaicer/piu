@@ -338,9 +338,13 @@ test("empty favorites and no search matches have distinct messages", async () =>
 	await using piu = await start();
 	await clickText(piu, "faux-1");
 	await piu.waitForFrame((f) => f.includes("☆ faux-2"));
-	await clickText(piu, "Favorites");
+	piu.mockInput.pressArrow("right");
 	await piu.waitForFrame((f) => f.includes("No favorites yet"));
+	piu.mockInput.pressArrow("down");
+	piu.mockInput.pressArrow("left");
+	await piu.waitForFrame((f) => f.includes("☆ faux-2"));
 	await clickText(piu, "All");
+	piu.mockInput.pressTab();
 	await piu.mockInput.typeText("no-such-model");
 	await piu.waitForFrame((f) => f.includes("No matching models"));
 	piu.mockInput.pressEnter();

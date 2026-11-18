@@ -80,10 +80,7 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 			event.preventDefault();
 			if (searching) list.focus();
 			move(event.name === "up" ? -1 : 1);
-		} else if (
-			!searching &&
-			(event.name === "left" || event.name === "right")
-		) {
+		} else if (event.name === "left" || event.name === "right") {
 			event.preventDefault();
 			changeTab(tab() === "All" ? "Favorites" : "All");
 		} else if (!searching && event.name === "f") {
