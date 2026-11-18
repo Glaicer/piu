@@ -200,17 +200,47 @@ export function saveGlobalSetting(path: string, change: GlobalSettingChange) {
 	}
 }
 
+function readKeybindingConfig(path: string) {
+	const { value, error } = readJson(path);
+	if (error) throw new Error(error);
+	const config = value === undefined ? {} : object(value, "config");
+	const bindings =
+		"keybindings" in config ? object(config.keybindings, "keybindings") : {};
+	return { config, bindings };
+}
+
+export function readKeybindingEdit(path: string) {
+	const snapshot = readKeybindingConfig(path);
+	return {
+		personal: parseKeybindings(snapshot.bindings),
+		save(action: string, shortcuts: readonly Shortcut[], moveToEnd: boolean) {
+			writeKeybinding(path, snapshot, action, shortcuts, moveToEnd);
+		},
+	};
+}
+
 export function saveKeybinding(
 	path: string,
 	action: string,
 	shortcuts: readonly Shortcut[] | undefined,
 	moveToEnd = false,
 ) {
-	const { value, error } = readJson(path);
-	if (error) throw new Error(error);
-	const config = value === undefined ? {} : object(value, "config");
-	const bindings =
-		"keybindings" in config ? object(config.keybindings, "keybindings") : {};
+	writeKeybinding(
+		path,
+		readKeybindingConfig(path),
+		action,
+		shortcuts,
+		moveToEnd,
+	);
+}
+
+function writeKeybinding(
+	path: string,
+	{ config, bindings }: ReturnType<typeof readKeybindingConfig>,
+	action: string,
+	shortcuts: readonly Shortcut[] | undefined,
+	moveToEnd: boolean,
+) {
 	// why: a plain object turns an own "__proto__" from the file into a prototype write and drops it; a null-prototype object keeps every key the file had.
 	const keybindings: Fields = Object.create(null);
 	if (moveToEnd) {
@@ -224,7 +254,6 @@ export function saveKeybinding(
 				keybindings[id] = bindingValue(shortcuts);
 		}
 	}
-	// why: a new assignment goes last in the file, because personal Config order decides a shortcut conflict.
 	if (
 		shortcuts !== undefined &&
 		(moveToEnd || !Object.hasOwn(bindings, action))

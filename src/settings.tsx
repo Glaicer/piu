@@ -141,20 +141,11 @@ export function createSettings(options: {
 						footer: true,
 						render: () => (
 							<box flexDirection="column" flexShrink={0}>
-								<For each={status(active())?.lines ?? []}>
-									{(line) => (
-										<text
-											fg={
-												status(active())?.tone === "error"
-													? context.theme.error
-													: context.theme.warning
-											}
-											wrapMode="word"
-										>
-											{` ${line}`}
-										</text>
-									)}
-								</For>
+								<Show when={status(active())}>
+									<text fg={context.theme.error} wrapMode="word">
+										{` ${status(active()) ?? ""}`}
+									</text>
+								</Show>
 								<text fg={context.theme.faint} wrapMode="none" truncate>
 									{footer(active())}
 								</text>
