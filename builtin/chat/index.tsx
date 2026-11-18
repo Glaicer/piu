@@ -273,7 +273,12 @@ function ServiceRows(props: { context: ModuleContext; position: number }) {
 				(row) => row.position === props.position,
 			)}
 		>
-			{(row) => <text fg={color(row.status)}>{`· ${row.text}`}</text>}
+			{(row) => (
+				<text
+					fg={color(row.status)}
+					marginTop={row.kind === "interruption" ? 1 : 0}
+				>{`· ${row.text}`}</text>
+			)}
 		</For>
 	);
 }

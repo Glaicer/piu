@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { inputArea, panelBoxes, startPiu, working } from "./harness.ts";
+import {
+	inputArea,
+	panelBoxes,
+	panelText,
+	startPiu,
+	working,
+} from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -151,9 +157,16 @@ test("Esc during a run aborts it and the indicator goes away", async () => {
 
 	piu.mockInput.pressEscape();
 
-	const frame = await piu.waitForFrame((f) => !working(f));
+	const frame = await piu.waitForFrame(
+		(f) =>
+			!working(f) &&
+			panelText(f, 10).trimEnd().endsWith("· request interrupted"),
+	);
 	expect(frame).not.toContain("running");
 	expect(frame).not.toContain("Never reached");
+	expect(panelText(frame, 10).trimEnd()).toMatch(
+		/\S[^\n]*\n[ \t]*\n[ \t]*· request interrupted$/,
+	);
 });
 
 test("Down keeps a nonempty draft instead of recalling history", async () => {

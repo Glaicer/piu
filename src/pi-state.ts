@@ -55,7 +55,7 @@ type AssistantUpdate = Extract<
 >["assistantMessageEvent"];
 
 export type ServiceRow = {
-	readonly kind: "compaction" | "retry";
+	readonly kind: "compaction" | "retry" | "interruption";
 	readonly position: number;
 	readonly status: "active" | "ok" | "failed";
 	readonly text: string;
@@ -860,6 +860,7 @@ export function createPiState(options: {
 		followUp: (text) => send(text, "followUp"),
 		answerDialog,
 		async abort() {
+			const wasWorking = state.working;
 			for (const { id } of state.dialogs) answerDialog(id, { cancelled: true });
 			// why: Pi queues a message some time after reading it, so a clear_queue sent at once could overtake the message the user just sent and let it run after the abort.
 			await Promise.all(inFlight);
@@ -868,7 +869,17 @@ export function createPiState(options: {
 				.request({ type: "clear_queue" })
 				.catch(ignoreDeadBackend);
 			clearPending(({ id, mode }) => mode !== "prompt" && !unconfirmed.has(id));
-			await backend.request({ type: "abort" }).catch(ignoreDeadBackend);
+			const aborted = await backend
+				.request({ type: "abort" })
+				.catch(ignoreDeadBackend);
+			if (wasWorking && aborted?.success) {
+				setState("serviceRows", state.serviceRows.length, {
+					kind: "interruption",
+					position: state.messages.length,
+					status: "failed",
+					text: "request interrupted",
+				});
+			}
 			return cleared?.success && cleared.command === "clear_queue"
 				? [...cleared.data.steering, ...cleared.data.followUp]
 				: [];
