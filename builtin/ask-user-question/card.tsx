@@ -174,7 +174,12 @@ export function Card(props: {
 	);
 	createEffect(on(tab, () => setScrolled(0), { defer: true }));
 
-	const line = (at: number, selected: () => boolean, children: unknown) => (
+	const line = (
+		at: number,
+		selected: () => boolean,
+		children: unknown,
+		option?: Question["options"][number],
+	) => (
 		<box
 			ref={(element: BoxRenderable) => {
 				rows.set(at, element);
@@ -183,17 +188,40 @@ export function Card(props: {
 					if (rows.get(at) === element) rows.delete(at);
 				});
 			}}
-			flexDirection="row"
-			backgroundColor={selected() ? theme.border : undefined}
+			onMouseMove={option ? () => setRow(at) : undefined}
+			onMouseDown={
+				option
+					? (event) => {
+							event.preventDefault();
+							setRow(at);
+							select(tab(), option.label);
+						}
+					: undefined
+			}
 		>
-			<text fg={theme.accent}>{selected() ? " ▸" : "  "}</text>
-			{children}
+			<box
+				flexDirection="row"
+				backgroundColor={
+					selected() ? (option ? theme.bar : theme.border) : undefined
+				}
+			>
+				<text fg={option && selected() ? theme.barText : theme.accent}>
+					{selected() ? " ▸" : "  "}
+				</text>
+				{children}
+			</box>
+			{option?.description && (
+				<text marginLeft={7} fg={theme.muted} wrapMode="word">
+					{option.description}
+				</text>
+			)}
 		</box>
 	);
 
 	return (
 		<box
 			flexDirection="column"
+			maxWidth={84}
 			focusable
 			focused={!typing()}
 			onKeyDown={onKeyDown}
@@ -216,7 +244,9 @@ export function Card(props: {
 					}}
 				>
 					{!several && (
-						<text fg={theme.accent}>{` ${questions[0]?.header}`}</text>
+						<text fg={theme.text}>
+							<strong>{` ${questions[0]?.header}`}</strong>
+						</text>
 					)}
 					{several && (
 						<box flexDirection="row">
@@ -245,22 +275,18 @@ export function Card(props: {
 									line(
 										at(),
 										() => at() === row(),
-										<box
-											flexDirection="row"
-											onMouseOver={() => setRow(at())}
-											onMouseDown={(event) => {
-												event.preventDefault();
-												setRow(at());
-												select(tab(), option.label);
-											}}
-										>
-											<text fg={theme.text}>
-												{` ${marker(tab(), option.label)} ${option.label}`}
+										<>
+											<text fg={at() === row() ? theme.barMuted : theme.muted}>
+												{` ${marker(tab(), option.label)} `}
 											</text>
-											<text fg={theme.muted}>
-												{option.description ? `  ${option.description}` : ""}
+											<text
+												flexShrink={1}
+												fg={at() === row() ? theme.barText : theme.text}
+											>
+												<strong>{option.label}</strong>
 											</text>
-										</box>,
+										</>,
+										option,
 									)
 								}
 							</For>

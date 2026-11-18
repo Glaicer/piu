@@ -79,6 +79,14 @@ test("calling ask_user shows the question card in place of the input", async () 
 	expect(shown).toContain("Fruit");
 	expect(shown).toContain("Apple");
 	expect(shown).toContain("Crisp and red");
+	const rows = shown.split("\n");
+	const apple = rows.findIndex((line) => line.includes("Apple"));
+	expect(rows[apple + 1]?.indexOf("Crisp and red")).toBe(
+		rows[apple]?.indexOf("Apple"),
+	);
+	expect(rows[apple]?.indexOf("Apple")).toBe(
+		rows.find((line) => line.includes("Banana"))?.indexOf("Banana"),
+	);
 	expect(shown).not.toContain("/ commands");
 	expect(frame).not.toContain("opentui:ask-user-question");
 });
@@ -568,7 +576,7 @@ test("the input Panel fits the card and restores the editor after", async () => 
 	expect(panelRows(piu)).toEqual([0, 21]);
 	await send(piu, "go");
 	const asked = await piu.waitForFrame(showsCard);
-	expect(panelRows(piu)).toEqual([0, 21]);
+	expect(panelRows(piu)).toEqual([0, 19]);
 	expect(inputPanel(asked)).not.toContain(hints);
 
 	piu.mockInput.pressEnter();
