@@ -16,7 +16,7 @@ import { createSyntaxStyle, Markdown } from "./markdown.tsx";
 import { createSelection, type Selection } from "./selection.ts";
 import { sessionCommands } from "./session-commands.tsx";
 import { contentText } from "./sessions.ts";
-import { SubagentCard } from "./subagent-card.tsx";
+import { SubagentCard, type SubagentRow } from "./subagent-card.tsx";
 import { subagentModule } from "./subagent-view.tsx";
 import { Thinking } from "./thinking.tsx";
 import {
@@ -53,6 +53,75 @@ function Messages(props: { context: ModuleContext }) {
 			(message): message is ToolResultMessage =>
 				message.role === "toolResult" && message.toolCallId === id,
 		);
+	const subagentCalls = createMemo(() => {
+		if (!pi.subagents.length) return new Map<string, SubagentRow>();
+		const results = new Map(
+			pi.messages
+				.filter((message) => message.role === "toolResult")
+				.map((message) => [message.toolCallId, message]),
+		);
+		const calls = pi.messages.flatMap((message) =>
+			message.role === "assistant"
+				? message.content.filter(
+						(block): block is ToolCallBlock =>
+							block.type === "toolCall" &&
+							(block.name === "agent_spawn" || block.name === "agent_send"),
+					)
+				: [],
+		);
+		const spawns = new Map<string, string>();
+		const claimed = new Set<string>();
+		for (const call of calls) {
+			if (call.name !== "agent_spawn") continue;
+			const result = results.get(call.id);
+			const details = result?.details;
+			if (
+				details &&
+				typeof details === "object" &&
+				"agentId" in details &&
+				typeof details.agentId === "string"
+			) {
+				spawns.set(call.id, details.agentId);
+				claimed.add(details.agentId);
+			}
+		}
+		const active = new Map<string, SubagentRow & { callId: string }>();
+		for (const call of calls) {
+			const result = results.get(call.id);
+			let id: unknown;
+			let instruction: unknown;
+			if (call.name === "agent_spawn") {
+				id = spawns.get(call.id);
+				instruction = call.arguments.prompt;
+				if (!id && !result) {
+					const matches = pi.subagents.filter(
+						(agent) =>
+							agent.label === call.arguments.label && !claimed.has(agent.id),
+					);
+					if (matches.length === 1) {
+						id = matches[0]?.id;
+						if (typeof id === "string") claimed.add(id);
+					}
+				}
+			} else if (call.name === "agent_send" && !result?.isError) {
+				id =
+					typeof call.arguments.to === "string"
+						? call.arguments.to.replace(/^@/, "")
+						: undefined;
+				instruction = call.arguments.message;
+			}
+			const agent = pi.subagents.find((agent) => agent.id === id);
+			if (agent && typeof instruction === "string") {
+				active.set(agent.id, {
+					agent,
+					instruction,
+					name: call.name,
+					callId: call.id,
+				});
+			}
+		}
+		return new Map([...active.values()].map((row) => [row.callId, row]));
+	});
 	const openSubagent = (id: string) =>
 		props.context.actions.openModal(
 			moduleModal(subagentModule(id), {
@@ -91,6 +160,8 @@ function Messages(props: { context: ModuleContext }) {
 										block={block()}
 										groupedTools={groupedTools()}
 										resultFor={resultFor}
+										subagentCalls={subagentCalls()}
+										openSubagent={openSubagent}
 										jobs={() => pi.backgroundJobs}
 										abandoned={
 											message.stopReason === "error" ||
@@ -125,16 +196,6 @@ function Messages(props: { context: ModuleContext }) {
 					<text
 						fg={theme.muted}
 					>{`${entry.text}  ${pendingLabel(entry)}`}</text>
-				)}
-			</For>
-			<For each={pi.subagents}>
-				{(agent) => (
-					<SubagentCard
-						agent={() => agent}
-						selection={selection}
-						theme={theme}
-						onOpen={() => openSubagent(agent.id)}
-					/>
 				)}
 			</For>
 			<BackendCard context={props.context} selection={selection} />
@@ -226,6 +287,8 @@ function AssistantBlock(props: {
 	block: AssistantBlockData;
 	groupedTools: ReadonlySet<string>;
 	resultFor: (toolCallId: string) => ToolResultMessage | undefined;
+	subagentCalls: ReadonlyMap<string, SubagentRow>;
+	openSubagent: (id: string) => void;
 	jobs: () => readonly BackgroundJob[];
 	abandoned: boolean;
 	streaming: boolean;
@@ -246,6 +309,7 @@ function AssistantBlock(props: {
 		const block = props.block;
 		return block.type === "toolCall" ? block : undefined;
 	};
+	const subagent = () => props.subagentCalls.get(toolCall()?.id ?? "");
 	return (
 		<>
 			{type() === "thinking" ? (
@@ -273,19 +337,35 @@ function AssistantBlock(props: {
 					/>
 				</box>
 			) : type() === "toolCall" ? (
-				<ToolCard
-					grouped={props.groupedTools.has(toolCall()?.id ?? "")}
-					call={toolCall}
-					result={() => {
-						const id = toolCall()?.id;
-						return id === undefined ? undefined : props.resultFor(id);
-					}}
-					jobs={props.jobs}
-					abandoned={props.abandoned}
-					animate={props.animate}
-					selection={props.selection}
-					theme={props.theme}
-				/>
+				<Show
+					when={subagent()}
+					fallback={
+						<ToolCard
+							grouped={props.groupedTools.has(toolCall()?.id ?? "")}
+							call={toolCall}
+							result={() => {
+								const id = toolCall()?.id;
+								return id === undefined ? undefined : props.resultFor(id);
+							}}
+							jobs={props.jobs}
+							abandoned={props.abandoned}
+							animate={props.animate}
+							selection={props.selection}
+							theme={props.theme}
+						/>
+					}
+				>
+					<SubagentCard
+						row={subagent}
+						grouped={props.groupedTools.has(toolCall()?.id ?? "")}
+						selection={props.selection}
+						theme={props.theme}
+						onOpen={() => {
+							const entry = subagent();
+							if (entry) props.openSubagent(entry.agent.id);
+						}}
+					/>
+				</Show>
 			) : null}
 		</>
 	);

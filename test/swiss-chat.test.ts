@@ -250,7 +250,7 @@ test("subagent statuses use signal while running, faint when settled and error o
 	});
 	await send(piu, "Start");
 	await piu.waitForFrame(
-		(f) => chat(f).includes("agent @max") && chat(f).includes("Agent launched"),
+		(f) => chat(f).includes("▸ @max") && chat(f).includes("Agent launched"),
 	);
 	for (const [status, color] of [
 		["running", lightTheme.signal],
@@ -264,12 +264,12 @@ test("subagent statuses use signal while running, faint when settled and error o
 			chat(f)
 				.split("\n")
 				.some(
-					(row) => row.includes("agent @max") && row.trimEnd().endsWith(status),
+					(row) => row.includes("▸ @max") && row.trimEnd().endsWith(status),
 				),
 		);
 		const row = chat(frame)
 			.split("\n")
-			.findIndex((row) => row.includes("agent @max"));
+			.findIndex((row) => row.includes("▸ @max"));
 		expect(span(piu, status, row)?.fg.equals(RGBA.fromHex(color))).toBe(true);
 	}
 });

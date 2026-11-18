@@ -49,7 +49,11 @@ async function send(piu: Piu, text: string) {
 const cards = (frame: string, text = "") =>
 	agentPanel(frame)
 		.split("\n")
-		.filter((line) => /^\W*agent @\w+ /.test(line) && line.includes(text));
+		.filter(
+			(line) =>
+				/^\s*agent_(spawn|send) +[▸›] @[^ ]+ +\|/.test(line) &&
+				line.includes(text),
+		);
 
 test("a background subagent has a card with its id, task and status that stays running after the spawn call and the turn are over", async () => {
 	using control = subagentsControl();
@@ -65,7 +69,10 @@ test("a background subagent has a card with its id, task and status that stays r
 			!working(f),
 	);
 
-	expect(cards(frame)[0]).toMatch(/agent @max +Audit the auth code +running/);
+	expect(cards(frame)[0]).toMatch(
+		/agent_spawn.*@max {4}\| Do: Audit the auth code.*running/,
+	);
+	expect(frame.indexOf("@max")).toBeLessThan(frame.indexOf("Spawned it"));
 });
 
 test("subagent cards come back when the session is opened again by a new Backend, as after a restart", async () => {
@@ -84,7 +91,7 @@ test("subagent cards come back when the session is opened again by a new Backend
 			);
 			control.status("max", "done", "all good");
 			await first.waitForFrame((f) =>
-				/@max +Audit the auth code +done/.test(f),
+				/@max +\| Do: Audit the auth code.*done/.test(f),
 			);
 		}
 
@@ -96,7 +103,9 @@ test("subagent cards come back when the session is opened again by a new Backend
 		const frame = await again.waitForFrame(
 			(f) => f.includes("Spawned it") && spawned(f, "max"),
 		);
-		expect(cards(frame)[0]).toMatch(/agent @max +Audit the auth code +done/);
+		expect(cards(frame)[0]).toMatch(
+			/agent_spawn.*@max +\| Do: Audit the auth code.*done/,
+		);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
@@ -119,7 +128,7 @@ test("a foreground subagent has a card while the spawn call is still blocked, an
 
 	const frame = await piu.waitForFrame((f) => f.includes("Counted"));
 	expect(cards(frame)).toHaveLength(1);
-	expect(cards(frame)[0]).toMatch(/@max +Count the files +done/);
+	expect(cards(frame)[0]).toMatch(/@max +\| Do: Count the files.*done/);
 });
 
 const readCall = (id: string) => ({
@@ -131,8 +140,10 @@ const readCall = (id: string) => ({
 
 async function clickCard(piu: Piu, frame: string, id: string) {
 	const rows = frame.split("\n");
-	const y = rows.findIndex((line) => line.includes(`agent @${id} `));
-	await piu.mockMouse.click((rows[y] ?? "").indexOf(`agent @${id}`) + 1, y);
+	const y = rows.findIndex(
+		(line) => line.includes(`@${id} `) && line.includes("|"),
+	);
+	await piu.mockMouse.click((rows[y] ?? "").indexOf(`@${id}`) + 1, y);
 }
 
 async function clickText(piu: Piu, frame: string, text: string) {
@@ -267,9 +278,7 @@ test("a card can be selected and opened by keyboard, and Esc closes the view wit
 	piu.mockInput.pressTab({ shift: true });
 	await piu.waitForFrame((f) => focusedPanels(piu, f).includes("agent"));
 	piu.mockInput.pressArrow("down");
-	await piu.waitForFrame((f) => f.includes("› agent_spawn"));
-	piu.mockInput.pressArrow("down");
-	await piu.waitForFrame((f) => f.includes("› agent @max"));
+	await piu.waitForFrame((f) => f.includes("› @max"));
 	piu.mockInput.pressEnter();
 
 	await piu.waitForFrame((f) => f.includes("Reading the sources"));
@@ -329,15 +338,15 @@ test("cards and an open view show the real end: resident idle is not working, fa
 	control.status("zoe", "failed");
 	control.status("kai", "stopped");
 
-	const frame = await piu.waitForFrame((f) => /agent @max +One +idle/.test(f));
+	const frame = await piu.waitForFrame((f) => /@max .*idle/.test(f));
 	expect(frame).not.toMatch(/@max .*running/);
 	expect(frame).toContain("Working on it");
 	piu.mockInput.pressEscape();
 	const closed = await piu.waitForFrame(
 		(f) =>
-			/@max +One +idle/.test(f) &&
-			/@zoe +Two +failed/.test(f) &&
-			/@kai +Three +stopped/.test(f),
+			/@max +\| Do: One.*idle/.test(f) &&
+			/@zoe +\| Do: Two.*failed/.test(f) &&
+			/@kai +\| Do: Three.*stopped/.test(f),
 	);
 	expect(cards(closed)).toHaveLength(3);
 });
@@ -407,9 +416,7 @@ test("the view follows new output at the bottom, and keeps its place when the re
 	const scrolled = await piu.waitForFrame((f) => !f.includes("Line 61"));
 	control.say("max", "Line 62");
 	control.status("max", "idle");
-	const held = await piu.waitForFrame(
-		(f) => cards(f, "Job")[0]?.includes("idle") === true,
-	);
+	const held = await piu.waitForFrame((f) => /@max .*idle/.test(f));
 	expect(held).not.toContain("Line 62");
 	expect(held).toContain(scrolled.match(/Line \d+/)?.[0] ?? "Line ?");
 
@@ -425,7 +432,10 @@ test("a resident subagent that is idle for a long time shows working again when 
 			"Spawned it",
 			{
 				toolCalls: [
-					{ name: "agent_send", args: { to: "max", message: "Next task" } },
+					{
+						name: "agent_send",
+						args: { to: "max", message: `Next task ${"x".repeat(60)}` },
+					},
 				],
 			},
 			"Sent it",
@@ -442,7 +452,13 @@ test("a resident subagent that is idle for a long time shows working again when 
 	await send(piu, "Wake it");
 
 	const frame = await piu.waitForFrame((f) => f.includes("Sent it"));
-	expect(cards(frame, "Resident job")[0]).toContain("running");
+	const row = cards(frame, "Next task")[0] ?? "";
+	expect(row).toMatch(/agent_send.*@max {4}\| Next task x{39}… +◐ running/);
+	expect(frame.indexOf(row.trim())).toBeGreaterThan(
+		frame.indexOf("Spawned it"),
+	);
+	expect(frame.indexOf(row.trim())).toBeLessThan(frame.indexOf("Sent it"));
+	expect(cards(frame)).toHaveLength(1);
 });
 
 test("a child's launch carries the live reporter and the folder it writes to", async () => {
