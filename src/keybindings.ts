@@ -94,7 +94,7 @@ export function parseChord(spec: string): Chord | undefined {
 	);
 }
 
-function eventChord(event: KeyEvent): Chord {
+export function chordFromEvent(event: KeyEvent): Chord {
 	return canonicalStroke(event.name, event.ctrl, event.shift, event.meta);
 }
 
@@ -138,8 +138,17 @@ export function formatChord(shortcut: Shortcut) {
 	return shortcut.map(formatStroke).join(" ");
 }
 
+export function shortcutSpec(shortcut: Shortcut) {
+	return shortcut
+		.map(
+			(chord) =>
+				`${chord.ctrl ? "ctrl+" : ""}${chord.meta ? "alt+" : ""}${chord.shift ? "shift+" : ""}${chord.name}`,
+		)
+		.join(" ");
+}
+
 export function matches(chord: Chord, event: KeyEvent) {
-	return sameStroke(chord, eventChord(event));
+	return sameStroke(chord, chordFromEvent(event));
 }
 
 export function resolveKeybindings(

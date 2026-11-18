@@ -1,8 +1,10 @@
-import { type BoxRenderable, TextAttributes } from "@opentui/core";
+import { type BoxRenderable, type Clock, TextAttributes } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
-import { createSignal, For, onMount, Show } from "solid-js";
+import { type Accessor, createSignal, For, onMount, Show } from "solid-js";
 import { type GlobalSettingChange, saveGlobalSetting } from "./config.ts";
 import { contains } from "./focus.ts";
+import { createHotkeysTab } from "./hotkeys.tsx";
+import type { Keybindings, ResolvedKeybindings } from "./keybindings.ts";
 import { moduleModal } from "./modal.tsx";
 import type { CommandContext, SettingsTab } from "./module.ts";
 import { scrollIntoView, scrollKeys } from "./scroll.ts";
@@ -15,9 +17,13 @@ function cycle(index: number, step: number, length: number) {
 
 export function createSettings(options: {
 	path: string;
+	clock: Clock;
 	mode: ThemePreference;
 	animations: boolean;
 	tabs: readonly SettingsTab[];
+	keybindings: Accessor<ResolvedKeybindings>;
+	personal: Accessor<Keybindings>;
+	applyKeybindings(next: Keybindings): void;
 	notify(message: string): void;
 }) {
 	const [mode, setMode] = createSignal(options.mode);
@@ -31,6 +37,14 @@ export function createSettings(options: {
 			);
 		}
 	};
+	const hotkeys = createHotkeysTab({
+		path: options.path,
+		clock: options.clock,
+		keybindings: options.keybindings,
+		personal: options.personal,
+		apply: options.applyKeybindings,
+		notify: options.notify,
+	});
 	const global: SettingsTab = {
 		title: "Global",
 		render: ({ theme }) => (
@@ -63,17 +77,33 @@ export function createSettings(options: {
 			/>
 		),
 	};
-	const tabs = [global, ...options.tabs];
+	const tabs = [global, hotkeys.tab, ...options.tabs];
 	const keys = tabs.map((_, index) => index);
+	const status = (active: number) => {
+		const tab = tabs[active] ?? global;
+		return tab === hotkeys.tab ? hotkeys.status() : undefined;
+	};
+	const footer = (active: number) => {
+		const tab = tabs[active] ?? global;
+		if (tab === hotkeys.tab && hotkeys.busy()) return ` ${hotkeys.hint()}`;
+		const parts: string[] = [];
+		if (tab === global) parts.push("↑/↓ select   ⏎ change");
+		else if (tab === hotkeys.tab) parts.push(hotkeys.hint());
+		if (tabs.length > 1) parts.push("ctrl+PgUp/PgDn tabs");
+		parts.push("esc close");
+		return ` ${parts.join("   ")}`;
+	};
 	return {
 		mode,
 		animations,
 		open(context: CommandContext) {
 			const [active, setActive] = createSignal(0);
+			hotkeys.reset();
 			const current = () => tabs[active()] ?? global;
 			let resetScroll: (() => void) | undefined;
 			const select = (key: number) => {
 				if (key === active()) return;
+				hotkeys.cancel();
 				resetScroll?.();
 				setActive(key);
 			};
@@ -110,13 +140,31 @@ export function createSettings(options: {
 						id: "settings-hints",
 						footer: true,
 						render: () => (
-							<text fg={context.theme.faint} wrapMode="none" truncate>
-								{`${active() === 0 ? " ↑/↓ select   ⏎ change   " : " "}${tabs.length > 1 ? "ctrl+PgUp/PgDn tabs   " : ""}esc close`}
-							</text>
+							<box flexDirection="column" flexShrink={0}>
+								<Show when={status(active())}>
+									<text
+										fg={
+											status(active())?.tone === "error"
+												? context.theme.error
+												: context.theme.warning
+										}
+										wrapMode="word"
+									>
+										{` ${status(active())?.text ?? ""}`}
+									</text>
+								</Show>
+								<text fg={context.theme.faint} wrapMode="none" truncate>
+									{footer(active())}
+								</text>
+							</box>
 						),
 					},
 				),
+				onDismiss(reason) {
+					if (reason === "escape" && hotkeys.cancel()) return false;
+				},
 				onKey(event) {
+					if (hotkeys.busy()) return;
 					if (
 						!event.ctrl ||
 						event.meta ||

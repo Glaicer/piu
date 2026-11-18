@@ -177,6 +177,17 @@ export function messageBar(text: string, width?: number) {
 }
 
 export type Piu = Awaited<ReturnType<typeof startPiu>>;
+
+export async function openSettings(piu: Piu) {
+	await piu.waitForFrame((frame) => frame.includes("/ commands"));
+	await piu.mockInput.typeText("/settings");
+	await piu.waitForFrame((frame) => frame.includes("  /settings"));
+	piu.mockInput.pressEnter();
+	return piu.waitForFrame(
+		(frame) => frame.includes("Global") && frame.includes("Animations"),
+	);
+}
+
 export type PanelBox = {
 	id: string;
 	x: number;

@@ -6,6 +6,7 @@ import { ManualClock } from "@opentui/core/testing";
 import {
 	focusedPanels,
 	modalBounds,
+	openSettings,
 	type Piu,
 	prepareFixture,
 	startPiu,
@@ -13,16 +14,6 @@ import {
 import { spawnPiu } from "./process.ts";
 
 const script = { replies: [] };
-
-async function openSettings(piu: Piu) {
-	await piu.waitForFrame((frame) => frame.includes("/ commands"));
-	await piu.mockInput.typeText("/settings");
-	await piu.waitForFrame((frame) => frame.includes("  /settings"));
-	piu.mockInput.pressEnter();
-	return piu.waitForFrame(
-		(frame) => frame.includes("Global") && frame.includes("Animations"),
-	);
-}
 
 async function clickText(piu: Piu, text: string) {
 	const rows = piu.captureCharFrame().split("\n");
@@ -169,7 +160,7 @@ const extensionOptions = {
 test("a loaded personal Extension tab opens by click and its content scrolls under the tab strip", async () => {
 	await using piu = await startPiu(extensionOptions);
 	const frame = await openSettings(piu);
-	expect(frame).toMatch(/Global +Profile/);
+	expect(frame).toMatch(/Global +Hotkeys +Profile/);
 	await clickText(piu, "Profile");
 	await piu.waitForFrame(
 		(frame) =>
@@ -182,7 +173,7 @@ test("a loaded personal Extension tab opens by click and its content scrolls und
 	await piu.waitForFrame(
 		(frame) =>
 			frame.includes("profile row 24") &&
-			/Global +Profile/.test(frame) &&
+			/Global +Hotkeys +Profile/.test(frame) &&
 			!frame.includes("profile row 01"),
 	);
 	await clickText(piu, "Global");
@@ -193,6 +184,7 @@ test("Ctrl+PageUp and Ctrl+PageDown switch tabs without stealing cursor and word
 	await using piu = await startPiu(extensionOptions);
 	await openSettings(piu);
 	piu.mockInput.pressKey("\x1b[6;5~");
+	piu.mockInput.pressKey("\x1b[6;5~");
 	await piu.waitForFrame((frame) => frame.includes("profile input"));
 	await clickText(piu, "profile input");
 	await piu.mockInput.typeText("one ab");
@@ -202,6 +194,7 @@ test("Ctrl+PageUp and Ctrl+PageDown switch tabs without stealing cursor and word
 	piu.mockInput.pressKey("ARROW_LEFT", { meta: true });
 	await piu.mockInput.typeText("Y");
 	await piu.waitForFrame((frame) => frame.includes("one YaXb"));
+	piu.mockInput.pressKey("\x1b[5;5~");
 	piu.mockInput.pressKey("\x1b[5;5~");
 	await piu.waitForFrame((frame) => /Theme +auto/.test(frame));
 });

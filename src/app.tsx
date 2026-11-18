@@ -40,6 +40,7 @@ import { createKeybindingRouter } from "./keybinding-router.ts";
 import {
 	commandAction,
 	type KeybindingAction,
+	type Keybindings,
 	type ResolvedKeybindings,
 	resolveKeybindings,
 	type Shortcut,
@@ -250,11 +251,24 @@ function App(props: {
 	const { mode, ...overrides } = props.config.theme;
 	const toasts = createToasts(renderer.clock);
 	const modals = createModals();
+	const catalog = props.keybindings.actions;
+	const [keybindings, setKeybindings] = createSignal(props.keybindings);
+	const [personal, setPersonal] = createSignal<Keybindings>(
+		props.config.keybindings,
+	);
+	const applyKeybindings = (next: Keybindings) => {
+		setPersonal(next);
+		setKeybindings(resolveKeybindings(catalog, next));
+	};
 	const settings = createSettings({
 		path: join(props.home, "config.json"),
+		clock: renderer.clock,
 		mode,
 		animations: props.config.animations,
 		tabs: props.settingsTabs,
+		keybindings,
+		personal,
+		applyKeybindings,
 		notify: (message) => toasts.show(message, "error"),
 	});
 	const theme = createTheme(renderer, overrides, settings.mode);
@@ -490,7 +504,7 @@ function App(props: {
 	};
 	const router = createKeybindingRouter({
 		clock: renderer.clock,
-		bindings: () => props.keybindings.effective,
+		bindings: () => keybindings().effective,
 		enabled: () => modals.stack().length === 0,
 		canUseSequence,
 		run: runKeybinding,
@@ -511,7 +525,7 @@ function App(props: {
 		cwd: props.cwd,
 		...commandContext,
 		commands,
-		keybindings: () => props.keybindings,
+		keybindings,
 		registerFocusedAction: (
 			id: string,
 			target: () => Renderable | undefined,

@@ -9,6 +9,7 @@ import {
 	type Shortcut,
 	sameShortcut,
 	shiftEnter,
+	shortcutSpec,
 } from "./keybindings.ts";
 import type { Size, Slot } from "./layout.tsx";
 import type { ModuleSettings } from "./module.ts";
@@ -197,6 +198,45 @@ export function saveGlobalSetting(path: string, change: GlobalSettingChange) {
 	} else {
 		writeJson(path, { ...config, animations: change.value }, 2);
 	}
+}
+
+export function saveKeybinding(
+	path: string,
+	action: string,
+	shortcuts: readonly Shortcut[] | undefined,
+	moveToEnd = false,
+) {
+	const { value, error } = readJson(path);
+	if (error) throw new Error(error);
+	const config = value === undefined ? {} : object(value, "config");
+	const bindings =
+		"keybindings" in config ? object(config.keybindings, "keybindings") : {};
+	const keybindings: Fields = {};
+	if (moveToEnd) {
+		for (const [id, previous] of Object.entries(bindings)) {
+			if (id !== action) keybindings[id] = previous;
+		}
+	} else {
+		for (const [id, previous] of Object.entries(bindings)) {
+			if (id !== action) keybindings[id] = previous;
+			else if (shortcuts !== undefined)
+				keybindings[id] = bindingValue(shortcuts);
+		}
+	}
+	// why: a new assignment goes last in the file, because personal Config order decides a shortcut conflict.
+	if (
+		shortcuts !== undefined &&
+		(moveToEnd || !Object.hasOwn(bindings, action))
+	) {
+		keybindings[action] = bindingValue(shortcuts);
+	}
+	writeJson(path, { ...config, keybindings }, 2);
+}
+
+function bindingValue(shortcuts: readonly Shortcut[]) {
+	const specs = shortcuts.map(shortcutSpec);
+	if (specs.length === 0) return [];
+	return specs.length === 1 ? specs[0] : specs;
 }
 
 function readUserConfig(path: string): Fields {
@@ -402,7 +442,26 @@ function parseShortcut(spec: string, action: string, path: string): Shortcut {
 			`expected at most two strokes separated by a space, got ${parts.length}`,
 		);
 	}
-	const chords = parts.map((part) => parseStroke(part, path));
+	return validateChords(
+		parts.map((part) => parseStroke(part, path)),
+		action,
+		path,
+	);
+}
+
+export function validateShortcut(
+	shortcut: Shortcut,
+	action: string,
+	path = `keybindings.${action}`,
+): Shortcut {
+	return validateChords(shortcut, action, path);
+}
+
+function validateChords(
+	chords: readonly Chord[],
+	action: string,
+	path: string,
+): Shortcut {
 	for (const [at, chord] of chords.entries()) {
 		if (chord.name === "c" && chord.ctrl && !chord.shift && !chord.meta) {
 			throw fieldError(

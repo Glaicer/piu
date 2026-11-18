@@ -46,7 +46,7 @@ The full name of the action is `<extension>.<name>`, so this one is `modes.next-
 }
 ```
 
-A value is one shortcut string or an array of them: `"ctrl+l"`, `["ctrl+l", "ctrl+x m"]`, or `[]`. An array replaces the default shortcuts, and `[]` removes them all. A shortcut is one stroke or two strokes separated by a space, such as `"ctrl+x m"`; three or more strokes are a startup error. `run` receives the same context as a command.
+A value is one shortcut string or an array of them: `"ctrl+l"`, `["ctrl+l", "ctrl+x m"]`, or `[]`. An array replaces the default shortcuts, and `[]` removes them all. A shortcut is one stroke or two strokes separated by a space, such as `"ctrl+x m"`; three or more strokes are a startup error. `run` receives the same context as a command. The Hotkeys tab in `/settings` shows this action in its Extension's group and edits the same `keybindings` key.
 
 Piu's own defaults are assigned first, then the defaults of enabled Extensions in the order they loaded, then the personal Config in key order. When two actions claim the same shortcut, the later assignment wins and the earlier action keeps its other shortcuts; a single-stroke shortcut and a two-stroke shortcut that starts with it conflict the same way. This is not a startup error. Commands stay addressable as `command.<name>`; piu gives `/model` and `/reasoning` their defaults, and an Extension's command gets none unless you assign one.
 
