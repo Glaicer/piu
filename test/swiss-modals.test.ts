@@ -100,7 +100,7 @@ test("the model picker marks the active tab, the search and the current model th
 		bg: "surface",
 		bold: false,
 	});
-	expect(frame).toContain("tab search/list   ←/→ tabs   f favorite   ⏎ pick");
+	expect(frame).toContain("tab search/list   ←/→ tabs   f favorite   ⏎ apply");
 });
 
 test("a select dialog puts its title in the Modal's title row and inverts the chosen option", async () => {

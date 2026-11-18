@@ -5,6 +5,11 @@ import {
 } from "@opentui/core";
 import { createEffect, createSignal, untrack } from "solid-js";
 import {
+	AdvisorDialog,
+	advisorDialogTitle,
+	parseAdvisorDialog,
+} from "./advisor-dialog.tsx";
+import {
 	modalFrameColumns,
 	modalHintColumns,
 	untitledModalFrameRows,
@@ -141,6 +146,32 @@ function dialogModal(
 ): ModalRequest {
 	const answer = (given: DialogAnswer) =>
 		actions.answerDialog(dialog.id, given);
+	const advisor =
+		dialog.method === "editor" && dialog.title === advisorDialogTitle
+			? parseAdvisorDialog(dialog.prefill)
+			: undefined;
+	if (advisor) {
+		return {
+			...moduleModal(
+				{
+					id: `dialog-${dialog.id}`,
+					title: "Advisor",
+					render: (context) => (
+						<AdvisorDialog
+							context={context}
+							data={advisor}
+							apply={(value) => answer({ value })}
+						/>
+					),
+				},
+				{ width: 72, height: Math.min(25, screenRows) },
+			),
+			onDismiss: () => {
+				answer({ cancelled: true });
+				return undefined;
+			},
+		};
+	}
 	return {
 		...moduleModal(
 			{

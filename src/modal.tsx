@@ -153,6 +153,7 @@ function ModalView(props: {
 			>
 				<SlotView
 					modal
+					onModalEscape={() => props.modals.dismiss(props.entry, "escape")}
 					slot={request.slot}
 					parentDirection="column"
 					panels={request.panels}

@@ -31,9 +31,11 @@ import {
 	parseContextInjections,
 	parseContextUsage,
 } from "./context-usage.ts";
+import { sameModel } from "./model.ts";
 import {
 	type createModelSelection,
 	isThinkingLevel,
+	thinkingLevels,
 } from "./model-selection.ts";
 import {
 	parseLog,
@@ -75,6 +77,10 @@ export type ModelInfo = {
 	readonly name: string;
 };
 
+type AvailableModel = ModelInfo & {
+	readonly thinkingLevels: readonly ThinkingLevel[];
+};
+
 export type BackendCommand = {
 	readonly name: string;
 	readonly description?: string;
@@ -113,7 +119,7 @@ export type PiState = {
 	readonly commands: readonly BackendCommand[];
 	readonly model: ModelInfo | null;
 	readonly modelRestoring: boolean;
-	readonly models: readonly ModelInfo[];
+	readonly models: readonly AvailableModel[];
 	readonly thinkingLevel: ThinkingLevel;
 	readonly thinkingLevels: readonly ThinkingLevel[];
 	readonly messages: readonly PiMessage[];
@@ -140,7 +146,7 @@ export type PiActions = {
 	followUp(text: string): Promise<boolean>;
 	answerDialog(id: string, answer: DialogAnswer): void;
 	abort(): Promise<readonly string[]>;
-	setModel(model: ModelInfo): Promise<void>;
+	setModel(model: ModelInfo, level?: ThinkingLevel): Promise<void>;
 	setThinkingLevel(level: ThinkingLevel): Promise<void>;
 	newSession(): Promise<void>;
 	switchSession(sessionFile: string): Promise<void>;
@@ -168,7 +174,7 @@ export function createPiState(options: {
 		commands: BackendCommand[];
 		model: ModelInfo | null;
 		modelRestoring: boolean;
-		models: ModelInfo[];
+		models: AvailableModel[];
 		thinkingLevel: ThinkingLevel;
 		thinkingLevels: ThinkingLevel[];
 		messages: PiMessage[];
@@ -318,7 +324,15 @@ export function createPiState(options: {
 			.request({ type: "get_available_models" })
 			.then((response) => {
 				if (response.command === "get_available_models" && response.success) {
-					setState("models", reconcile(response.data.models.map(toModelInfo)));
+					setState(
+						"models",
+						reconcile(
+							response.data.models.map((model) => ({
+								...toModelInfo(model),
+								thinkingLevels: modelThinkingLevels(model),
+							})),
+						),
+					);
 				}
 			})
 			.catch(ignoreDeadBackend);
@@ -884,15 +898,28 @@ export function createPiState(options: {
 				? [...cleared.data.steering, ...cleared.data.followUp]
 				: [];
 		},
-		async setModel({ provider, id }) {
-			await ready;
-			const success = await refuseToToast({
-				type: "set_model",
-				provider,
-				modelId: id,
+		async setModel(model, level) {
+			// why: Pi switches the model and level in separate RPCs; a prompt must wait for both.
+			sessionTransition = sessionTransition.then(async () => {
+				await ready;
+				const epoch = sessionEpoch;
+				const switched =
+					(level !== undefined && sameModel(model, state.model)) ||
+					(await refuseToToast({
+						type: "set_model",
+						provider: model.provider,
+						modelId: model.id,
+					}));
+				if (epoch !== sessionEpoch) return;
+				const applied =
+					switched &&
+					(level === undefined ||
+						(await refuseToToast({ type: "set_thinking_level", level })));
+				if (epoch !== sessionEpoch) return;
+				await refreshSession();
+				if (applied && epoch === sessionEpoch) saveSelection();
 			});
-			await refreshSession();
-			if (success) saveSelection();
+			await sessionTransition;
 		},
 		async setThinkingLevel(level) {
 			await ready;
@@ -990,6 +1017,18 @@ function toModelInfo(model: {
 		id: model.id,
 		name: model.name || model.id,
 	};
+}
+
+function modelThinkingLevels(model: NonNullable<RpcSessionState["model"]>) {
+	// why: Pi's level RPC only describes the active model; preview the others from their model definitions.
+	if (!model.reasoning) return ["off"] satisfies ThinkingLevel[];
+	return thinkingLevels.filter((level) => {
+		const mapped = model.thinkingLevelMap?.[level];
+		return (
+			mapped !== null &&
+			(mapped !== undefined || (level !== "xhigh" && level !== "max"))
+		);
+	});
 }
 
 function compactionOutcome(

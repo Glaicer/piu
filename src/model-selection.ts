@@ -13,7 +13,7 @@ type ReadResult = {
 	error?: string;
 };
 
-const levels: readonly ThinkingLevel[] = [
+export const thinkingLevels: readonly ThinkingLevel[] = [
 	"off",
 	"minimal",
 	"low",
@@ -24,7 +24,9 @@ const levels: readonly ThinkingLevel[] = [
 ];
 
 export function isThinkingLevel(value: unknown): value is ThinkingLevel {
-	return typeof value === "string" && levels.includes(value as ThinkingLevel);
+	return (
+		typeof value === "string" && thinkingLevels.includes(value as ThinkingLevel)
+	);
 }
 
 function parse(value: unknown): Selection | undefined {

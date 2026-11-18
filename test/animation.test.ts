@@ -113,9 +113,10 @@ for (const animations of [true, false]) {
 		await clickText(app.piu, "faux-1");
 		await app.frame();
 		await clickText(app.piu, "faux-2");
+		app.piu.mockInput.pressEnter();
 		const closed = await app.frame();
 		expect(focusedPanels(app.piu, closed)).toEqual(["input"]);
-		expect(closed).not.toContain("faux-1");
+		expect(closed).not.toContain("search models");
 		await app.piu.mockInput.typeText("draft");
 		const frame = await app.frame();
 		expect(frame).toContain("draft");

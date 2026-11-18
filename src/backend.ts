@@ -41,7 +41,11 @@ export function startBackend(
 	const child = spawn(
 		config.command,
 		[...config.args, "--mode", "rpc", ...userArgs],
-		{ stdio: ["pipe", "pipe", "pipe"], cwd },
+		{
+			stdio: ["pipe", "pipe", "pipe"],
+			cwd,
+			env: { ...process.env, PIU_ADVISOR_DIALOG: "1" },
+		},
 	);
 	const listeners = new Set<(record: BackendRecord) => void>();
 	const healthListeners = new Set<(health: BackendHealth) => void>();

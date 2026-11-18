@@ -1,10 +1,11 @@
 import {
 	type KeyEvent,
+	type MouseEvent,
 	type Renderable,
 	ScrollBoxRenderable,
 } from "@opentui/core";
 import { type Accessor, createSignal, For, onCleanup } from "solid-js";
-import { paintPanel, paintSheet } from "./card.ts";
+import { paintPanel, paintSheet, sheetHintOffset } from "./card.ts";
 import { channelFor } from "./channel.ts";
 import type { PanelFocus } from "./focus.ts";
 import type { ModuleContext, PlacedModule, Presence } from "./module.ts";
@@ -42,6 +43,7 @@ type SlotProps = {
 	parentDirection: Direction;
 	inContent?: boolean;
 	modal?: boolean;
+	onModalEscape?(): void;
 	joinedAt?: () => number | undefined;
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	context: SharedContext;
@@ -116,6 +118,7 @@ export function SlotView(props: SlotProps) {
 							parentDirection={slot.direction}
 							inContent={slot.size === "content"}
 							modal={props.modal}
+							onModalEscape={props.onModalEscape}
 							joinedAt={joinedAt}
 							panels={props.panels}
 							context={props.context}
@@ -192,6 +195,20 @@ export function SlotView(props: SlotProps) {
 					paddingRight: outsideModalScrollbar
 						? modalFrame.paddingRight - 1
 						: modalFrame.paddingRight,
+					onMouseDown(this: Renderable, event: MouseEvent) {
+						const x = event.x - this.screenX;
+						const start = sheetHintOffset(this.width, modalHint);
+						if (
+							event.button === 0 &&
+							event.y === this.screenY + 1 &&
+							x >= start &&
+							x < start + modalHint.length
+						) {
+							event.preventDefault();
+							event.stopPropagation();
+							props.onModalEscape?.();
+						}
+					},
 					renderBefore: paintSheet(() => ({
 						fill: shared.theme.surface,
 						rule: shared.theme.text,

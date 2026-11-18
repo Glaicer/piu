@@ -74,6 +74,10 @@ export type SheetPaint = {
 	hintColor?: string;
 };
 
+export function sheetHintOffset(width: number, hint: string) {
+	return width - 2 - hint.length;
+}
+
 // why: a floating surface (a Modal, the `/` list) has no contour, so the heavy line along its top row is what sets it apart from the Panel behind it.
 export function paintSheet(paint: () => SheetPaint) {
 	return function (this: Box, buffer: OptimizedBuffer) {
@@ -96,7 +100,7 @@ export function paintSheet(paint: () => SheetPaint) {
 		if (hint && hintColor)
 			buffer.drawText(
 				hint,
-				x + width - 2 - hint.length,
+				x + sheetHintOffset(width, hint),
 				y + 1,
 				parseColor(hintColor),
 				fill,

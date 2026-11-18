@@ -37,6 +37,76 @@ async function raise(args: UiArgs) {
 
 const gotValue = (value: string) => `Extension got {"value":${value}}`;
 
+test("Advisor searches models and sends the model and effort in one reply", async () => {
+	await using piu = await raise({
+		method: "editor",
+		title: "piu:advisor:v1",
+		prefill: JSON.stringify({
+			current: 1,
+			options: [
+				{ label: "Use current model", levels: ["off", "high"] },
+				{ label: "Disable advisor", levels: [] },
+				{
+					label: "test/alpha",
+					levels: ["off", "high"],
+					model: { provider: "test", id: "alpha", name: "Alpha" },
+				},
+			],
+		}),
+	});
+	await piu.waitForFrame(
+		(f) =>
+			f.includes("Disable advisor") &&
+			f.includes("Use current model") &&
+			f.includes("Favorites"),
+	);
+	await piu.mockInput.typeText("alpha");
+	await piu.waitForFrame(
+		(f) => f.includes("Reasoning effort") && f.includes("Alpha"),
+	);
+	piu.mockInput.pressTab();
+	piu.mockInput.pressTab();
+	piu.mockInput.pressArrow("right");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) =>
+		agentPanel(f).includes(
+			gotValue(JSON.stringify(JSON.stringify({ index: 2, effort: "high" }))),
+		),
+	);
+});
+
+test("clicking the Advisor search row returns focus after selecting a model", async () => {
+	await using piu = await raise({
+		method: "editor",
+		title: "piu:advisor:v1",
+		prefill: JSON.stringify({
+			current: 0,
+			options: [
+				{ label: "Disable advisor", levels: [] },
+				{
+					label: "test/alpha",
+					levels: ["minimal", "high"],
+					model: { provider: "test", id: "alpha", name: "Alpha" },
+				},
+			],
+		}),
+	});
+	const frame = await piu.waitForFrame(
+		(f) => f.includes("search models") && f.includes("Alpha"),
+	);
+	const lines = frame.split("\n");
+	const modelRow = lines.findIndex((line) => line.includes("Alpha"));
+	const searchRow = lines.findIndex((line) => line.includes("search models"));
+	await piu.mockMouse.click(lines[modelRow]?.indexOf("Alpha") ?? 0, modelRow);
+	const effortFrame = await piu.waitForFrame(
+		(f) => f.includes("Reasoning effort") && /\bmin\s+high\b/.test(f),
+	);
+	expect(effortFrame).not.toContain("minimal");
+	await piu.mockMouse.click(lines[searchRow]?.indexOf("›") ?? 0, searchRow);
+	await piu.mockInput.typeText("missing");
+	await piu.waitForFrame((f) => f.includes("No matching models"));
+});
+
 test("a select dialog opens a Modal, and the chosen option reaches the extension", async () => {
 	await using piu = await raise({
 		method: "select",

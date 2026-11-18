@@ -325,6 +325,7 @@ test("a refused model change leaves the saved personal selection untouched", asy
 		await piu.waitForFrame((f) => f.includes("other"));
 		writeFileSync(join(dir, "script.json.deny"), "");
 		await clickText(piu, "other");
+		await clickText(piu, "⏎ apply");
 		await piu.waitForFrame(
 			(f) => f.includes("No API key") && f.includes("faux-1"),
 		);
@@ -361,8 +362,9 @@ test("filtering keeps the highlighted model when it still matches", async () => 
 	await piu.waitForFrame((f) => f.includes("faux-2"));
 	piu.mockInput.pressTab();
 	piu.mockInput.pressArrow("down");
-	piu.mockInput.pressTab();
+	piu.mockInput.pressTab({ shift: true });
 	await piu.mockInput.typeText("faux");
+	await piu.waitForFrame((f) => f.includes("› faux"));
 	piu.mockInput.pressEnter();
 	await piu.waitForFrame((f) => f.includes("faux-2") && !f.includes("faux-1"));
 });
@@ -413,13 +415,12 @@ test("the selected model and reasoning survive a new launch", async () => {
 			await clickText(piu, "faux-1");
 			await piu.waitForFrame((f) => f.includes("faux-2"));
 			await clickText(piu, "faux-2");
-			await piu.waitForFrame(
-				(f) => f.includes("faux-2") && !f.includes("faux-1"),
-			);
-			await clickText(piu, "Reasoning: off");
-			await piu.waitForFrame((f) => f.includes("high"));
+			await piu.waitForFrame((f) => f.includes("med    high"));
 			await clickText(piu, "high");
-			await piu.waitForFrame((f) => f.includes("Reasoning: high"));
+			await clickText(piu, "⏎ apply");
+			await piu.waitForFrame(
+				(f) => f.includes("faux-2") && f.includes("Reasoning: high"),
+			);
 		}
 		{
 			await using piu = await startPiu({
@@ -735,6 +736,7 @@ test("a resumed session keeps its model and reasoning without changing the perso
 			await clickText(piu, "faux-1");
 			await piu.waitForFrame((f) => f.includes("faux-2"));
 			await clickText(piu, "faux-2");
+			await clickText(piu, "⏎ apply");
 			await piu.waitForFrame(
 				(f) => f.includes("faux-2") && !f.includes("faux-1"),
 			);
@@ -877,6 +879,7 @@ test("two instances keep their live models and save favorites independently of t
 			await clickText(second, "faux-1");
 			await second.waitForFrame((f) => f.includes("faux-2"));
 			await clickText(second, "faux-2");
+			await clickText(second, "⏎ apply");
 			await second.waitForFrame(
 				(f) => f.includes("faux-2") && !f.includes("faux-1"),
 			);
@@ -1089,6 +1092,7 @@ test("a failed personal selection write is shown without undoing the Backend sel
 		await clickText(piu, "faux-1");
 		await piu.waitForFrame((f) => f.includes("faux-2"));
 		await clickText(piu, "faux-2");
+		await clickText(piu, "⏎ apply");
 		await piu.waitForFrame(
 			(f) =>
 				f.includes("Could not save model selection") && f.includes("faux-2"),
@@ -1195,8 +1199,10 @@ test("search text stays out of the prompt and Esc returns the keyboard to it", a
 	await piu.waitForFrame((f) => inputArea(f).includes("after"));
 });
 
-test("clicking the model opens a centered Modal of the Backend's models, and picking one switches the Backend", async () => {
-	await using piu = await start({ replies: ["Answered by {model}"] });
+test("the centered model picker applies the model and effort chosen with the mouse", async () => {
+	await using piu = await start({
+		replies: ["Answered by {model} with {reasoning}"],
+	});
 
 	await clickText(piu, "faux-1");
 	const open = await piu.waitForFrame((f) => f.includes("faux-2"));
@@ -1206,6 +1212,12 @@ test("clicking the model opens a centered Modal of the Backend's models, and pic
 	expect(Math.abs(center.x - 80)).toBeLessThan(30);
 
 	await clickText(piu, "faux-2");
+	await piu.waitForFrame((f) => f.includes("min    low    med    high"));
+	await clickText(piu, "low");
+	await piu.waitForFrame(
+		(f) => f.includes("[ ]────[ ]────[x]────") && f.includes("faux-1  current"),
+	);
+	await clickText(piu, "⏎ apply");
 	const closed = await piu.waitForFrame(
 		(f) => f.includes("faux-2") && !f.includes("faux-1"),
 	);
@@ -1213,7 +1225,7 @@ test("clicking the model opens a centered Modal of the Backend's models, and pic
 
 	await piu.mockInput.typeText("Hi");
 	piu.mockInput.pressEnter();
-	await piu.waitForFrame((f) => f.includes("Answered by faux-2"));
+	await piu.waitForFrame((f) => f.includes("Answered by faux-2 with low"));
 });
 
 test("the reasoning picker lists only the levels the current model supports, and picking one updates it", async () => {
@@ -1228,6 +1240,7 @@ test("the reasoning picker lists only the levels the current model supports, and
 	await clickText(piu, "faux-1");
 	await piu.waitForFrame((f) => f.includes("faux-2"));
 	await clickText(piu, "faux-2");
+	await clickText(piu, "⏎ apply");
 	await piu.waitForFrame((f) => !f.includes("faux-1"));
 
 	await clickText(piu, "Reasoning: off");
@@ -1356,6 +1369,69 @@ test("the model picker works from the keyboard: Down moves, Enter picks", async 
 	await piu.mockInput.typeText("Hi");
 	piu.mockInput.pressEnter();
 	await piu.waitForFrame((f) => f.includes("Answered by faux-2"));
+});
+
+test("the model picker applies the highlighted model and reasoning before the next prompt", async () => {
+	await using piu = await start({
+		replies: ["Answered by {model} with {reasoning}"],
+		limitedReasoning: true,
+	});
+	await piu.mockInput.typeText("Hi");
+	await clickText(piu, "faux-1");
+	await piu.waitForFrame(
+		(f) => f.includes("☆ faux-2") && f.includes("Not supported by this model"),
+	);
+
+	piu.mockInput.pressArrow("down");
+	await piu.waitForFrame(
+		(f) =>
+			f.includes("off    min    low    med    high") &&
+			f.includes("[x]────[ ]────[ ]────[ ]────[ ]"),
+	);
+	piu.mockInput.pressTab();
+	piu.mockInput.pressArrow("right");
+	await piu.waitForFrame((f) => f.includes("[ ]────[x]────[ ]────[ ]────[ ]"));
+
+	piu.mockInput.pressEnter();
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) => f.includes("Answered by faux-2 with minimal"));
+});
+
+test("Esc discards a reasoning draft without changing the current model", async () => {
+	await using piu = await start();
+	await clickText(piu, "faux-1");
+	await piu.waitForFrame((f) => f.includes("☆ faux-2"));
+	await clickText(piu, "faux-2");
+	await piu.waitForFrame((f) => f.includes("min    low"));
+	await clickText(piu, "min");
+	await piu.waitForFrame((f) => f.includes("[ ]────[x]────[ ]"));
+	piu.mockInput.pressEscape();
+	await piu.waitForFrame(
+		(f) => !f.includes("search models") && f.includes("faux-1 · no reasoning"),
+	);
+	await clickText(piu, "faux-1");
+	await piu.waitForFrame((f) => f.includes("☆ faux-2"));
+	piu.mockInput.pressArrow("down");
+	await piu.waitForFrame((f) => f.includes("[x]────[ ]────[ ]"));
+});
+
+test("clicking esc closes only the top Modal", async () => {
+	await using piu = await startPiu({
+		script: none,
+		extensions,
+		config: { placement: { status: ["stacker.opener"] } },
+	});
+	await piu.waitForFrame((f) => f.includes("open outer"));
+	await clickText(piu, "open outer");
+	await piu.waitForFrame((f) => f.includes("OUTER"));
+	await clickText(piu, "open inner");
+	const frame = await piu.waitForFrame((f) => f.includes("INNER"));
+	const title = locate(frame, "INNER").y;
+	const x = (frame.split("\n")[title] ?? "").indexOf("esc");
+	expect(x).toBeGreaterThanOrEqual(0);
+	await piu.mockMouse.click(x, title);
+	const outer = await piu.waitForFrame((f) => !f.includes("INNER"));
+	expect(outer).toContain("OUTER");
 });
 
 test("a click outside a stacked Modal closes only the top one", async () => {
