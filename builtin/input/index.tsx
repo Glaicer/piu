@@ -369,6 +369,7 @@ function Prompt(props: { context: ModuleContext }) {
 				/>
 				<box
 					width={1}
+					marginLeft={1}
 					height="100%"
 					ref={(node) => {
 						node.add(scrollbar);
@@ -408,7 +409,7 @@ function Prompt(props: { context: ModuleContext }) {
 						position="absolute"
 						left={anchor().left - 4}
 						top={Math.max(0, anchor().top - shown().length - 4)}
-						width={anchor().width + 6}
+						width={anchor().width + 7}
 						height={shown().length + 2}
 						zIndex={50}
 						flexDirection="column"

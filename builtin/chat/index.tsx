@@ -113,20 +113,7 @@ function Messages(props: { context: ModuleContext }) {
 							</Index>
 						) : (
 							message.role === "user" && (
-								<box
-									renderBefore={paintCard(() => ({ fill: theme.raised }))}
-									paddingX={2}
-									paddingY={1}
-									marginTop={1}
-									flexDirection="row"
-								>
-									<text fg={theme.text} flexGrow={1} flexShrink={1}>
-										<b>{messageText(message)}</b>
-									</text>
-									<text fg={theme.faint} flexShrink={0} marginLeft={1}>
-										you
-									</text>
-								</box>
+								<UserMessage message={message} theme={theme} />
 							)
 						)}
 					</>
@@ -151,6 +138,64 @@ function Messages(props: { context: ModuleContext }) {
 				)}
 			</For>
 			<BackendCard context={props.context} selection={selection} />
+		</box>
+	);
+}
+
+function UserMessage(props: {
+	message: Extract<PiMessage, { role: "user" }>;
+	theme: Theme;
+}) {
+	const text = () => contentText(props.message.content);
+	// why: Pi expands /skill before RPC delivers the message; only the chat projection strips the instructions.
+	const skill = createMemo(() =>
+		text().match(
+			/^<skill name="([^"]+)" location="[^"]+">\n[\s\S]*?\n<\/skill>(?:\n\n([\s\S]+))?$/,
+		),
+	);
+	const request = () => skill()?.[2];
+	const theme = props.theme;
+	const author = () => (
+		<text fg={theme.faint} flexShrink={0} marginLeft={1}>
+			you
+		</text>
+	);
+	const prompt = (value: string) => (
+		<text fg={theme.text} flexGrow={1} flexShrink={1}>
+			<b>{value}</b>
+		</text>
+	);
+	return (
+		<box
+			renderBefore={paintCard(() => ({ fill: theme.raised }))}
+			paddingX={2}
+			paddingY={1}
+			marginTop={1}
+			flexDirection={skill() ? "column" : "row"}
+		>
+			<Show
+				when={skill()}
+				fallback={
+					<>
+						{prompt(text())}
+						{author()}
+					</>
+				}
+			>
+				<Show when={request()}>
+					<box flexDirection="row">
+						{prompt(request() ?? "")}
+						{author()}
+					</box>
+					<box height={1} border={["top"]} borderColor={theme.border} />
+				</Show>
+				<box flexDirection="row" justifyContent="space-between">
+					<text fg={theme.surface} bg={theme.chip} wrapMode="none" truncate>
+						<b>{` ${skill()?.[1]} `}</b>
+					</text>
+					<Show when={!request()}>{author()}</Show>
+				</box>
+			</Show>
 		</box>
 	);
 }
@@ -262,10 +307,6 @@ const PENDING_LABELS = {
 
 function pendingLabel(entry: PendingMessage) {
 	return PENDING_LABELS[entry.mode];
-}
-
-function messageText(message: PiMessage): string {
-	return "content" in message ? contentText(message.content) : "";
 }
 
 export default {

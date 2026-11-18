@@ -444,6 +444,11 @@ test("arrow keys switch between usage and injections in one Modal", async () => 
 		8000,
 	);
 	expect(modalBounds(piu)).toEqual(bounds);
+	piu.mockInput.pressArrow("right");
+	await piu.waitForFrame(
+		(frame) => modalText(piu, frame).includes("No request to the model yet."),
+		3000,
+	);
 }, 20000);
 
 test("a click on a tab switches the view", async () => {

@@ -18,7 +18,7 @@ import { Tabs } from "../../src/tabs.tsx";
 
 const tabs = ["Favorites", "All"] as const;
 type ModelTab = (typeof tabs)[number];
-const WIDTH = 60;
+const WIDTH = 72;
 
 function ModelPicker(props: { context: CommandContext; close(): void }) {
 	const { pi, theme, actions, modelFavorites } = props.context;
@@ -138,8 +138,9 @@ function ModelPicker(props: { context: CommandContext; close(): void }) {
 				marginTop={1}
 				height={12}
 				flexShrink={1}
-				contentOptions={{ flexDirection: "column" }}
-				scrollbarOptions={{
+				contentOptions={{ flexDirection: "column", paddingRight: 1 }}
+				verticalScrollbarOptions={{
+					position: "absolute",
 					trackOptions: {
 						foregroundColor: theme.text,
 						backgroundColor: theme.surface,

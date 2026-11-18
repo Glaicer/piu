@@ -120,6 +120,7 @@ export function ToolCard(props: {
 			backgroundColor={row.selected() ? props.theme.selection : undefined}
 			paddingX={1}
 			marginTop={props.grouped ? 0 : 1}
+			marginBottom={shown() === undefined ? 0 : 1}
 		>
 			<box ref={row.ref} flexDirection="row" onMouseDown={row.activate}>
 				{row.selected() && (

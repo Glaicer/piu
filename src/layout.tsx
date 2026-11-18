@@ -70,11 +70,12 @@ export const modalContentInsets = {
 // why: a Modal whose Module has no title (a Dialog, a subagent's window) gives its first row the title row under the heavy line, so the Module draws its own heading there and can wrap it; the heading keeps clear of the hint at the row's right end.
 const untitledPaddingTop = 1;
 const modalHint = "esc";
+const scrollbarGutter = 2;
 export const modalHintColumns = modalHint.length + 1;
 export const untitledModalFrameRows =
 	untitledPaddingTop + modalFrame.paddingBottom;
 export const modalFrameColumns =
-	modalFrame.paddingLeft + modalFrame.paddingRight;
+	modalFrame.paddingLeft + modalFrame.paddingRight + scrollbarGutter;
 
 export function SlotView(props: SlotProps) {
 	const slot = props.slot;
@@ -171,8 +172,8 @@ export function SlotView(props: SlotProps) {
 				? entries[0]?.placed.module.title
 				: undefined;
 	const bar = slot.bar ?? false;
-	// why: a Modal that follows live output gains a scrollbar mid-read; the scrollbar is drawn over a column kept empty for it, so the text never rewraps, and it sits right of the esc hint instead of over it.
-	const reservesScrollbar =
+	// why: in live Modals the scrollbar sits to the right of the esc hint.
+	const outsideModalScrollbar =
 		props.modal === true &&
 		entries.some((entry) => entry.placed.module.followsOutput);
 	const frame = bar
@@ -188,7 +189,7 @@ export function SlotView(props: SlotProps) {
 			? {
 					...modalFrame,
 					paddingTop: title() ? modalFrame.paddingTop : untitledPaddingTop,
-					paddingRight: reservesScrollbar
+					paddingRight: outsideModalScrollbar
 						? modalFrame.paddingRight - 1
 						: modalFrame.paddingRight,
 					renderBefore: paintSheet(() => ({
@@ -306,10 +307,11 @@ export function SlotView(props: SlotProps) {
 				stickyStart="bottom"
 				contentOptions={{
 					flexDirection: slot.direction,
-					paddingRight: reservesScrollbar ? 3 : 0,
+					paddingRight: scrollbarGutter + (outsideModalScrollbar ? 1 : 0),
 				}}
-				scrollbarOptions={{
-					position: reservesScrollbar ? "absolute" : "relative",
+				// why: keep the scrollbar out of layout so overflow never changes wrapping.
+				verticalScrollbarOptions={{
+					position: "absolute",
 					trackOptions: {
 						foregroundColor: shared.theme.border,
 						backgroundColor: shared.theme.surface,
@@ -330,7 +332,7 @@ export function SlotView(props: SlotProps) {
 			{followsOutput() && awayFromBottom() && (
 				<box
 					position="absolute"
-					right={2}
+					right={scrollbarGutter + 1}
 					bottom={footerHeight() + 1}
 					backgroundColor={shared.theme.jump}
 				>

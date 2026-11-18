@@ -58,6 +58,37 @@ function spyOnHighlights() {
 const agentPanel = (frame: string) => panelText(frame, 10);
 const sidePanel = (frame: string) => panelText(frame, 150);
 
+test("a skill invocation separates its chip from the request and hides its instructions", async () => {
+	await using piu = await startPiu({
+		extraBackendArgs: [
+			"--skill",
+			join(import.meta.dir, "fixtures/skills/review-notes/SKILL.md"),
+		],
+		script: { replies: ["Finished reviewing."] },
+	});
+
+	await piu.mockInput.typeText("/skill:review-notes Review these notes");
+	piu.mockInput.pressEnter();
+
+	const frame = await piu.waitForFrame((f) =>
+		f.includes("Finished reviewing."),
+	);
+	const lines = agentPanel(frame).split("\n");
+	const request = lines.findIndex((line) =>
+		line.includes("Review these notes"),
+	);
+	expect(request).toBeGreaterThanOrEqual(0);
+	expect(lines[request + 1]).toMatch(/─{3,}/);
+	expect(lines[request + 2]).toContain("review-notes");
+	expect(frame).not.toContain("<skill");
+	expect(frame).not.toContain("Private fixture instructions.");
+	const chip = piu
+		.captureSpans()
+		.lines.flatMap((line) => line.spans)
+		.find((span) => span.text.includes("review-notes"));
+	expect(chip?.bg.equals(RGBA.fromHex(darkTheme.chip))).toBe(true);
+});
+
 test("a reply with headings, lists, a table and code renders without raw Markdown markers", async () => {
 	await using piu = await startPiu({ script: { replies: [formatted] } });
 

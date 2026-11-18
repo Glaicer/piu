@@ -42,7 +42,9 @@ function hasThumb(piu: Piu, frame: string) {
 	return frame
 		.split("\n")
 		.slice(field.screenY, field.screenY + field.height)
-		.some((line) => /[█▀▄]/.test([...line][field.screenX + field.width] ?? ""));
+		.some((line) =>
+			/[█▀▄]/.test([...line][field.screenX + field.width + 1] ?? ""),
+		);
 }
 
 test("the cursor starts on the first line of the input Panel", async () => {
@@ -133,7 +135,13 @@ test("the editor caps at sixteen rows and its scrollbar can reveal the beginning
 	);
 	expect(inputArea(overflow)).not.toContain("Draft 01");
 	const field = editor(piu);
-	const barX = field.screenX + field.width;
+	const barX = field.screenX + field.width + 1;
+	expect(
+		overflow
+			.split("\n")
+			.slice(field.screenY, field.screenY + field.height)
+			.every((line) => [...line][barX - 1] === " "),
+	).toBe(true);
 	expect(
 		overflow
 			.split("\n")

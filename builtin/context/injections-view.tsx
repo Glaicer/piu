@@ -1,4 +1,4 @@
-import { type KeyEvent, type Renderable, TextAttributes } from "@opentui/core";
+import { type Renderable, TextAttributes } from "@opentui/core";
 import { createEffect, For, Show } from "solid-js";
 import {
 	CONTEXT_INJECTION_GROUPS,
@@ -6,9 +6,9 @@ import {
 	formatTokens,
 } from "../../src/context-usage.ts";
 import type { ModuleContext } from "../../src/module.ts";
-import { scrollIntoView, scrollKeys } from "../../src/scroll.ts";
+import { scrollIntoView } from "../../src/scroll.ts";
 import type { Theme } from "../../src/theme.ts";
-import { type ContextModalState, switchTabKey } from "./state.ts";
+import type { ContextModalState } from "./state.ts";
 
 const NOTE =
 	"Edits made after piu's hook (later context_with_system handlers, provider payload rewrites) are not shown.";
@@ -167,7 +167,6 @@ export function InjectionsContent(props: {
 	const theme = context.theme;
 	const items = () => context.pi.contextInjections?.items ?? [];
 	const rows = new Map<number, Renderable>();
-	let node: Renderable | undefined;
 	createEffect(() => {
 		const length = items().length;
 		if (state.selected() >= length) state.setSelected(Math.max(0, length - 1));
@@ -180,39 +179,8 @@ export function InjectionsContent(props: {
 			if (item) scrollIntoView(rows.get(index));
 		});
 	});
-	const move = (step: number) => {
-		const last = items().length - 1;
-		state.setSelected(Math.max(0, Math.min(last, state.selected() + step)));
-	};
-	const onListKey = (event: KeyEvent) => {
-		if (event.name === "up" || event.name === "down") {
-			event.preventDefault();
-			move(event.name === "up" ? -1 : 1);
-		} else if (event.name === "pageup" || event.name === "pagedown") {
-			event.preventDefault();
-			move(event.name === "pageup" ? -10 : 10);
-		} else if (event.name === "return") {
-			event.preventDefault();
-			state.setDetail(items()[state.selected()]);
-		}
-	};
 	return (
-		<box
-			ref={(element: Renderable) => {
-				node = element;
-			}}
-			flexDirection="column"
-			focusable
-			focused
-			onKeyDown={(event) => {
-				if (switchTabKey(event, state)) return;
-				if (state.detail()) {
-					if (scrollKeys(event, node)) event.preventDefault();
-					return;
-				}
-				onListKey(event);
-			}}
-		>
+		<box flexDirection="column">
 			<Show when={context.pi.contextInjections === null}>
 				<text fg={theme.muted}> No request to the model yet.</text>
 			</Show>

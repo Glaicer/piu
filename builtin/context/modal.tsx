@@ -17,6 +17,12 @@ import { InjectionsContent } from "./injections-view.tsx";
 import { type ContextModalState, switchTabKey } from "./state.ts";
 
 const PANEL = "context";
+const listSteps: Readonly<Partial<Record<string, number>>> = {
+	up: -1,
+	down: 1,
+	pageup: -10,
+	pagedown: 10,
+};
 const VIEW = "context.view";
 const TABS = "context.tabs";
 const HINTS = "context.hints";
@@ -93,11 +99,8 @@ function usageRows(view: ContextUsageView | null, working: boolean): Row[] {
 	];
 }
 
-function UsageContent(props: {
-	context: ModuleContext;
-	state: ContextModalState;
-}) {
-	const { context, state } = props;
+function UsageContent(props: { context: ModuleContext }) {
+	const { context } = props;
 	const theme = context.theme;
 	const view = () => context.pi.contextUsage;
 	const compacting = () =>
@@ -107,20 +110,8 @@ function UsageContent(props: {
 		);
 	const rows = () =>
 		compacting() ? [] : usageRows(view(), context.pi.working);
-	let node: Renderable | undefined;
 	return (
-		<box
-			ref={(element: Renderable) => {
-				node = element;
-			}}
-			flexDirection="column"
-			focusable
-			focused
-			onKeyDown={(event) => {
-				if (switchTabKey(event, state)) return;
-				if (scrollKeys(event, node)) event.preventDefault();
-			}}
-		>
+		<box flexDirection="column">
 			<Show when={compacting()}>
 				<text fg={theme.text}>Compacting context…</text>
 			</Show>
@@ -141,15 +132,41 @@ function ContentView(props: {
 	context: ModuleContext;
 	state: ContextModalState;
 }) {
+	const { state, context } = props;
+	let node: Renderable | undefined;
 	return (
-		<Show
-			when={props.state.tab() === "usage"}
-			fallback={
-				<InjectionsContent context={props.context} state={props.state} />
-			}
+		<box
+			ref={(element: Renderable) => {
+				node = element;
+			}}
+			focusable
+			focused
+			onKeyDown={(event) => {
+				if (switchTabKey(event, state)) return;
+				if (state.tab() === "usage" || state.detail()) {
+					if (scrollKeys(event, node)) event.preventDefault();
+					return;
+				}
+				const items = context.pi.contextInjections?.items ?? [];
+				const step = listSteps[event.name];
+				if (step) {
+					event.preventDefault();
+					state.setSelected(
+						Math.max(0, Math.min(items.length - 1, state.selected() + step)),
+					);
+				} else if (event.name === "return") {
+					event.preventDefault();
+					state.setDetail(items[state.selected()]);
+				}
+			}}
 		>
-			<UsageContent context={props.context} state={props.state} />
-		</Show>
+			<Show
+				when={state.tab() === "usage"}
+				fallback={<InjectionsContent context={context} state={state} />}
+			>
+				<UsageContent context={context} />
+			</Show>
+		</box>
 	);
 }
 

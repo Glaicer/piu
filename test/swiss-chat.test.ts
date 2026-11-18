@@ -316,6 +316,50 @@ test("tools in one reply stay grouped, but text separates the next group and an 
 	const header = openedRows.findIndex((row) => row.includes("MID%s DLE"));
 	expect(openedRows[header + 1]?.trim()).toBe("");
 	expect(openedRows[header + 2]).toContain("{");
+	const next = openedRows.findIndex((row) => row.includes("printf THIRD"));
+	expect(openedRows[next - 2]?.trim()).toBe("MIDDLE");
+	expect(openedRows[next - 1]?.trim()).toBe("");
+	await piu.mockMouse.click(
+		panel.x + 2 + (openedRows[header] ?? "").indexOf("bash"),
+		panel.y + 1 + header,
+	);
+	await piu.waitForFrame((f) =>
+		chat(f)
+			.split("\n")
+			.some(
+				(row, index, lines) =>
+					row.includes("MID%s DLE") &&
+					lines[index + 1]?.includes("printf THIRD"),
+			),
+	);
+});
+
+test("chat text keeps its wrapping when the scrollbar appears", async () => {
+	await using piu = await startPiu({
+		width: 64,
+		script: {
+			replies: [
+				"q".repeat(150),
+				`${"Overflow\n\n".repeat(40)}${"z".repeat(150)}`,
+			],
+		},
+	});
+	const runs = (frame: string, letter: string) =>
+		chat(frame)
+			.split("\n")
+			.flatMap((row) => {
+				const run = row.match(new RegExp(`${letter}{5,}`));
+				return run ? [{ column: run.index, width: run[0].length }] : [];
+			});
+	await send(piu, "Before overflow");
+	const before = await piu.waitForFrame(
+		(frame) => runs(frame, "q").length === 3,
+	);
+	await send(piu, "After overflow");
+	const after = await piu.waitForFrame(
+		(frame) => runs(frame, "z").length === 3,
+	);
+	expect(runs(after, "z")).toEqual(runs(before, "q"));
 });
 
 test("background tool cards keep job labels with signal, faint and error colors", async () => {
