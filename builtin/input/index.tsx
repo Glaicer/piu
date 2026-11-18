@@ -80,6 +80,7 @@ function Prompt(props: { context: ModuleContext }) {
 			? "esc stop   alt+⏎ queue"
 			: `⏎ send   ${newlineKey()} new line`;
 	const [before, setBefore] = createSignal("");
+	const [empty, setEmpty] = createSignal(true);
 	const [lineCount, setLineCount] = createSignal(1);
 	const height = () => Math.max(MIN_LINES, Math.min(MAX_LINES, lineCount()));
 	const [anchor, setAnchor] = createSignal(
@@ -188,8 +189,11 @@ function Prompt(props: { context: ModuleContext }) {
 	}
 
 	function sync() {
-		if (field && field.plainText !== history[recalled])
-			recalled = history.length;
+		if (field) {
+			const text = field.plainText;
+			if (text !== history[recalled]) recalled = history.length;
+			setEmpty(text.length === 0);
+		}
 		setBefore(field?.getTextRange(0, field.cursorOffset) ?? "");
 	}
 
@@ -377,15 +381,17 @@ function Prompt(props: { context: ModuleContext }) {
 				/>
 			</box>
 			<box flexDirection="row" flexShrink={0} paddingLeft={2}>
-				<text flexShrink={0} wrapMode="none" fg={props.context.theme.faint}>
-					{"/ commands   @ files"}
-				</text>
+				<Show when={empty()}>
+					<text flexShrink={0} wrapMode="none" fg={props.context.theme.faint}>
+						{"/ commands   @ files"}
+					</text>
+				</Show>
 				<box
 					flexGrow={1}
 					flexShrink={1}
 					flexDirection="row"
 					justifyContent="flex-end"
-					marginLeft={3}
+					marginLeft={empty() ? 3 : 0}
 				>
 					<text
 						flexShrink={1}

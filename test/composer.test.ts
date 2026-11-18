@@ -271,8 +271,8 @@ test("the first input row starts with a prompt mark, signal red when focused and
 		width: 80,
 	});
 	await piu.mockInput.pasteBracketedText("first line\nsecond line");
-	const frame = await piu.waitForFrame(
-		(f) => inputArea(f).includes("second line") && idleHints(f),
+	const frame = await piu.waitForFrame((f) =>
+		inputArea(f).includes("second line"),
 	);
 	const field = editor(piu);
 	const rows = frame.split("\n");
@@ -318,6 +318,21 @@ test("idle hints sit under the input in faint, commands on the left and keys on 
 		true,
 	);
 	expect(frame).not.toContain("/ commands · @ files");
+});
+
+test("command and file hints return when the input is cleared", async () => {
+	await using piu = await startPiu({ script: { replies: [] }, width: 80 });
+	await piu.waitForFrame((f) => f.includes("faux-1") && idleHints(f));
+
+	await piu.mockInput.typeText("x");
+	const frame = await piu.waitForFrame(
+		(f) => inputArea(f).includes("x") && inputHints(f).endsWith("⇧⏎ new line"),
+	);
+	expect(inputHints(frame)).not.toContain("/ commands");
+	expect(inputHints(frame)).not.toContain("@ files");
+
+	piu.mockInput.pressBackspace();
+	await piu.waitForFrame((f) => !inputArea(f).includes("x") && idleHints(f));
 });
 
 test("while the agent works the hints name stop and queue, and no Working line is above the input", async () => {
