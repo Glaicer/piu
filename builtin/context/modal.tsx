@@ -62,12 +62,6 @@ function breakdown(snapshot: ContextUsageSnapshot): Row[] {
 
 function summary(snapshot: ContextUsageSnapshot): Row[] {
 	const free = Math.max(0, snapshot.contextWindow - snapshot.used);
-	const source =
-		snapshot.source === "last-request" ? "Last request" : "Session estimate";
-	const total =
-		snapshot.totalSource === "pi"
-			? "Total from Pi"
-			: "Total estimated from the session";
 	return [
 		row(cell(`Model: ${snapshot.model}`)),
 		row(cell(`Window: ${formatTokens(snapshot.contextWindow)} tokens`)),
@@ -81,7 +75,6 @@ function summary(snapshot: ContextUsageSnapshot): Row[] {
 				`Free: ${formatTokens(free)} tokens (${percent(free, snapshot.contextWindow)})`,
 			),
 		),
-		row(cell(`${source} · ${total}`, "faint")),
 	];
 }
 

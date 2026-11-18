@@ -150,8 +150,9 @@ test("context before the first turn is an estimate and does not call the model",
 	const usage = readUsage(piu, frame);
 	const text = modalText(piu, frame);
 	expect(usage.window).toBe(formatTokens(128000));
-	expect(text).toContain("Session estimate");
-	expect(text).toContain("Total estimated from the session");
+	expect(text).toContain("Breakdown · estimated");
+	expect(text).not.toContain("Session estimate");
+	expect(text).not.toContain("Total estimated from the session");
 	expect(shown(usage.rows.system.tokens)).toBeGreaterThan(0);
 	expect(shown(usage.rows.tools.tokens)).toBeGreaterThan(0);
 	expect(usage.rows.messages.tokens).toBe("0");
@@ -199,9 +200,9 @@ test("context after a turn agrees with Pi including cached and output tokens", a
 			).toFixed(1),
 		),
 	);
-	expect(text).toContain("Last request");
-	expect(text).toContain("Total from Pi");
 	expect(text).toContain("estimated");
+	expect(text).not.toContain("Last request");
+	expect(text).not.toContain("Total from Pi");
 	expect(frame).not.toContain('{"v":1');
 }, 20000);
 
@@ -288,7 +289,6 @@ test("category estimates scale to a smaller Pi total without losing tokens", asy
 		);
 	}
 	expect(usage.free).toBe(formatTokens(128000 - 7));
-	expect(modalText(piu, frame)).toContain("Total from Pi");
 }, 20000);
 
 test("token counts shorten above a thousand", () => {
@@ -501,18 +501,17 @@ test("manual compaction hides numbers then shows a fresh session estimate", asyn
 	expect(modalText(piu, compacting)).not.toContain("Used:");
 
 	writeFileSync(releasing, "");
-	const fresh = await piu.waitForFrame(
-		(frame) => modalText(piu, frame).includes("Session estimate"),
+	await piu.waitForFrame(
+		(frame) =>
+			modalText(piu, frame).includes("Used:") &&
+			!modalText(piu, frame).includes("Compacting context…"),
 		8000,
 	);
-	expect(modalText(piu, fresh)).not.toContain("Last request");
 	const pi = await oracle(piu);
 	expect(pi.tokens).toBeNull();
 
 	piu.mockInput.pressEscape();
-	await piu.waitForFrame(
-		(f) => !modalText(piu, f).includes("Session estimate"),
-	);
+	await piu.waitForFrame((f) => !modalText(piu, f).includes("Window:"));
 	await send(piu, "After");
 	await piu.waitForFrame(
 		(frame) => agentPanel(frame).includes("After answer") && !working(frame),
@@ -520,7 +519,6 @@ test("manual compaction hides numbers then shows a fresh session estimate", asyn
 	const usage = readUsage(piu, await openContext(piu));
 	const after = await oracle(piu);
 	expect(usage.used).toBe(formatTokens(after.tokens ?? 0));
-	expect(modalText(piu, piu.captureCharFrame())).toContain("Last request");
 }, 20000);
 
 test("automatic compaction hides numbers while its gate is held", async () => {
@@ -551,11 +549,10 @@ test("automatic compaction hides numbers while its gate is held", async () => {
 
 	writeFileSync(`${script}.context-release`, "");
 	const fresh = await piu.waitForFrame(
-		(frame) => modalText(piu, frame).includes("Session estimate"),
+		(frame) => modalText(piu, frame).includes("Used:"),
 		8000,
 	);
 	expect(modalText(piu, fresh)).not.toContain("20000");
-	expect(modalText(piu, fresh)).not.toContain("Last request");
 }, 20000);
 
 test("failed compaction restores the last request instead of staying busy", async () => {
@@ -595,9 +592,7 @@ test("failed compaction restores the last request instead of staying busy", asyn
 
 	writeFileSync(`${script}.context-release`, "");
 	const restored = await piu.waitForFrame(
-		(frame) =>
-			modalText(piu, frame).includes("Last request") &&
-			modalText(piu, frame).includes("Used:"),
+		(frame) => modalText(piu, frame).includes("Used:"),
 		8000,
 	);
 	expect(readUsage(piu, restored)).toEqual(before);
@@ -615,7 +610,7 @@ test("a new session closes context and forgets the old request", async () => {
 		(frame) => agentPanel(frame).includes("Seen 1") && !working(frame),
 	);
 	const first = await openContext(piu);
-	expect(modalText(piu, first)).toContain("Last request");
+	expect(modalText(piu, first)).toContain("Used:");
 
 	const actions = hooks.probe.actions;
 	if (!actions) throw new Error("The probe Extension is not placed.");
@@ -627,7 +622,6 @@ test("a new session closes context and forgets the old request", async () => {
 
 	const frame = await openContext(piu);
 	const usage = readUsage(piu, frame);
-	expect(modalText(piu, frame)).toContain("Session estimate");
 	expect(usage.rows.messages.tokens).toBe("0");
 
 	piu.mockInput.pressEscape();
@@ -664,21 +658,17 @@ test("resuming a session estimates its current projection until a new request", 
 		const frame = await openContext(piu);
 		const usage = readUsage(piu, frame);
 		const pi = await oracle(piu);
-		expect(modalText(piu, frame)).toContain("Session estimate");
 		expect(shown(usage.rows.messages.tokens)).toBeGreaterThan(0);
 		expect(usage.used).toBe(formatTokens(pi.tokens ?? 0));
 
 		piu.mockInput.pressEscape();
-		await piu.waitForFrame(
-			(f) => !modalText(piu, f).includes("Session estimate"),
-		);
+		await piu.waitForFrame((f) => !modalText(piu, f).includes("Window:"));
 		await send(piu, "Again");
 		await piu.waitForFrame(
 			(frame) => agentPanel(frame).includes("Second answer") && !working(frame),
 		);
 		const resumed = await openContext(piu);
 		const after = await oracle(piu);
-		expect(modalText(piu, resumed)).toContain("Last request");
 		expect(readUsage(piu, resumed).used).toBe(formatTokens(after.tokens ?? 0));
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
@@ -713,8 +703,6 @@ test("changing the model refreshes context without reopening it", async () => {
 	expect(usage.window).toBe(formatTokens(pi.contextWindow));
 	expect(usage.window).not.toBe(before.window);
 	expect(modalBounds(piu)).toEqual(bounds);
-	expect(modalText(piu, frame)).toContain("Session estimate");
-	expect(modalText(piu, frame)).not.toContain("Last request");
 
 	piu.mockInput.pressEscape();
 	await piu.waitForFrame((f) => !modalText(piu, f).includes("Window:"), 8000);
