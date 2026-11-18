@@ -1,5 +1,5 @@
 import type { CliRenderer, ThemeMode } from "@opentui/core";
-import { onCleanup } from "solid-js";
+import { type Accessor, createEffect, createSignal, onCleanup } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 
 export const themeTokens = [
@@ -36,6 +36,10 @@ export function isThemeToken(name: string): name is ThemeToken {
 export type Theme = Readonly<Record<ThemeToken, string>>;
 
 export type ThemeOverrides = Readonly<Partial<Record<ThemeToken, string>>>;
+
+export const themeModes = ["auto", "light", "dark"] as const;
+export type ThemePreference = (typeof themeModes)[number];
+export type ThemeConfig = ThemeOverrides & { mode: ThemePreference };
 
 export const darkTheme: Theme = {
 	text: "#ececec",
@@ -96,13 +100,18 @@ const builtIn: Readonly<Record<ThemeMode, Theme>> = {
 export function createTheme(
 	renderer: CliRenderer,
 	overrides: ThemeOverrides,
+	preference: Accessor<ThemePreference>,
 ): Theme {
-	const resolve = (mode: ThemeMode): Theme => ({
-		...builtIn[mode],
-		...overrides,
-	});
-	const [theme, setTheme] = createStore(resolve(renderer.themeMode ?? "dark"));
-	const follow = (mode: ThemeMode) => setTheme(reconcile(resolve(mode)));
+	const [terminalMode, follow] = createSignal(renderer.themeMode ?? "dark");
+	const resolve = (): Theme => {
+		const mode = preference();
+		return {
+			...builtIn[mode === "auto" ? terminalMode() : mode],
+			...overrides,
+		};
+	};
+	const [theme, setTheme] = createStore(resolve());
+	createEffect(() => setTheme(reconcile(resolve())));
 	renderer.on("theme_mode", follow);
 	onCleanup(() => renderer.off("theme_mode", follow));
 	return theme;

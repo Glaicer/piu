@@ -178,7 +178,7 @@ function Messages(props: { context: ModuleContext }) {
 										selection={selection}
 										syntaxStyle={syntaxStyle()}
 										theme={theme}
-										animate={props.context.animate}
+										animate={props.context.animateReveal}
 									/>
 								)}
 							</Index>

@@ -1,9 +1,5 @@
 import { join } from "node:path";
-import {
-	type ClipboardService,
-	EditBufferRenderable,
-	type MouseEvent,
-} from "@opentui/core";
+import type { ClipboardService } from "@opentui/core";
 import {
 	useKeyboard,
 	useRenderer,
@@ -24,7 +20,7 @@ import { type Config, loadConfig } from "./config.ts";
 import { useCopyOnSelect } from "./copy-on-select.ts";
 import { bridgeDialogs } from "./dialogs.tsx";
 import { builtinDir, findExtensions, resolvePlacement } from "./extensions.ts";
-import { createPanelFocus } from "./focus.ts";
+import { createPanelFocus, keepFocus } from "./focus.ts";
 import { piuHome } from "./home.ts";
 import type { InstallLease } from "./install-lock.ts";
 import { commandAction, matches } from "./keybindings.ts";
@@ -33,24 +29,21 @@ import { lifecycleCommands } from "./lifecycle-commands.ts";
 import { createModals, ModalLayer } from "./modal.tsx";
 import { createModelFavorites } from "./model-favorites.ts";
 import { createModelSelection } from "./model-selection.ts";
-import type { Command, CommandContext, PlacedModule } from "./module.ts";
+import type {
+	Command,
+	CommandContext,
+	PlacedModule,
+	SettingsTab,
+} from "./module.ts";
 import { createPiState } from "./pi-state.ts";
 import { restartArgs } from "./restart.ts";
+import { createSettings } from "./settings.tsx";
 import { StartupError } from "./startup-error.ts";
 import { createTheme } from "./theme.ts";
 import { createToasts, ToastLayer } from "./toast.tsx";
 
 export type ExitRequest = { readonly restartArgs?: readonly string[] };
 const UPDATE_NOTICE_MS = 12_000;
-
-// why: OpenTUI focuses the nearest focusable ancestor of a clicked element, which would take the keyboard away from the input; only a click on a text field may move the focus.
-function keepFocus(event: MouseEvent) {
-	for (let node = event.target; node; node = node.parent) {
-		if (!node.focusable) continue;
-		if (!(node instanceof EditBufferRenderable)) event.preventDefault();
-		return;
-	}
-}
 
 export async function createApp(options: {
 	args: string[];
@@ -60,13 +53,14 @@ export async function createApp(options: {
 	clipboard?: ClipboardService;
 	env?: NodeJS.ProcessEnv;
 	notice?: (message: string) => void;
+	motion?: boolean;
 }) {
 	const cwd = options.cwd ?? process.cwd();
 	const home = piuHome();
 	const config = loadConfig(join(home, "config.json"));
 	const env = { ...process.env, ...options.env };
 	const folders = findExtensions([builtinDir, join(home, "extensions")]);
-	const { panels, commands, channelTitles, piExtensions } =
+	const { panels, commands, settingsTabs, channelTitles, piExtensions } =
 		await resolvePlacement(config, folders);
 	for (const { name } of lifecycleCommands) {
 		if (commands.some((command) => command.name === name)) {
@@ -98,6 +92,8 @@ export async function createApp(options: {
 			cwd={cwd}
 			panels={panels}
 			commands={commands}
+			settingsTabs={settingsTabs}
+			motion={options.motion ?? true}
 			updateCheck={options.updateCheck ?? { fetch }}
 			clipboard={options.clipboard}
 			env={env}
@@ -115,6 +111,8 @@ function App(props: {
 	cwd: string;
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	commands: readonly Command[];
+	settingsTabs: readonly SettingsTab[];
+	motion: boolean;
 	updateCheck: UpdateCheckOptions;
 	clipboard: ClipboardService | undefined;
 	env: NodeJS.ProcessEnv;
@@ -122,9 +120,19 @@ function App(props: {
 	startupLease: InstallLease | undefined;
 }) {
 	const renderer = useRenderer();
-	const theme = createTheme(renderer, props.config.theme);
-	const animate = createAnimate(renderer, props.config.animations);
+	const { mode, ...overrides } = props.config.theme;
 	const toasts = createToasts(renderer.clock);
+	const modals = createModals();
+	const settings = createSettings({
+		path: join(props.home, "config.json"),
+		mode,
+		animations: props.config.animations,
+		tabs: props.settingsTabs,
+		notify: (message) => toasts.show(message, "error"),
+	});
+	const theme = createTheme(renderer, overrides, settings.mode);
+	const animate = createAnimate(renderer, props.motion);
+	const instant = createAnimate(renderer, false);
 	onCleanup(toasts.dispose);
 	useCopyOnSelect(renderer, props.clipboard, toasts.show);
 	let nextLease = props.startupLease;
@@ -167,7 +175,6 @@ function App(props: {
 		args: [...props.config.backend.args, ...props.cliArgs],
 	});
 	onCleanup(pi.dispose);
-	const modals = createModals();
 	const updateCheck = props.updateCheck;
 	let stopUpdateCheck: (() => void) | undefined;
 	onCleanup(() => stopUpdateCheck?.());
@@ -264,6 +271,7 @@ function App(props: {
 			...pi.actions,
 			restartBackend: () => void retryBackend(),
 			openModal: modals.open,
+			openSettings: () => settings.open(commandContext),
 			showToast: toasts.show,
 			quit: () => void leave(false),
 			restart: () => void leave(true),
@@ -284,6 +292,8 @@ function App(props: {
 		commands,
 		keybindings: props.config.keybindings,
 		animate,
+		animateReveal: (options: Parameters<typeof animate>[0]) =>
+			(settings.animations() ? animate : instant)(options),
 		focus,
 		terminal: useTerminalDimensions(),
 	};

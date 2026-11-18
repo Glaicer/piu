@@ -29,6 +29,7 @@ async function start(options: {
 		script: options.script ?? none,
 		height: options.height,
 		clock,
+		motion: true,
 		extensions: options.extensions,
 		config: {
 			animations: options.animations,
@@ -261,7 +262,7 @@ test("the working indicator turns while the agent works and goes when it stops",
 	expect(workingLine(await app.frame(100))).toBe("");
 });
 
-test("with animations off the working indicator is the still text", async () => {
+test("the working indicator turns even with block animations off", async () => {
 	await using app = await start({
 		animations: false,
 		script: { replies: [slowTool, "All done"] },
@@ -274,7 +275,7 @@ test("with animations off the working indicator is the still text", async () => 
 	for (let step = 0; step < 6; step++) {
 		lines.add(workingLine(await app.frame(100)).trim());
 	}
-	expect([...lines]).toHaveLength(1);
+	expect(lines.size).toBeGreaterThan(2);
 });
 
 const numberedLines = (count: number) =>
@@ -320,13 +321,15 @@ test("the wheel eases a Panel to its new position through the rows in between", 
 	expect(tops).toEqual([...tops].sort((a, b) => b - a));
 });
 
-test("with animations off the wheel moves a Panel at once", async () => {
+test("the wheel still eases with block animations off", async () => {
 	await using app = await longChat(false);
 	const before = topLine(await app.frame());
 	for (let tick = 0; tick < WHEEL_TICKS; tick++) {
 		await app.piu.mockMouse.scroll(10, 5, "up");
 	}
 
+	expect(topLine(await app.frame())).toBe(before);
+	for (let step = 0; step < 12; step++) await app.frame(20);
 	expect(topLine(await app.frame())).toBe(before - SCROLLED_LINES);
 });
 

@@ -23,6 +23,16 @@ export default {
 
 An Extension can also export `commands: [{ name, description, takesArguments, run(context, args) }]`. They appear in the prompt's `/` autocomplete and run locally instead of going to the model, and they exist exactly when the Extension is enabled. Picking one with Enter or Tab runs it at once when it takes no arguments (`takesArguments: false`) and the input holds nothing but that command; otherwise it is inserted as `/name ` for the user to finish. A command takes arguments unless it says otherwise, and a Backend command always does, because `get_commands` does not report whether it takes any. A command name must be unique across Extensions, and it hides a Backend command of the same name.
 
+An Extension can add pages to `/settings` with `settingsTabs` on the same default export:
+
+```tsx
+settingsTabs: [
+	{ title: "Greeter", render: ({ theme }) => <text fg={theme.text}>Hello</text> },
+],
+```
+
+Tabs appear after the built-in tabs, in Extension load order, only while the Extension is enabled. `render` receives the same `CommandContext` as an Extension command. The Modal scrolls the page and mounts only the selected tab, so keep any state that should survive switching tabs outside the page. Use Ctrl+PgUp/PgDn to switch tabs or Shift+wheel over the strip to reveal more tabs.
+
 An Extension can carry a Pi extension as `pi-extension.ts` in its folder. Whenever the Extension is enabled, the app passes it to the Backend with `-e`. It runs inside Pi, so it imports only types and code that doesn't need Solid. It never registers a tool name another Pi extension may already have (see ADR-0001). To talk to its Modules it calls `ctx.ui.editor("opentui:<name>/<channel>", JSON.stringify({ v: 1, ... }))` for a channel the Extension lists in `channels: [...]`. That request never opens a Modal: it appears in `context.channel.requests` of the Extension's Modules, and `context.channel.answer(id, value)` returns `JSON.stringify(value)` to the editor call, while `cancel(id)` makes it return `undefined`. A request for an undeclared channel, or whose payload isn't JSON with `v: 1`, is cancelled at once. `builtin/ask-user-question` is the example.
 
 The `import type` line only gives your editor the types and is erased at run time, so it can point anywhere or be left out. At run time your imports of `solid-js`, `solid-js/store` and `@opentui/*` resolve to the app's own copies, although the folder has no `node_modules`; this is what keeps your signals reactive in the app's renderer. Any other npm package your Extension needs goes in the Extension's own folder (`~/.piu/extensions/<name>/package.json` and `node_modules`). The app's internals (`src/`) are not importable once `piu` is a compiled binary, so use only what the Module context gives you.

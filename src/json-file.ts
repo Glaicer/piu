@@ -21,11 +21,12 @@ export function readJson(file: string): ReadJson {
 	}
 }
 
-export function writeJson(file: string, value: unknown) {
+export function writeJson(file: string, value: unknown, indent?: number) {
 	mkdirSync(dirname(file), { recursive: true });
 	const temp = `${file}.${crypto.randomUUID()}.tmp`;
 	try {
-		writeFileSync(temp, JSON.stringify(value));
+		const json = JSON.stringify(value, null, indent);
+		writeFileSync(temp, indent ? `${json}\n` : json);
 		renameSync(temp, file);
 	} catch (error) {
 		rmSync(temp, { force: true });

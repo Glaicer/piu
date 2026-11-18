@@ -20,6 +20,7 @@ export type UiActions = {
 	quit(): void;
 	restart(): void;
 	updateBackend(): void;
+	openSettings(): void;
 };
 
 export type CommandContext = {
@@ -45,10 +46,12 @@ export type ModuleContext = CommandContext & {
 	readonly channel: Channel;
 	readonly keybindings: Keybindings;
 	readonly animate: Animate;
+	readonly animateReveal: Animate;
 	readonly bar: boolean;
 	onCleanup(cleanup: () => void): void;
 	onKey(handler: (event: KeyEvent) => void): void;
 	holdFocusKeys(active: Accessor<boolean>): void;
+	resetScroll(): void;
 	reportPresence(presence: Accessor<Presence>): void;
 };
 
@@ -66,7 +69,13 @@ export type Module = {
 export type Extension = {
 	readonly modules: readonly Module[];
 	readonly commands?: readonly Command[];
+	readonly settingsTabs?: readonly SettingsTab[];
 	readonly channels?: readonly string[];
+};
+
+export type SettingsTab = {
+	readonly title: string;
+	render(context: CommandContext): JSX.Element;
 };
 
 export type PlacedModule = {

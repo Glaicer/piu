@@ -1,10 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { BackendConfig } from "./backend.ts";
+import { readJson, writeJson } from "./json-file.ts";
 import { isKeyName, type Keybindings, parseChord } from "./keybindings.ts";
 import type { Size, Slot } from "./layout.tsx";
 import type { ModuleSettings } from "./module.ts";
 import { StartupError } from "./startup-error.ts";
-import { isThemeToken, type ThemeOverrides, themeTokens } from "./theme.ts";
+import {
+	isThemeToken,
+	type ThemeConfig,
+	type ThemePreference,
+	themeModes,
+	themeTokens,
+} from "./theme.ts";
 
 export type Placement = Readonly<Record<string, readonly string[]>>;
 
@@ -14,7 +21,7 @@ export type Config = {
 	placement: Placement;
 	modules: Readonly<Record<string, ModuleSettings>>;
 	keybindings: Keybindings;
-	theme: ThemeOverrides;
+	theme: ThemeConfig;
 	animations: boolean;
 };
 
@@ -103,7 +110,7 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 		bottom: ["model.current", "input.dir", "status.working"],
 	},
 	modules: {},
-	theme: {},
+	theme: { mode: "auto" },
 	animations: true,
 	keybindings: {
 		"focus.next": "tab",
@@ -165,6 +172,22 @@ export function loadConfig(path: string): Config {
 			"animations",
 		),
 	};
+}
+
+export type GlobalSettingChange =
+	| { key: "theme.mode"; value: ThemePreference }
+	| { key: "animations"; value: boolean };
+
+export function saveGlobalSetting(path: string, change: GlobalSettingChange) {
+	const { value, error } = readJson(path);
+	if (error) throw new Error(error);
+	const config = value === undefined ? {} : object(value, "config");
+	if (change.key === "theme.mode") {
+		const theme = "theme" in config ? object(config.theme, "theme") : {};
+		writeJson(path, { ...config, theme: { ...theme, mode: change.value } }, 2);
+	} else {
+		writeJson(path, { ...config, animations: change.value }, 2);
+	}
 }
 
 function readUserConfig(path: string): Fields {
@@ -355,23 +378,30 @@ function parseKeybindings(value: unknown): Keybindings {
 	);
 }
 
-function parseTheme(value: unknown): ThemeOverrides {
-	return Object.fromEntries(
-		Object.entries(object(value, "theme")).map(([name, color]) => {
-			const path = `theme.${name}`;
-			if (!isThemeToken(name)) {
-				throw fieldError(path, `expected one of ${themeTokens.join(", ")}`);
-			}
-			const hex = string(color, path);
-			if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
-				throw fieldError(
-					path,
-					`expected a color like "#7aa2f7", got ${JSON.stringify(hex)}`,
-				);
-			}
-			return [name, hex];
-		}),
-	);
+function parseTheme(value: unknown): ThemeConfig {
+	const { mode, ...overrides } = object(value, "theme");
+	const preference = themeModes.find((choice) => choice === mode);
+	if (!preference)
+		throw fieldError("theme.mode", `expected one of ${themeModes.join(", ")}`);
+	return {
+		...Object.fromEntries(
+			Object.entries(overrides).map(([name, color]) => {
+				const path = `theme.${name}`;
+				if (!isThemeToken(name)) {
+					throw fieldError(path, `expected one of ${themeTokens.join(", ")}`);
+				}
+				const hex = string(color, path);
+				if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+					throw fieldError(
+						path,
+						`expected a color like "#7aa2f7", got ${JSON.stringify(hex)}`,
+					);
+				}
+				return [name, hex];
+			}),
+		),
+		mode: preference,
+	};
 }
 
 function isObject(value: unknown): value is Fields {

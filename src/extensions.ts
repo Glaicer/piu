@@ -4,7 +4,13 @@ import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-suppor
 import { channelTitle } from "./channel.ts";
 import { type Config, defaultConfig, fieldError } from "./config.ts";
 import { commandAction } from "./keybindings.ts";
-import type { Command, Extension, Module, PlacedModule } from "./module.ts";
+import type {
+	Command,
+	Extension,
+	Module,
+	PlacedModule,
+	SettingsTab,
+} from "./module.ts";
 import { StartupError } from "./startup-error.ts";
 
 // why: a personal Extension has no node_modules, so its solid-js, solid-js/store and @opentui/* imports must resolve to the app's own instances.
@@ -52,6 +58,7 @@ export async function resolvePlacement(
 ): Promise<{
 	panels: Map<string, PlacedModule[]>;
 	commands: Command[];
+	settingsTabs: SettingsTab[];
 	channelTitles: string[];
 	piExtensions: string[];
 }> {
@@ -126,6 +133,9 @@ export async function resolvePlacement(
 	return {
 		panels,
 		commands,
+		settingsTabs: [...extensions.values()].flatMap(
+			(extension) => extension.settingsTabs ?? [],
+		),
 		channelTitles: [...extensions].flatMap(([name, extension]) =>
 			(extension.channels ?? []).map((channel) => channelTitle(name, channel)),
 		),
@@ -166,6 +176,19 @@ async function loadExtension(name: string, dir: string): Promise<Extension> {
 	if (!Array.isArray(extension?.modules)) {
 		throw new StartupError(
 			`Extension "${name}" (${dir}) must default-export { modules: [...] }`,
+		);
+	}
+	const tabs = extension.settingsTabs;
+	if (
+		tabs !== undefined &&
+		(!Array.isArray(tabs) ||
+			tabs.some(
+				(tab) =>
+					typeof tab?.title !== "string" || typeof tab.render !== "function",
+			))
+	) {
+		throw new StartupError(
+			`Extension "${name}" (${dir}) must define settingsTabs as [{ title, render }]`,
 		);
 	}
 	return extension;

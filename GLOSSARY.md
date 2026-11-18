@@ -25,8 +25,16 @@ A Slot drawn above the Layout at a chosen position and size (centered by default
 _Avoid_: Popup, window
 
 **Config**:
-The user's file that overrides the default Layout, Module placement and Module settings.
-_Avoid_: Settings (that word belongs to Pi's own settings)
+The user's piu file that overrides defaults, including appearance, Layout, Placement and Module settings. It is separate from Pi settings.
+
+**Settings**:
+The Modal opened by `/settings` for viewing or changing preferences. Global is its first tab.
+
+**Settings tab**:
+A page in Settings. Piu provides built-in tabs, and loaded Extensions can add their own.
+
+**Pi settings**:
+The Backend's own settings, separate from piu's Config.
 
 **Placement**:
 The ordered list of Modules assigned to each Panel, kept apart from the Layout.

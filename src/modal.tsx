@@ -1,7 +1,7 @@
-import { type BoxRenderable, RGBA } from "@opentui/core";
+import { type BoxRenderable, type KeyEvent, RGBA } from "@opentui/core";
 import { useKeyboard, usePaste, useRenderer } from "@opentui/solid";
 import { createSignal, For, onCleanup } from "solid-js";
-import { contains } from "./focus.ts";
+import { contains, keepFocus } from "./focus.ts";
 import {
 	type SharedContext,
 	type Size,
@@ -23,17 +23,28 @@ export type ModalRequest = {
 	height: Cells;
 	left?: number;
 	top?: number;
+	onKey?(event: KeyEvent): void;
 	onDismiss?(reason: DismissReason): boolean | undefined;
 };
 
 export function moduleModal(
 	module: Module,
 	size: { width: Cells; height: Cells; left?: number; top?: number },
+	...companions: Module[]
 ): ModalRequest {
 	const id = `modal-${module.id}`;
 	return {
 		slot: { kind: "panel", id, direction: "column", size: "rest" },
-		panels: new Map([[id, [{ id, module, settings: {} }]]]),
+		panels: new Map([
+			[
+				id,
+				[module, ...companions].map((part) => ({
+					id: part.id,
+					module: part,
+					settings: {},
+				})),
+			],
+		]),
 		...size,
 	};
 }
@@ -85,6 +96,7 @@ export function ModalLayer(props: { modals: Modals; context: SharedContext }) {
 			props.modals.dismiss(top, "escape");
 			return;
 		}
+		if (!event.defaultPrevented) top?.request.onKey?.(event);
 		trap(event);
 	});
 	usePaste(trap);
@@ -147,7 +159,7 @@ function ModalView(props: {
 				width={request.width}
 				height={request.height}
 				onMouseDown={(event) => {
-					event.preventDefault();
+					keepFocus(event);
 					event.stopPropagation();
 				}}
 			>

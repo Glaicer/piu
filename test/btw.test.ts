@@ -516,7 +516,7 @@ test("while answering, the placeholder dots change every half second", async () 
 	const clock = new ManualClock();
 	await using piu = await startPiu({
 		clock,
-		config: { animations: true },
+		motion: true,
 		script: {
 			replies: ["Main reply", answer],
 			tokensPerSecond: 40,

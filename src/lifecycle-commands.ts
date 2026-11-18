@@ -9,6 +9,12 @@ const quit = (name: string): Command => ({
 
 export const lifecycleCommands: readonly Command[] = [
 	{
+		name: "settings",
+		description: "Open piu settings",
+		takesArguments: false,
+		run: ({ actions }) => actions.openSettings(),
+	},
+	{
 		name: "update",
 		description: "Update the configured Backend",
 		takesArguments: false,

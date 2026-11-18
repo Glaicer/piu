@@ -2,6 +2,7 @@ import {
 	CliRenderEvents,
 	EditBufferRenderable,
 	type KeyEvent,
+	type MouseEvent,
 	type Renderable,
 	ScrollBoxRenderable,
 } from "@opentui/core";
@@ -21,6 +22,15 @@ export function contains(ancestor: Renderable, node: Renderable | null) {
 		if (next === ancestor) return true;
 	}
 	return false;
+}
+
+// why: OpenTUI otherwise focuses the nearest focusable ancestor of a click, taking keys away from the input.
+export function keepFocus(event: MouseEvent) {
+	for (let node = event.target; node; node = node.parent) {
+		if (!node.focusable) continue;
+		if (!(node instanceof EditBufferRenderable)) event.preventDefault();
+		return;
+	}
 }
 
 function isShown(element: Renderable) {

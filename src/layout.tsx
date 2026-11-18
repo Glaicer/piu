@@ -5,6 +5,7 @@ import {
 	ScrollBoxRenderable,
 } from "@opentui/core";
 import { type Accessor, createSignal, For, onCleanup } from "solid-js";
+import type { Animate } from "./animate.ts";
 import { paintPanel, paintSheet, sheetHintOffset } from "./card.ts";
 import { channelFor } from "./channel.ts";
 import type { PanelFocus } from "./focus.ts";
@@ -32,7 +33,7 @@ type PanelContext = Omit<
 >;
 export type SharedContext = Omit<
 	PanelContext,
-	"reportPresence" | "onKey" | "bar"
+	"reportPresence" | "onKey" | "bar" | "resetScroll"
 > & {
 	focus?: PanelFocus;
 	terminal: Accessor<{ width: number; height: number }>;
@@ -240,6 +241,8 @@ export function SlotView(props: SlotProps) {
 			if (event.defaultPrevented) return;
 		}
 	};
+	const smoothScroll = createSmoothScroll(shared.animate);
+	onCleanup(smoothScroll.cancel);
 	const moduleView = (entry: (typeof entries)[number]) => (
 		<box
 			visible={shown(entry)}
@@ -256,6 +259,11 @@ export function SlotView(props: SlotProps) {
 					reportPresence: entry.setPresence,
 					onKey: (handler) => entry.keyHandlers.push(handler),
 					holdFocusKeys: (active) => focus?.hold(active),
+					resetScroll: () => {
+						if (!(element instanceof ScrollBoxRenderable)) return;
+						smoothScroll.cancel();
+						element.scrollTo(0);
+					},
 				}}
 			/>
 		</box>
@@ -278,8 +286,6 @@ export function SlotView(props: SlotProps) {
 			</box>
 		);
 	}
-	const smoothScroll = createSmoothScroll(shared.animate);
-	onCleanup(smoothScroll.cancel);
 	const [awayFromBottom, setAwayFromBottom] = createSignal(false);
 	const [footerHeight, setFooterHeight] = createSignal(0);
 	// why: a footer Module sits inside the Panel's padding but stays outside the scrollbox, so it remains visible while the content scrolls.
@@ -373,12 +379,12 @@ function ModuleView(props: {
 		for (const cancel of animations) cancel();
 	});
 	const { pi, actions } = props.context;
-	return props.placed.module.render({
-		...props.context,
-		animate: (options) => {
+	const track =
+		(animate: Animate): Animate =>
+		(options) => {
 			let finished = false;
 			let cancel: () => void = () => {};
-			cancel = props.context.animate({
+			cancel = animate({
 				...options,
 				onComplete: () => {
 					finished = true;
@@ -391,7 +397,11 @@ function ModuleView(props: {
 				animations.delete(cancel);
 				cancel();
 			};
-		},
+		};
+	return props.placed.module.render({
+		...props.context,
+		animate: track(props.context.animate),
+		animateReveal: track(props.context.animateReveal),
 		settings: props.placed.settings,
 		channel: channelFor(
 			props.placed.id.split(".")[0] ?? "",

@@ -176,7 +176,7 @@ export function messageBar(text: string, width?: number) {
 	return width === undefined ? prefix : `${prefix.padEnd(width - 5)}you`;
 }
 
-type Piu = Awaited<ReturnType<typeof startPiu>>;
+export type Piu = Awaited<ReturnType<typeof startPiu>>;
 export type PanelBox = {
 	id: string;
 	x: number;
@@ -457,6 +457,7 @@ export async function startPiu(
 		height?: number;
 		kittyKeyboard?: boolean;
 		clock?: ManualClock;
+		motion?: boolean;
 		terminalBackground?: ThemeMode;
 		clipboardError?: Error | "reports";
 	},
@@ -480,6 +481,7 @@ export async function startPiu(
 			updateCheck: options.updateCheck ?? false,
 			env: options.appEnv,
 			clipboard: clipboard.service,
+			motion: options.motion ?? false,
 		});
 	} catch (error) {
 		removeDir();

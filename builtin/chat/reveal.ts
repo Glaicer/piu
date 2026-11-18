@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createSignal, onCleanup } from "solid-js";
 import type { Animate } from "../../src/animate.ts";
 
 const REVEAL_MS = 150;
@@ -7,6 +7,7 @@ export function createReveal(animate: Animate) {
 	const [open, setOpen] = createSignal(false);
 	const [progress, setProgress] = createSignal(0);
 	let stop = () => {};
+	onCleanup(() => stop());
 	return {
 		open,
 		toggle() {

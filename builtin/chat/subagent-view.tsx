@@ -166,7 +166,7 @@ export function subagentModule(id: string): Module {
 			<SubagentView
 				id={id}
 				pi={context.pi}
-				animate={context.animate}
+				animate={context.animateReveal}
 				theme={context.theme}
 			/>
 		),
