@@ -322,8 +322,11 @@ test("a throwing action keeps the second stroke out of the draft", async () => {
 		await piu.waitForFrame((f) => inputArea(f).includes("keep"));
 		piu.mockInput.pressKey("g");
 		piu.mockInput.pressEnter();
-		await Bun.sleep(200);
-		const frame = await rendered(piu);
+		const frame = await piu.waitForFrame(() =>
+			errors.mock.calls
+				.flat()
+				.some((value) => value instanceof Error && value.message === "boom"),
+		);
 		expect(inputArea(frame).trim()).toBe("keep");
 		expect(frame).not.toContain("Model got");
 	} finally {

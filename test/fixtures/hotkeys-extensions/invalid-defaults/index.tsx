@@ -4,6 +4,7 @@ import type { Extension } from "../../../../src/module.ts";
 // why: a hole must be a startup error, not a TypeError when the registry walks the defaults.
 const defaultBindings: string[] = [];
 defaultBindings[1] = "alt+m";
+let readDefaults = false;
 
 const [, setCount] = createSignal(0);
 
@@ -13,7 +14,11 @@ export default {
 		{
 			name: "cycle",
 			description: "Cycle the invalid defaults",
-			defaultBindings,
+			get defaultBindings() {
+				if (readDefaults) return ["alt+m"];
+				readDefaults = true;
+				return defaultBindings;
+			},
 			run: () => setCount((value) => value + 1),
 		},
 	],

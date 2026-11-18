@@ -126,16 +126,6 @@ function collides(a: Shortcut, b: Shortcut) {
 		: false;
 }
 
-function shortcutKey(shortcut: Shortcut) {
-	return shortcut
-		.map((chord) => `${chord.name}:${chord.ctrl}:${chord.shift}:${chord.meta}`)
-		.join(" ");
-}
-
-function assignmentKey(assignment: KeybindingAssignment) {
-	return `${assignment.action}\u0000${shortcutKey(assignment.shortcut)}`;
-}
-
 const KEY_LABELS: Readonly<Record<string, string>> = {
 	return: "⏎",
 };
@@ -182,12 +172,13 @@ export function resolveKeybindings(
 	for (const [id, shortcuts] of Object.entries(overrides)) {
 		if (catalog.has(id)) assign(id, shortcuts);
 	}
-	const lastAt = new Map<string, number>();
-	for (const [at, assignment] of assignments.entries()) {
-		lastAt.set(assignmentKey(assignment), at);
-	}
 	const ordered = assignments.filter(
-		(assignment, at) => lastAt.get(assignmentKey(assignment)) === at,
+		(assignment, at) =>
+			assignments.findLastIndex(
+				(other) =>
+					other.action === assignment.action &&
+					sameShortcut(other.shortcut, assignment.shortcut),
+			) === at,
 	);
 
 	const accepted: (KeybindingAssignment | undefined)[] = new Array(

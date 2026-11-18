@@ -211,7 +211,8 @@ function collectKeybindingActions(
 					`Extension "${extensionName}" ${field}.description: expected a non-empty description`,
 				);
 			}
-			if (!Array.isArray(declared.defaultBindings)) {
+			const defaultBindings = declared.defaultBindings;
+			if (!Array.isArray(defaultBindings)) {
 				throw new StartupError(
 					`Extension "${extensionName}" ${field}.defaultBindings: expected an array of strings`,
 				);
@@ -233,7 +234,7 @@ function collectKeybindingActions(
 				description,
 				source: { kind: "extension", name: extensionName },
 				defaults: parseBindingValue(
-					declared.defaultBindings,
+					defaultBindings,
 					id,
 					`Extension "${extensionName}".${field}.defaultBindings`,
 				),
