@@ -41,7 +41,7 @@ function foregroundTools(piu: Piu, frame: string) {
 	expect(indices[2]).toBe((indices[1] ?? -1) + 1);
 	for (const [index, status, color] of [
 		[indices[0], /● +\d+(\.\d+)?m?s/, lightTheme.faint],
-		[indices[1], /● error +\d+(\.\d+)?m?s/, lightTheme.error],
+		[indices[1], /error {2}● +\d+(\.\d+)?m?s/, lightTheme.error],
 		[indices[2], /◐ running/, lightTheme.signal],
 	] as const) {
 		expect(rows[index ?? -1]).toMatch(status);
@@ -51,6 +51,9 @@ function foregroundTools(piu: Piu, frame: string) {
 			),
 		).toBe(true);
 	}
+	expect(rows[indices[1] ?? -1]?.lastIndexOf("●")).toBe(
+		rows[indices[0] ?? -1]?.lastIndexOf("●"),
+	);
 	const chip = span(piu, " bash ", indices[0]);
 	expect(chip?.fg.equals(RGBA.fromHex(lightTheme.surface))).toBe(true);
 	expect(chip?.bg.equals(RGBA.fromHex(lightTheme.chip))).toBe(true);

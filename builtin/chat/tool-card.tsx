@@ -38,8 +38,14 @@ function keyArgument(args: ToolCallBlock["arguments"]): string {
 		: line;
 }
 
-function formatDuration(ms: number): string {
-	return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+export function formatDuration(ms: number): string {
+	if (ms > 999_000) return ">999s";
+	const millis = Math.round(ms);
+	if (millis < 100) return `${millis}ms`.padStart(5);
+	const tenths = Math.round(ms / 100);
+	const seconds =
+		tenths < 100 ? (tenths / 10).toFixed(1) : Math.round(ms / 1000);
+	return `${seconds}s`.padStart(5);
 }
 
 function resultText(result: ToolResultMessage): string {
@@ -95,7 +101,7 @@ export function ToolCard(props: {
 		const id = jobId();
 		if (id !== undefined) return `${id} ${status()}`;
 		if (status() === "running") return "◐ running";
-		return status() === "done" ? "●" : "● error";
+		return status() === "done" ? "●" : "error  ●";
 	};
 	const argument = () => {
 		const call = props.call();
