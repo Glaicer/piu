@@ -291,6 +291,41 @@ test("Ctrl+Home and Ctrl+End jump through chat and show a bottom hint when scrol
 	expect(agentPanel(end)).not.toContain("Line 000");
 });
 
+test("chat jump keys and hint follow Config", async () => {
+	await using piu = await startPiu({
+		script: { replies: [numberedLines("Line", 120)] },
+		config: {
+			keybindings: { "chat.top": "alt+u", "chat.bottom": "alt+d" },
+		},
+	});
+	await piu.mockInput.typeText("Lines");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((frame) => agentPanel(frame).includes("Line 119"));
+
+	piu.mockInput.pressKey("HOME", { ctrl: true });
+	await piu.renderOnce();
+	const unchanged = agentPanel(piu.captureCharFrame());
+	expect(unchanged).toContain("Line 119");
+	expect(unchanged).not.toContain("Line 000");
+	expect(unchanged).not.toContain("jump to bottom");
+
+	piu.mockInput.pressKey("u", { meta: true });
+	const top = await piu.waitForFrame(
+		(frame) =>
+			agentPanel(frame).includes("Line 000") &&
+			agentPanel(frame).includes("alt+d: jump to bottom"),
+	);
+	expect(agentPanel(top)).not.toContain("Line 119");
+
+	piu.mockInput.pressKey("d", { meta: true });
+	const end = await piu.waitForFrame(
+		(frame) =>
+			agentPanel(frame).includes("Line 119") &&
+			!agentPanel(frame).includes("jump to bottom"),
+	);
+	expect(agentPanel(end)).not.toContain("Line 000");
+});
+
 test("the bottom hint follows mouse scrolling", async () => {
 	await using piu = await startPiu({
 		script: { replies: [numberedLines("Line", 120)] },

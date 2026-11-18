@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ClipboardService } from "@opentui/core";
+import type { ClipboardService, KeyEvent, Renderable } from "@opentui/core";
 import {
 	useKeyboard,
 	useRenderer,
@@ -16,14 +16,35 @@ import {
 } from "./backend-updates.ts";
 import { paintCard } from "./card.ts";
 import { changelogModal } from "./changelog.tsx";
-import { type Config, loadConfig } from "./config.ts";
+import {
+	type Config,
+	defaultConfig,
+	fieldError,
+	loadConfig,
+	parseBindingValue,
+} from "./config.ts";
 import { useCopyOnSelect } from "./copy-on-select.ts";
 import { bridgeDialogs } from "./dialogs.tsx";
-import { builtinDir, findExtensions, resolvePlacement } from "./extensions.ts";
+import {
+	builtinDir,
+	findExtensions,
+	type LoadedKeybindingAction,
+	type ResolvedPlacement,
+	resolvePlacement,
+} from "./extensions.ts";
 import { createPanelFocus, keepFocus } from "./focus.ts";
 import { piuHome } from "./home.ts";
 import type { InstallLease } from "./install-lock.ts";
-import { commandAction, matches } from "./keybindings.ts";
+import { createKeybindingRouter } from "./keybinding-router.ts";
+import {
+	commandAction,
+	type KeybindingAction,
+	type ResolvedKeybindings,
+	resolveKeybindings,
+	type Shortcut,
+	sameShortcut,
+	shiftEnter,
+} from "./keybindings.ts";
 import { SlotView } from "./layout.tsx";
 import { lifecycleCommands } from "./lifecycle-commands.ts";
 import { createModals, ModalLayer } from "./modal.tsx";
@@ -60,8 +81,9 @@ export async function createApp(options: {
 	const config = loadConfig(join(home, "config.json"));
 	const env = { ...process.env, ...options.env };
 	const folders = findExtensions([builtinDir, join(home, "extensions")]);
-	const { panels, commands, settingsTabs, channelTitles, piExtensions } =
-		await resolvePlacement(config, folders);
+	const placement = await resolvePlacement(config, folders);
+	const { panels, settingsTabs, channelTitles, piExtensions } = placement;
+	const commands = placement.commands.map(({ command }) => command);
 	for (const { name } of lifecycleCommands) {
 		if (commands.some((command) => command.name === name)) {
 			throw new StartupError(
@@ -69,6 +91,7 @@ export async function createApp(options: {
 			);
 		}
 	}
+	const keybindings = prepareKeybindings(config, placement, folders);
 	let startupLease: InstallLease | undefined;
 	try {
 		startupLease = await prepareBackendLease(config.backend, {
@@ -92,6 +115,8 @@ export async function createApp(options: {
 			cwd={cwd}
 			panels={panels}
 			commands={commands}
+			keybindings={keybindings}
+			keybindingActions={placement.keybindingActions}
 			settingsTabs={settingsTabs}
 			motion={options.motion ?? true}
 			updateCheck={options.updateCheck ?? { fetch }}
@@ -100,6 +125,102 @@ export async function createApp(options: {
 			home={home}
 		/>
 	);
+}
+
+const piuKeybindingDescriptions: Readonly<Record<string, string>> = {
+	"focus.next": "Focus the next Panel",
+	"focus.previous": "Focus the previous Panel",
+	"input.newline": "Insert a newline",
+	"chat.top": "Jump to the top of the chat",
+	"chat.bottom": "Jump to the bottom of the chat",
+};
+
+export function prepareKeybindings(
+	config: Pick<Config, "keybindings">,
+	placement: ResolvedPlacement,
+	folders: ReadonlyMap<string, string>,
+): ResolvedKeybindings {
+	const definitions = new Map<string, KeybindingAction>();
+	const define = (action: KeybindingAction) => {
+		if (definitions.has(action.id)) {
+			const owner =
+				action.source.kind === "extension"
+					? `Extension "${action.source.name}"`
+					: "piu";
+			throw new StartupError(
+				`${owner} keybindingActions: action "${action.id}" is already defined`,
+			);
+		}
+		definitions.set(action.id, action);
+	};
+	for (const { command, extension } of placement.commands) {
+		define({
+			id: commandAction(command.name),
+			description: command.description ?? `/${command.name}`,
+			source: { kind: "extension", name: extension },
+			defaults: [],
+		});
+	}
+	for (const command of lifecycleCommands) {
+		define({
+			id: commandAction(command.name),
+			description: command.description ?? `/${command.name}`,
+			source: { kind: "piu" },
+			defaults: [],
+		});
+	}
+	for (const [id, description] of Object.entries(piuKeybindingDescriptions)) {
+		define({ id, description, source: { kind: "piu" }, defaults: [] });
+	}
+	for (const action of placement.keybindingActions) {
+		define(action);
+	}
+	for (const [id, spec] of Object.entries(defaultConfig.keybindings)) {
+		const action = definitions.get(id);
+		if (!action) continue;
+		definitions.set(id, {
+			...action,
+			defaults: parseBindingValue(spec, id),
+		});
+	}
+
+	const actions: KeybindingAction[] = [];
+	const added = new Set<string>();
+	for (const id of Object.keys(defaultConfig.keybindings)) {
+		const action = definitions.get(id);
+		if (!action) continue;
+		actions.push(action);
+		added.add(id);
+	}
+	for (const action of definitions.values()) {
+		if (added.has(action.id)) continue;
+		actions.push(action);
+		added.add(action.id);
+	}
+
+	const known = new Set([
+		...definitions.keys(),
+		...Object.keys(defaultConfig.keybindings),
+	]);
+	for (const id of Object.keys(config.keybindings)) {
+		if (known.has(id)) continue;
+		const dot = id.indexOf(".");
+		const extension = dot > 0 ? id.slice(0, dot) : "";
+		if (extension && extension !== "command") {
+			if (!folders.has(extension)) {
+				throw fieldError(
+					`keybindings.${id}`,
+					`unknown action, no Extension named "${extension}"`,
+				);
+			}
+			if (!placement.enabledExtensions.has(extension)) continue;
+		}
+		throw fieldError(
+			`keybindings.${id}`,
+			`unknown action, expected one of: ${[...known].sort().join(", ")}`,
+		);
+	}
+	return resolveKeybindings(actions, config.keybindings);
 }
 
 function App(props: {
@@ -111,6 +232,8 @@ function App(props: {
 	cwd: string;
 	panels: ReadonlyMap<string, readonly PlacedModule[]>;
 	commands: readonly Command[];
+	keybindings: ResolvedKeybindings;
+	keybindingActions: readonly LoadedKeybindingAction[];
 	settingsTabs: readonly SettingsTab[];
 	motion: boolean;
 	updateCheck: UpdateCheckOptions;
@@ -286,48 +409,126 @@ function App(props: {
 		...command,
 		run: (args = "") => command.run(commandContext, args),
 	}));
+	const commandById = new Map(
+		commands.map((command) => [commandAction(command.name), command] as const),
+	);
+	const actionById = new Map(
+		props.keybindingActions.map((action) => [action.id, action] as const),
+	);
+	const focusedActions = new Set<{
+		id: string;
+		target: () => Renderable | undefined;
+		run: () => void;
+	}>();
+	const currentFocused = () => {
+		const current = renderer.currentFocusedRenderable;
+		return current !== null && !current.isDestroyed ? current : undefined;
+	};
+	const focusedAction = (id: string) => {
+		const current = currentFocused();
+		if (!current) return undefined;
+		for (const entry of focusedActions) {
+			if (entry.id === id && entry.target() === current) return entry;
+		}
+		return undefined;
+	};
+	const runKeybinding = (
+		action: string,
+		shortcut: Shortcut,
+		event: KeyEvent,
+	) => {
+		// why: the textarea's own Shift+Enter must keep inserting a newline even when input.newline also lists it.
+		if (
+			shortcut.length === 1 &&
+			sameShortcut(shortcut, [shiftEnter] as const)
+		) {
+			return false;
+		}
+		if (action === "focus.next" || action === "focus.previous") {
+			if (focus.held()) return false;
+			event.preventDefault();
+			focus.move(action === "focus.next" ? 1 : -1);
+			return true;
+		}
+		if (action === "chat.top" || action === "chat.bottom") {
+			if (!focus.jumpChat(action === "chat.bottom")) return false;
+			event.preventDefault();
+			return true;
+		}
+		const command = commandById.get(action);
+		if (command) {
+			event.preventDefault();
+			command.run();
+			return true;
+		}
+		const declared = actionById.get(action);
+		if (declared) {
+			event.preventDefault();
+			declared.run(commandContext);
+			return true;
+		}
+		let focused = focusedAction(action);
+		if (!focused && action === "input.newline" && shortcut.length === 1) {
+			focus.returnToInput(event, false);
+			focused = focusedAction(action);
+		}
+		if (!focused) return false;
+		event.preventDefault();
+		focused.run();
+		return true;
+	};
+	const canUseSequence = (action: string) => {
+		if (action === "focus.next" || action === "focus.previous") {
+			return !focus.held();
+		}
+		if (
+			action === "input.newline" ||
+			[...focusedActions].some((entry) => entry.id === action)
+		) {
+			return focusedAction(action) !== undefined;
+		}
+		return true;
+	};
+	const router = createKeybindingRouter({
+		clock: renderer.clock,
+		bindings: () => props.keybindings.effective,
+		enabled: () => modals.stack().length === 0,
+		canUseSequence,
+		run: runKeybinding,
+		fallback: (event) =>
+			focus.returnToInput(
+				event,
+				pi.state.working && pi.state.dialogs.length === 0 && !focus.held(),
+			),
+		replay: (event) => renderer.keyInput.processParsedKey(event),
+	});
+	useKeyboard(router.onKey);
+	createEffect(() => {
+		if (modals.stack().length > 0) router.cancel();
+	});
+	onCleanup(router.cancel);
 	const context = {
 		cwd: props.cwd,
 		...commandContext,
 		commands,
-		keybindings: props.config.keybindings,
+		keybindings: () => props.keybindings,
+		registerFocusedAction: (
+			id: string,
+			target: () => Renderable | undefined,
+			run: () => void,
+		) => {
+			const entry = { id, target, run };
+			focusedActions.add(entry);
+			return () => {
+				focusedActions.delete(entry);
+			};
+		},
 		animate,
 		animateReveal: (options: Parameters<typeof animate>[0]) =>
 			(settings.animations() ? animate : instant)(options),
 		focus,
 		terminal: useTerminalDimensions(),
 	};
-	useKeyboard((event) => {
-		if (modals.stack().length > 0) return;
-		if (
-			event.ctrl &&
-			!event.shift &&
-			!event.meta &&
-			(event.name === "home" || event.name === "end")
-		) {
-			if (focus.jumpChat(event.name === "end")) event.preventDefault();
-			return;
-		}
-		const action = Object.entries(props.config.keybindings).find(([, chord]) =>
-			matches(chord, event),
-		)?.[0];
-		if (action === "focus.next" || action === "focus.previous") {
-			if (focus.held()) return;
-			event.preventDefault();
-			focus.move(action === "focus.next" ? 1 : -1);
-			return;
-		}
-		const command = commands.find((c) => commandAction(c.name) === action);
-		if (command) {
-			event.preventDefault();
-			command.run();
-			return;
-		}
-		focus.returnToInput(
-			event,
-			pi.state.working && pi.state.dialogs.length === 0 && !focus.held(),
-		);
-	});
 	return (
 		<box
 			width="100%"

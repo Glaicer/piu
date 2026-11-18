@@ -2,6 +2,20 @@
 
 A separate terminal interface for the Pi coding agent, built from clickable, animated, user-arrangeable pieces. It runs beside the regular `pi`, not instead of it.
 
+## Keys
+
+**Keybinding action**:
+Something a key can run: a built-in action of piu, a command, or an action an Extension declares with `keybindingActions`.
+_Avoid_: Hotkey (that is the Settings tab), handler
+
+**Shortcut**:
+One or two Strokes assigned together to a Keybinding action, such as `ctrl+l` or `ctrl+x m`.
+_Avoid_: Binding, key combination
+
+**Stroke**:
+One key press with its modifiers, such as `ctrl+x` or `shift+return`.
+_Avoid_: Keystroke
+
 ## Layout
 
 **Slot**:

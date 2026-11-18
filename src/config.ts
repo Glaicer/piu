@@ -1,7 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import type { BackendConfig } from "./backend.ts";
 import { readJson, writeJson } from "./json-file.ts";
-import { isKeyName, type Keybindings, parseChord } from "./keybindings.ts";
+import {
+	type Chord,
+	isKeyName,
+	type Keybindings,
+	parseChord,
+	type Shortcut,
+	sameShortcut,
+	shiftEnter,
+} from "./keybindings.ts";
 import type { Size, Slot } from "./layout.tsx";
 import type { ModuleSettings } from "./module.ts";
 import { StartupError } from "./startup-error.ts";
@@ -116,6 +124,8 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 		"focus.next": "tab",
 		"focus.previous": "shift+tab",
 		"input.newline": "ctrl+j",
+		"chat.top": "ctrl+home",
+		"chat.bottom": "ctrl+end",
 		"command.model": "ctrl+l",
 		"command.reasoning": "alt+t",
 	},
@@ -163,9 +173,8 @@ export function loadConfig(path: string): Config {
 			panelIds,
 		),
 		modules: parseModules(mergeObjects(defaultConfig.modules, user.modules)),
-		keybindings: parseKeybindings(
-			mergeObjects(defaultConfig.keybindings, user.keybindings),
-		),
+		keybindings:
+			user.keybindings === undefined ? {} : parseKeybindings(user.keybindings),
 		theme: parseTheme(mergeObjects(defaultConfig.theme, user.theme)),
 		animations: boolean(
 			user.animations ?? defaultConfig.animations,
@@ -356,25 +365,89 @@ function parseModules(value: unknown) {
 	);
 }
 
-function parseKeybindings(value: unknown): Keybindings {
+export function parseBindingValue(
+	value: unknown,
+	action: string,
+	path = `keybindings.${action}`,
+): readonly Shortcut[] {
+	const specs = Array.isArray(value) ? value : [value];
+	if (!Array.isArray(value) && typeof value !== "string") {
+		throw fieldError(
+			path,
+			`expected a key like "ctrl+j" or an array of them, got ${describe(value)}`,
+		);
+	}
+	return specs.map((spec) => {
+		if (typeof spec !== "string") {
+			throw fieldError(path, `expected a string, got ${describe(spec)}`);
+		}
+		const trimmed = spec.trim();
+		if (!trimmed) {
+			throw fieldError(path, "expected a key, got an empty string");
+		}
+		const parts = trimmed.split(/ +/);
+		if (parts.length > 2) {
+			throw fieldError(
+				path,
+				`expected at most two strokes separated by a space, got ${parts.length}`,
+			);
+		}
+		const chords = parts.map((part) => parseStroke(part, path));
+		for (const [at, chord] of chords.entries()) {
+			if (
+				at > 0 &&
+				chord.name === "escape" &&
+				!chord.ctrl &&
+				!chord.shift &&
+				!chord.meta
+			) {
+				throw fieldError(
+					path,
+					"Esc cancels a waiting sequence and cannot finish one",
+				);
+			}
+			if (!sameShortcut([chord], [shiftEnter])) continue;
+			if (action !== "input.newline") {
+				throw fieldError(
+					path,
+					"Shift+Enter is the newline key and can only be bound to input.newline",
+				);
+			}
+			if (at === 0 && chords.length > 1) {
+				throw fieldError(path, "Shift+Enter cannot start a sequence");
+			}
+		}
+		const [first, second] = chords;
+		if (first === undefined) {
+			throw fieldError(path, "expected a key, got an empty string");
+		}
+		return second === undefined ? [first] : [first, second];
+	});
+}
+
+function parseStroke(spec: string, path: string): Chord {
+	const chord = parseChord(spec);
+	if (!chord) {
+		throw fieldError(
+			path,
+			`expected a key like "ctrl+j" or "shift+tab", got ${JSON.stringify(spec)}`,
+		);
+	}
+	if (!isKeyName(chord.name)) {
+		throw fieldError(
+			path,
+			`OpenTUI never reports a key named ${JSON.stringify(chord.name)} (it says "escape" and "return", for example)`,
+		);
+	}
+	return chord;
+}
+
+export function parseKeybindings(value: unknown): Keybindings {
 	return Object.fromEntries(
-		Object.entries(object(value, "keybindings")).map(([action, spec]) => {
-			const path = `keybindings.${action}`;
-			const chord = parseChord(string(spec, path));
-			if (!chord) {
-				throw fieldError(
-					path,
-					`expected a key like "ctrl+j" or "shift+tab", got ${JSON.stringify(spec)}`,
-				);
-			}
-			if (!isKeyName(chord.name)) {
-				throw fieldError(
-					path,
-					`OpenTUI never reports a key named ${JSON.stringify(chord.name)} (it says "escape" and "return", for example)`,
-				);
-			}
-			return [action, chord];
-		}),
+		Object.entries(object(value, "keybindings")).map(([action, spec]) => [
+			action,
+			parseBindingValue(spec, action),
+		]),
 	);
 }
 

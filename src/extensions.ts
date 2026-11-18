@@ -2,10 +2,11 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support";
 import { channelTitle } from "./channel.ts";
-import { type Config, defaultConfig, fieldError } from "./config.ts";
-import { commandAction } from "./keybindings.ts";
+import { type Config, fieldError, parseBindingValue } from "./config.ts";
+import type { KeybindingAction } from "./keybindings.ts";
 import type {
 	Command,
+	CommandContext,
 	Extension,
 	Module,
 	PlacedModule,
@@ -19,6 +20,25 @@ ensureRuntimePluginSupport();
 export const builtinDir = join(import.meta.dir, "../builtin");
 
 export type ExtensionFolders = ReadonlyMap<string, string>;
+
+export type OwnedCommand = {
+	readonly command: Command;
+	readonly extension: string;
+};
+
+export type LoadedKeybindingAction = KeybindingAction & {
+	run(context: CommandContext): void;
+};
+
+export type ResolvedPlacement = {
+	panels: Map<string, PlacedModule[]>;
+	commands: OwnedCommand[];
+	settingsTabs: SettingsTab[];
+	channelTitles: string[];
+	piExtensions: string[];
+	keybindingActions: LoadedKeybindingAction[];
+	enabledExtensions: ReadonlySet<string>;
+};
 
 export function findExtensions(roots: readonly string[]): ExtensionFolders {
 	const folders = new Map<string, string>();
@@ -53,15 +73,9 @@ function extensionNames(root: string) {
 }
 
 export async function resolvePlacement(
-	config: Pick<Config, "placement" | "modules" | "keybindings">,
+	config: Pick<Config, "placement" | "modules">,
 	folders: ExtensionFolders,
-): Promise<{
-	panels: Map<string, PlacedModule[]>;
-	commands: Command[];
-	settingsTabs: SettingsTab[];
-	channelTitles: string[];
-	piExtensions: string[];
-}> {
+): Promise<ResolvedPlacement> {
 	const extensions = new Map<string, Extension>();
 	const placedIds = new Set<string>();
 	const panels = new Map<string, PlacedModule[]>();
@@ -117,19 +131,6 @@ export async function resolvePlacement(
 		}
 	}
 	const commands = collectCommands(extensions);
-	// why: a replaced Layout can leave a default key bound to a command whose Extension is no longer placed; that is not an error, so the default names stay known.
-	const actions = new Set([
-		...Object.keys(defaultConfig.keybindings),
-		...commands.map((command) => commandAction(command.name)),
-	]);
-	for (const action of Object.keys(config.keybindings)) {
-		if (!actions.has(action)) {
-			throw fieldError(
-				`keybindings.${action}`,
-				`unknown action, expected one of: ${[...actions].join(", ")}`,
-			);
-		}
-	}
 	return {
 		panels,
 		commands,
@@ -143,12 +144,16 @@ export async function resolvePlacement(
 			.filter(([name]) => extensions.has(name))
 			.map(([, dir]) => join(dir, "pi-extension.ts"))
 			.filter((path) => existsSync(path)),
+		keybindingActions: collectKeybindingActions(extensions),
+		enabledExtensions: new Set(extensions.keys()),
 	};
 }
 
-function collectCommands(extensions: ReadonlyMap<string, Extension>) {
+function collectCommands(
+	extensions: ReadonlyMap<string, Extension>,
+): OwnedCommand[] {
 	const owners = new Map<string, string>();
-	const commands: Command[] = [];
+	const commands: OwnedCommand[] = [];
 	for (const [name, extension] of extensions) {
 		for (const command of extension.commands ?? []) {
 			const owner = owners.get(command.name);
@@ -158,10 +163,93 @@ function collectCommands(extensions: ReadonlyMap<string, Extension>) {
 				);
 			}
 			owners.set(command.name, name);
-			commands.push(command);
+			commands.push({ command, extension: name });
 		}
 	}
 	return commands;
+}
+
+function collectKeybindingActions(
+	extensions: ReadonlyMap<string, Extension>,
+): LoadedKeybindingAction[] {
+	const ids = new Set<string>();
+	const actions: LoadedKeybindingAction[] = [];
+	for (const [extensionName, extension] of extensions) {
+		if (extension.keybindingActions === undefined) continue;
+		if (extensionName === "command") {
+			throw new StartupError(
+				'Extension "command" cannot declare keybinding actions: "command." is reserved for command actions',
+			);
+		}
+		if (!Array.isArray(extension.keybindingActions)) {
+			throw new StartupError(
+				`Extension "${extensionName}" keybindingActions: expected an array`,
+			);
+		}
+		for (const [index, value] of extension.keybindingActions.entries()) {
+			const field = `keybindingActions[${index}]`;
+			const declared = isObject(value) ? value : undefined;
+			if (!declared) {
+				throw new StartupError(
+					`Extension "${extensionName}" ${field}: expected an object`,
+				);
+			}
+			const name = declared.name;
+			if (
+				typeof name !== "string" ||
+				name.length === 0 ||
+				name.includes(".") ||
+				/\s/.test(name)
+			) {
+				throw new StartupError(
+					`Extension "${extensionName}" ${field}.name: expected a non-empty name without a dot or space`,
+				);
+			}
+			const description = declared.description;
+			if (typeof description !== "string" || description.trim().length === 0) {
+				throw new StartupError(
+					`Extension "${extensionName}" ${field}.description: expected a non-empty description`,
+				);
+			}
+			const defaultBindings = declared.defaultBindings;
+			if (
+				!Array.isArray(defaultBindings) ||
+				defaultBindings.some((binding) => typeof binding !== "string")
+			) {
+				throw new StartupError(
+					`Extension "${extensionName}" ${field}.defaultBindings: expected an array of strings`,
+				);
+			}
+			if (typeof declared.run !== "function") {
+				throw new StartupError(
+					`Extension "${extensionName}" ${field}.run: expected a function`,
+				);
+			}
+			const id = `${extensionName}.${name}`;
+			if (ids.has(id)) {
+				throw new StartupError(
+					`Extension "${extensionName}" ${field}: keybinding action "${id}" is declared twice`,
+				);
+			}
+			ids.add(id);
+			actions.push({
+				id,
+				description,
+				source: { kind: "extension", name: extensionName },
+				defaults: parseBindingValue(
+					defaultBindings as string[],
+					id,
+					`Extension "${extensionName}".${field}.defaultBindings`,
+				),
+				run: declared.run as LoadedKeybindingAction["run"],
+			});
+		}
+	}
+	return actions;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function loadExtension(name: string, dir: string): Promise<Extension> {

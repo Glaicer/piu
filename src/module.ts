@@ -1,9 +1,9 @@
-import type { KeyEvent } from "@opentui/core";
+import type { KeyEvent, Renderable } from "@opentui/core";
 import type { JSX } from "@opentui/solid";
 import type { Accessor } from "solid-js";
 import type { Animate } from "./animate.ts";
 import type { Channel } from "./channel.ts";
-import type { Keybindings } from "./keybindings.ts";
+import type { ResolvedKeybindings } from "./keybindings.ts";
 import type { ModalRequest } from "./modal.tsx";
 import type { ModelFavorites } from "./model-favorites.ts";
 import type { PiActions, PiState } from "./pi-state.ts";
@@ -44,13 +44,18 @@ export type ModuleContext = CommandContext & {
 	readonly commands: readonly BoundCommand[];
 	readonly settings: ModuleSettings;
 	readonly channel: Channel;
-	readonly keybindings: Keybindings;
+	readonly keybindings: Accessor<ResolvedKeybindings>;
 	readonly animate: Animate;
 	readonly animateReveal: Animate;
 	readonly bar: boolean;
 	onCleanup(cleanup: () => void): void;
 	onKey(handler: (event: KeyEvent) => void): void;
 	holdFocusKeys(active: Accessor<boolean>): void;
+	registerFocusedAction(
+		id: string,
+		target: () => Renderable | undefined,
+		run: () => void,
+	): () => void;
 	resetScroll(): void;
 	reportPresence(presence: Accessor<Presence>): void;
 };
@@ -66,9 +71,17 @@ export type Module = {
 	render(context: ModuleContext): JSX.Element;
 };
 
+export type ExtensionKeybindingAction = {
+	readonly name: string;
+	readonly description: string;
+	readonly defaultBindings: readonly string[];
+	run(context: CommandContext): void;
+};
+
 export type Extension = {
 	readonly modules: readonly Module[];
 	readonly commands?: readonly Command[];
+	readonly keybindingActions?: readonly ExtensionKeybindingAction[];
 	readonly settingsTabs?: readonly SettingsTab[];
 	readonly channels?: readonly string[];
 };

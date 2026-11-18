@@ -23,6 +23,35 @@ export default {
 
 An Extension can also export `commands: [{ name, description, takesArguments, run(context, args) }]`. They appear in the prompt's `/` autocomplete and run locally instead of going to the model, and they exist exactly when the Extension is enabled. Picking one with Enter or Tab runs it at once when it takes no arguments (`takesArguments: false`) and the input holds nothing but that command; otherwise it is inserted as `/name ` for the user to finish. A command takes arguments unless it says otherwise, and a Backend command always does, because `get_commands` does not report whether it takes any. A command name must be unique across Extensions, and it hides a Backend command of the same name.
 
+An Extension can declare keys of its own with `keybindingActions` on the same default export:
+
+```tsx
+keybindingActions: [
+	{
+		name: "next-mode",
+		description: "Switch to the next mode",
+		defaultBindings: ["alt+m"],
+		run: (context) => context.actions.showToast("Next mode"),
+	},
+],
+```
+
+The full name of the action is `<extension>.<name>`, so this one is `modes.next-mode`. Its `defaultBindings` apply while the Extension is enabled, which is exactly while one of its Modules is in the Placement. Assign it in your personal `~/.piu/config.json` like any built-in action:
+
+```json
+{
+	"keybindings": {
+		"modes.next-mode": "alt+n"
+	}
+}
+```
+
+A value is one shortcut string or an array of them: `"ctrl+l"`, `["ctrl+l", "ctrl+x m"]`, or `[]`. An array replaces the default bindings, and `[]` removes them all. A shortcut is one key with modifiers or a sequence of two keys separated by a space, such as `"ctrl+x m"`; three or more keys are a startup error. `run` receives the same context as a command.
+
+Piu's own defaults are assigned first, then the defaults of enabled Extensions in the order they loaded, then the personal Config in key order. When two actions claim the same shortcut, the later assignment wins and the earlier action keeps its other shortcuts; a single key and a sequence that starts with it conflict the same way. This is not a startup error. Commands stay addressable as `command.<name>`, and a command declared by an Extension has no default bindings.
+
+Shift+Enter is the input's fixed newline key. It cannot be assigned to any action except `input.newline`, neither alone nor as a stroke in a sequence, and it cannot start a sequence even for `input.newline`. `input.newline` may add shortcuts, and `[]` removes them all while Shift+Enter keeps inserting a newline.
+
 An Extension can add pages to `/settings` with `settingsTabs` on the same default export:
 
 ```tsx

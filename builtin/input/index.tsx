@@ -19,7 +19,13 @@ import {
 } from "solid-js";
 import { paintSheet } from "../../src/card.ts";
 import { defaultConfig } from "../../src/config.ts";
-import { formatChord, matches, parseChord } from "../../src/keybindings.ts";
+import {
+	formatChord,
+	parseChord,
+	type Shortcut,
+	sameShortcut,
+	shiftEnter,
+} from "../../src/keybindings.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
 import { type Entry, findTrigger, narrow } from "./autocomplete.ts";
 import { Directory } from "./dir.tsx";
@@ -34,13 +40,21 @@ export const promptFieldId = "input.prompt.field";
 const keyBindings = [
 	{ name: "return", shift: true, action: "newline" as const },
 ];
-const shiftEnter = { name: "return", ctrl: false, shift: true, meta: false };
-const defaultNewline = parseChord(
+const defaultNewlineChord = parseChord(
 	defaultConfig.keybindings["input.newline"] ?? "",
 );
+const defaultNewline: readonly Shortcut[] = defaultNewlineChord
+	? [[defaultNewlineChord]]
+	: [];
 
 function Prompt(props: { context: ModuleContext }) {
 	let field: TextareaRenderable | undefined;
+	const unregisterNewline = props.context.registerFocusedAction(
+		"input.newline",
+		() => field,
+		() => field?.newLine(),
+	);
+	props.context.onCleanup(unregisterNewline);
 	const history: string[] = [];
 	let recalled = 0;
 
@@ -68,12 +82,14 @@ function Prompt(props: { context: ModuleContext }) {
 	const [focused, setFocused] = createSignal(true);
 	// why: Shift+Enter is the textarea's own newline key and the default ctrl+j is only the fallback for terminals without the kitty protocol, so the hint names Shift+Enter unless the user has chosen another input.newline.
 	const newlineKey = () => {
-		const bound = props.context.keybindings["input.newline"];
-		const remapped =
-			bound !== undefined &&
-			defaultNewline !== undefined &&
-			formatChord(bound) !== formatChord(defaultNewline);
-		return formatChord(remapped ? bound : shiftEnter);
+		const bound = props.context.keybindings().effective["input.newline"] ?? [];
+		const first = bound[0];
+		const atDefault =
+			bound.length === 1 &&
+			first !== undefined &&
+			defaultNewline[0] !== undefined &&
+			sameShortcut(first, defaultNewline[0]);
+		return formatChord(first === undefined || atDefault ? [shiftEnter] : first);
 	};
 	const keyHints = () =>
 		props.context.pi.working
@@ -291,12 +307,9 @@ function Prompt(props: { context: ModuleContext }) {
 
 	function onKeyDown(event: KeyEvent) {
 		if (event.name === "up" || event.name === "down") queueMicrotask(sync);
-		const newline = props.context.keybindings["input.newline"];
-		const bound = newline !== undefined && matches(newline, event);
-		// why: the textarea itself turns a bare line feed (Ctrl+J without the kitty protocol) into a newline, so a remapped key has to swallow it.
-		if (bound || event.name === "linefeed") {
+		// why: the textarea itself turns a bare line feed (Ctrl+J without the kitty protocol) into a newline, so even an empty input.newline has to swallow it.
+		if (event.name === "linefeed") {
 			event.preventDefault();
-			if (bound) field?.newLine();
 			return;
 		}
 		if (open()) {

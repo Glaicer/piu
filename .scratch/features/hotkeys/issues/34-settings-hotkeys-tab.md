@@ -40,3 +40,7 @@
 ## Notes
 
 - Как вкладка ловит нажатия в обход глобальных keybindings и фокуса, сверить с `docs/agents/opentui.md`.
+
+## Comments
+
+**From 33:** `ResolvedKeybindings` in `src/keybindings.ts` exposes `actions` (id, description, source, defaults), `requested`, `effective`, `conflicts` (`loser`/`winner`) and `overridden` (the action ids present in the personal Config). `ModuleContext.keybindings` is now `Accessor<ResolvedKeybindings>`, and `prepareKeybindings` in `src/app.tsx` builds it once at startup; live writes and reactive Config changes are still this ticket's work.

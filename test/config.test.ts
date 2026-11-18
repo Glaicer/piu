@@ -266,6 +266,56 @@ test.each([
 		"keybindings.input.newline",
 	],
 	[
+		"an empty shortcut",
+		{ keybindings: { "command.model": "" } },
+		"keybindings.command.model",
+	],
+	[
+		"a whitespace-only shortcut",
+		{ keybindings: { "command.model": "   " } },
+		"keybindings.command.model",
+	],
+	[
+		"a three-stroke shortcut",
+		{ keybindings: { "command.model": "ctrl+x m t" } },
+		"keybindings.command.model",
+	],
+	[
+		"an invalid second stroke",
+		{ keybindings: { "command.model": "ctrl+x foobar" } },
+		"keybindings.command.model",
+	],
+	[
+		"a non-string list item",
+		{ keybindings: { "command.model": ["x", 42] } },
+		"keybindings.command.model",
+	],
+	[
+		"Shift+Enter bound to another action",
+		{ keybindings: { "command.model": "shift+return" } },
+		"keybindings.command.model",
+	],
+	[
+		"Shift+Enter finishing another action",
+		{ keybindings: { "command.model": "x shift+return" } },
+		"keybindings.command.model",
+	],
+	[
+		"Shift+Enter starting another action",
+		{ keybindings: { "command.model": "shift+return x" } },
+		"keybindings.command.model",
+	],
+	[
+		"Shift+Enter starting a newline sequence",
+		{ keybindings: { "input.newline": "shift+return x" } },
+		"keybindings.input.newline",
+	],
+	[
+		"Esc finishing a sequence",
+		{ keybindings: { "command.model": "ctrl+x escape" } },
+		"keybindings.command.model",
+	],
+	[
 		"a settings entry that is not an object",
 		{ modules: { "chat.messages": 3 } },
 		'modules["chat.messages"]',

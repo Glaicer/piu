@@ -9,6 +9,7 @@ import type { Animate } from "./animate.ts";
 import { paintPanel, paintSheet, sheetHintOffset } from "./card.ts";
 import { channelFor } from "./channel.ts";
 import type { PanelFocus } from "./focus.ts";
+import { formatChord } from "./keybindings.ts";
 import type { ModuleContext, PlacedModule, Presence } from "./module.ts";
 import { createSmoothScroll } from "./smooth-scroll.ts";
 
@@ -243,6 +244,14 @@ export function SlotView(props: SlotProps) {
 	};
 	const smoothScroll = createSmoothScroll(shared.animate);
 	onCleanup(smoothScroll.cancel);
+	const jumpHint = () => {
+		const shortcut = shared.keybindings().effective["chat.bottom"]?.[0];
+		if (!shortcut) return "jump to bottom";
+		const formatted = formatChord(shortcut);
+		return formatted === "ctrl+end"
+			? "CTRL+End: jump to bottom"
+			: `${formatted}: jump to bottom`;
+	};
 	const moduleView = (entry: (typeof entries)[number]) => (
 		<box
 			visible={shown(entry)}
@@ -359,7 +368,7 @@ export function SlotView(props: SlotProps) {
 					bottom={footerHeight() + 1}
 					backgroundColor={shared.theme.jump}
 				>
-					<text fg={shared.theme.barText}>CTRL+End: jump to bottom</text>
+					<text fg={shared.theme.barText}>{jumpHint()}</text>
 				</box>
 			)}
 		</box>
