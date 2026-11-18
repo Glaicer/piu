@@ -43,36 +43,53 @@ type Group = {
 	readonly rows: readonly EnumeratedAction[];
 };
 
-type Pending = {
-	readonly action: KeybindingAction;
+type Loss = {
+	readonly action: string;
 	readonly shortcut: Shortcut;
-	readonly list: readonly Shortcut[];
-	readonly personal: Keybindings;
-	readonly losers: readonly string[];
 };
+
+type Mode =
+	| { readonly kind: "idle" }
+	| { readonly kind: "recording"; readonly first?: Chord }
+	| {
+			readonly kind: "confirm";
+			readonly action: KeybindingAction;
+			readonly shortcut: Shortcut;
+			readonly personal: Keybindings;
+			readonly moveToEnd: boolean;
+			readonly losses: readonly Loss[];
+	  }
+	| { readonly kind: "error"; readonly message: string };
 
 function uniqueShortcuts(shortcuts: readonly Shortcut[]) {
 	const result: Shortcut[] = [];
-	for (const shortcut of shortcuts) {
+	for (let at = shortcuts.length - 1; at >= 0; at--) {
+		const shortcut = shortcuts[at];
+		if (shortcut === undefined) continue;
 		if (result.some((other) => sameShortcut(other, shortcut))) continue;
-		result.push(shortcut);
+		result.unshift(shortcut);
 	}
 	return result;
 }
 
 function groupActions(actions: readonly KeybindingAction[]): Group[] {
-	const bySource = new Map<string, KeybindingAction[]>();
+	const bySource = new Map<
+		string,
+		{ name: string; actions: KeybindingAction[] }
+	>();
 	for (const action of actions) {
+		const key =
+			action.source.kind === "piu" ? "piu" : `extension:${action.source.name}`;
 		const name = action.source.kind === "piu" ? "piu" : action.source.name;
-		const list = bySource.get(name);
-		if (list) list.push(action);
-		else bySource.set(name, [action]);
+		const group = bySource.get(key);
+		if (group) group.actions.push(action);
+		else bySource.set(key, { name, actions: [action] });
 	}
 	const ordered: { name: string; actions: readonly KeybindingAction[] }[] = [];
 	const piu = bySource.get("piu");
-	if (piu) ordered.push({ name: "piu", actions: piu });
-	for (const [name, list] of bySource) {
-		if (name !== "piu") ordered.push({ name, actions: list });
+	if (piu) ordered.push(piu);
+	for (const [key, group] of bySource) {
+		if (key !== "piu") ordered.push(group);
 	}
 	let index = 0;
 	return ordered.map((group) => ({
@@ -126,10 +143,7 @@ type HotkeysOptions = {
 export function createHotkeysTab(options: HotkeysOptions) {
 	const [index, setIndex] = createSignal(0);
 	const [keyIndex, setKeyIndex] = createSignal(0);
-	const [recording, setRecording] = createSignal(false);
-	const [firstStroke, setFirstStroke] = createSignal<Chord | undefined>();
-	const [pending, setPending] = createSignal<Pending | undefined>();
-	const [error, setError] = createSignal<string | undefined>();
+	const [mode, setMode] = createSignal<Mode>({ kind: "idle" });
 	const rows = new Map<string, BoxRenderable>();
 	let timer: ReturnType<Clock["setTimeout"]> | undefined;
 
@@ -137,6 +151,10 @@ export function createHotkeysTab(options: HotkeysOptions) {
 	const groups = createMemo(() => groupActions(actions()));
 	const flat = () => groups().flatMap((group) => group.rows);
 	const selected = () => flat()[index()]?.action;
+	const confirmation = () => {
+		const current = mode();
+		return current.kind === "confirm" ? current : undefined;
+	};
 	const shortcutsOf = (action: KeybindingAction) =>
 		uniqueShortcuts(options.keybindings().requested[action.id] ?? []).filter(
 			(shortcut) =>
@@ -165,27 +183,28 @@ export function createHotkeysTab(options: HotkeysOptions) {
 					conflict.loser.action === action &&
 					sameShortcut(conflict.loser.shortcut, shortcut),
 			)?.winner.action;
-	const describe = (id: string | undefined) =>
-		options.keybindings().actions.find((action) => action.id === id)
-			?.description ?? id;
+	const identify = (id: string | undefined) => {
+		if (id === undefined) return "unknown action";
+		const action = options
+			.keybindings()
+			.actions.find((entry) => entry.id === id);
+		return action ? `${action.description} (${id})` : id;
+	};
 
 	const stopTimer = () => {
 		if (timer !== undefined) options.clock.clearTimeout(timer);
 		timer = undefined;
 	};
 
-	const stopRecording = () => {
-		stopTimer();
-		setRecording(false);
-		setFirstStroke(undefined);
-	};
-
 	const cancel = () => {
-		const busy = recording() || pending() !== undefined;
-		stopRecording();
-		setPending(undefined);
+		const current = mode();
+		const busy = current.kind === "recording" || current.kind === "confirm";
+		stopTimer();
+		setMode({ kind: "idle" });
 		return busy;
 	};
+
+	const fail = (message: string) => setMode({ kind: "error", message });
 
 	const save = (
 		action: string,
@@ -209,28 +228,49 @@ export function createHotkeysTab(options: HotkeysOptions) {
 		save(action, list, moveToEnd);
 	};
 
+	const lossesFrom = (
+		edited: string,
+		before: Readonly<Record<string, readonly Shortcut[]>>,
+		after: Readonly<Record<string, readonly Shortcut[]>>,
+	) => {
+		const losses: Loss[] = [];
+		for (const action of options.keybindings().actions) {
+			if (action.id === edited) continue;
+			const previous = before[action.id] ?? [];
+			const next = after[action.id] ?? [];
+			for (const shortcut of previous) {
+				if (next.some((kept) => sameShortcut(kept, shortcut))) continue;
+				losses.push({ action: action.id, shortcut });
+			}
+		}
+		return losses;
+	};
+
 	const finish = (shortcut: Shortcut) => {
 		const action = selected();
-		stopRecording();
-		if (!action) return;
+		stopTimer();
+		if (!action) {
+			setMode({ kind: "idle" });
+			return;
+		}
 		let candidate: Shortcut;
 		try {
 			candidate = validateShortcut(shortcut, action.id);
 		} catch (error) {
-			setError(errorMessage(error));
+			fail(errorMessage(error));
 			return;
 		}
 		if (
 			candidate.some((chord) => parseChord(shortcutSpec([chord])) === undefined)
 		) {
-			setError("This key cannot be written to Config; choose another");
+			fail("This key cannot be written to Config; choose another");
 			return;
 		}
 		if (
 			action.id === "input.newline" &&
 			sameShortcut(candidate, [shiftEnter])
 		) {
-			setError("Shift+Enter is already the fixed newline key");
+			fail("Shift+Enter is already the fixed newline key");
 			return;
 		}
 		const list = [
@@ -239,58 +279,68 @@ export function createHotkeysTab(options: HotkeysOptions) {
 			),
 			candidate,
 		];
-		const personal = assignLayer(options.personal(), action.id, list);
-		const resolved = resolveKeybindings(
+		const keptPersonal = withList(options.personal(), action.id, list);
+		const kept = resolveKeybindings(
 			options.keybindings().actions,
-			personal,
+			keptPersonal,
 		);
-		const losers = [
-			...new Set(
-				resolved.conflicts
-					.filter(
-						(conflict) =>
-							conflict.winner.action === action.id &&
-							conflict.loser.action !== action.id &&
-							sameShortcut(conflict.winner.shortcut, candidate),
-					)
-					.map((conflict) => conflict.loser.action),
-			),
-		];
-		setError(undefined);
-		setKeyIndex(list.length - 1);
-		if (losers.length === 0) {
-			commit(action.id, list, personal, true);
+		const liveInKept = (kept.effective[action.id] ?? []).some((existing) =>
+			sameShortcut(existing, candidate),
+		);
+		const personal = liveInKept
+			? keptPersonal
+			: assignLayer(options.personal(), action.id, list);
+		const resolved = liveInKept
+			? kept
+			: resolveKeybindings(options.keybindings().actions, personal);
+		const live = (resolved.effective[action.id] ?? []).some((existing) =>
+			sameShortcut(existing, candidate),
+		);
+		if (!live) {
+			fail("This shortcut cannot be assigned; choose another");
 			return;
 		}
-		setPending({
+		setKeyIndex(list.length - 1);
+		const losses = lossesFrom(
+			action.id,
+			options.keybindings().effective,
+			resolved.effective,
+		);
+		if (losses.length === 0) {
+			setMode({ kind: "idle" });
+			commit(action.id, list, personal, !liveInKept);
+			return;
+		}
+		setMode({
+			kind: "confirm",
 			action,
 			shortcut: candidate,
-			list,
 			personal,
-			losers: losers.map((id) => describe(id) ?? id),
+			moveToEnd: !liveInKept,
+			losses,
 		});
 	};
 
 	const confirm = () => {
-		const current = pending();
+		const current = confirmation();
 		if (!current) return;
-		setPending(undefined);
-		commit(current.action.id, current.list, current.personal, true);
+		setMode({ kind: "idle" });
+		const list = current.personal[current.action.id] ?? [];
+		commit(current.action.id, list, current.personal, current.moveToEnd);
 	};
 
 	const record = (event: KeyEvent) => {
+		const current = mode();
+		if (current.kind !== "recording") return;
 		const stroke = chordFromEvent(event);
-		const first = firstStroke();
-		if (first) {
+		if (current.first) {
 			stopTimer();
-			finish([first, stroke]);
+			finish([current.first, stroke]);
 			return;
 		}
-		setFirstStroke(stroke);
-		const emergency =
-			stroke.ctrl && !stroke.shift && !stroke.meta && stroke.name === "c";
-		// why: Shift+Enter and Ctrl+C are settled after one stroke, because neither can start a sequence and waiting would only delay the answer.
-		if (sameShortcut([stroke], [shiftEnter]) || emergency) {
+		setMode({ kind: "recording", first: stroke });
+		// why: Shift+Enter cannot start a sequence and is settled at once; every other first stroke waits for the sequence rule.
+		if (sameShortcut([stroke], [shiftEnter])) {
 			finish([stroke]);
 			return;
 		}
@@ -302,10 +352,7 @@ export function createHotkeysTab(options: HotkeysOptions) {
 
 	const beginRecording = () => {
 		if (!selected()) return;
-		setPending(undefined);
-		setError(undefined);
-		setRecording(true);
-		setFirstStroke(undefined);
+		setMode({ kind: "recording" });
 	};
 
 	const move = (step: number) => {
@@ -314,7 +361,7 @@ export function createHotkeysTab(options: HotkeysOptions) {
 		if (next === index()) return;
 		setIndex(next);
 		setKeyIndex(0);
-		setError(undefined);
+		setMode({ kind: "idle" });
 	};
 
 	const removeOne = () => {
@@ -326,7 +373,7 @@ export function createHotkeysTab(options: HotkeysOptions) {
 		const next = list.filter((_, position) => position !== at);
 		const personal = withList(options.personal(), action.id, next);
 		setKeyIndex(Math.max(0, Math.min(at, next.length - 1)));
-		setError(undefined);
+		setMode({ kind: "idle" });
 		commit(action.id, next, personal);
 	};
 
@@ -334,7 +381,7 @@ export function createHotkeysTab(options: HotkeysOptions) {
 		const action = selected();
 		if (!action) return;
 		setKeyIndex(0);
-		setError(undefined);
+		setMode({ kind: "idle" });
 		commit(action.id, [], withList(options.personal(), action.id, []));
 	};
 
@@ -343,19 +390,20 @@ export function createHotkeysTab(options: HotkeysOptions) {
 		if (!action) return;
 		if (!options.keybindings().overridden.has(action.id)) return;
 		setKeyIndex(0);
-		setError(undefined);
+		setMode({ kind: "idle" });
 		options.apply(resetLayer(options.personal(), action.id));
 		save(action.id, undefined);
 	};
 
 	const onKeyDown = (event: KeyEvent, list: BoxRenderable) => {
-		if (pending()) {
+		const current = mode();
+		if (current.kind === "confirm") {
 			event.preventDefault();
 			if (event.name === "return" && !event.ctrl && !event.meta && !event.shift)
 				confirm();
 			return;
 		}
-		if (recording()) {
+		if (current.kind === "recording") {
 			event.preventDefault();
 			record(event);
 			return;
@@ -418,10 +466,12 @@ export function createHotkeysTab(options: HotkeysOptions) {
 			queueMicrotask(() => scrollIntoView(rows.get(action.id)));
 		});
 		const select = (at: number) => {
-			if (recording() || pending()) cancel();
+			if (mode().kind === "recording" || mode().kind === "confirm") {
+				cancel();
+			}
 			setIndex(at);
 			setKeyIndex(0);
-			setError(undefined);
+			setMode({ kind: "idle" });
 			list.focus();
 		};
 		const shortcutLabel = (action: KeybindingAction, at: number) => {
@@ -430,7 +480,7 @@ export function createHotkeysTab(options: HotkeysOptions) {
 				const text = formatChord(shortcut);
 				const shown = chosen && position === keyIndex() ? `[${text}]` : text;
 				const winner = winnerOf(action.id, shortcut);
-				return winner ? `${shown} → ${describe(winner)}` : shown;
+				return winner ? `${shown} → ${identify(winner)}` : shown;
 			});
 			if (action.id === "input.newline") {
 				parts.push(`${formatChord([shiftEnter])} fixed`);
@@ -494,15 +544,15 @@ export function createHotkeysTab(options: HotkeysOptions) {
 											</Show>
 											<text
 												fg={
-													lost(row.action)
-														? theme.warning
-														: chosen()
-															? theme.barMuted
+													chosen()
+														? theme.barMuted
+														: lost(row.action)
+															? theme.warning
 															: theme.muted
 												}
 												flexShrink={1}
-												wrapMode="none"
-												truncate
+												maxWidth="55%"
+												wrapMode="word"
 											>
 												{shortcutLabel(row.action, row.index)}
 											</text>
@@ -524,30 +574,38 @@ export function createHotkeysTab(options: HotkeysOptions) {
 
 	return {
 		tab,
-		busy: () => recording() || pending() !== undefined,
+		busy: () => mode().kind === "recording" || mode().kind === "confirm",
 		cancel,
-		status() {
-			const message = error();
-			if (message) return { text: message, tone: "error" as const };
-			const current = pending();
-			if (!current) return undefined;
-			return {
-				text: `Assign ${formatChord(current.shortcut)} to "${current.action.description}"? It will be taken from ${current.losers.join(", ")}.`,
-				tone: "warning" as const,
-			};
-		},
 		reset() {
 			cancel();
-			setError(undefined);
 			setIndex(0);
 			setKeyIndex(0);
 		},
+		status() {
+			const current = mode();
+			if (current.kind === "error") {
+				return { lines: [current.message], tone: "error" as const };
+			}
+			if (current.kind !== "confirm") return undefined;
+			return {
+				lines: [
+					`Assign ${formatChord(current.shortcut)} to ${identify(current.action.id)}?`,
+					...current.losses.map(
+						(loss) =>
+							`It will take ${formatChord(loss.shortcut)} from ${identify(loss.action)}.`,
+					),
+				],
+				tone: "warning" as const,
+			};
+		},
 		hint() {
-			if (pending()) return "⏎ assign anyway   esc cancel";
-			if (recording()) {
-				const first = firstStroke();
-				return first
-					? `${formatChord([first])} … press a second key or wait   esc cancel`
+			const current = mode();
+			if (current.kind === "confirm") {
+				return "⏎ assign anyway   esc cancel";
+			}
+			if (current.kind === "recording") {
+				return current.first
+					? `${formatChord([current.first])} … press a second key or wait   esc cancel`
 					: "press a shortcut   esc cancel";
 			}
 			return "↑/↓ action   ←/→ key   ⏎ add   ⌫ remove   c clear   r reset";

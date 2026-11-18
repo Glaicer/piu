@@ -69,7 +69,7 @@ function canonicalStroke(
 ): Chord {
 	const linefeed = name === "linefeed";
 	return {
-		name: linefeed ? "j" : name,
+		name: linefeed ? "j" : name.toLowerCase(),
 		ctrl: linefeed || ctrl,
 		shift,
 		meta,

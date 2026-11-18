@@ -1,10 +1,14 @@
 import { expect, test } from "bun:test";
+import { KeyEvent } from "@opentui/core";
 import { parseBindingValue, parseKeybindings } from "../src/config.ts";
 import {
+	chordFromEvent,
 	formatChord,
 	type KeybindingAction,
+	matches,
 	type ResolvedKeybindings,
 	resolveKeybindings,
+	shortcutSpec,
 } from "../src/keybindings.ts";
 
 function piu(id: string, defaults: string[]): KeybindingAction {
@@ -158,4 +162,25 @@ test("a duplicated shortcut of the loser reports one conflict", () => {
 	expect(conflicts(resolved)).toEqual([
 		["model", "alt+m", "reasoning", "alt+m"],
 	]);
+});
+
+test("a shifted non-Latin letter keeps its Config spelling", () => {
+	const [shortcut] = parseBindingValue("shift+я", "x");
+	const chord = shortcut?.[0];
+	if (!chord) throw new Error("expected a chord");
+	const event = new KeyEvent({
+		name: "Я",
+		ctrl: false,
+		meta: false,
+		shift: true,
+		option: false,
+		sequence: "Я",
+		number: false,
+		raw: "Я",
+		eventType: "press",
+		source: "raw",
+	});
+	expect(chordFromEvent(event)).toEqual(chord);
+	expect(matches(chord, event)).toBe(true);
+	expect(shortcutSpec([chord])).toBe("shift+я");
 });

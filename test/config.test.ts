@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseBindingValue, saveKeybinding } from "../src/config.ts";
 import { panelBoxes, startPiu } from "./harness.ts";
 import { hooks } from "./hooks.ts";
 
@@ -427,4 +434,30 @@ test("an Extension folder with a dot in its name fails startup naming its path",
 	rmSync(dir, { recursive: true, force: true });
 
 	expect(error?.message).toContain(join(dir, "extensions/my.ext"));
+});
+
+test("saving one keybinding keeps an own __proto__ key from the file", () => {
+	const dir = mkdtempSync(join(tmpdir(), "piu-config-"));
+	const path = join(dir, "config.json");
+	try {
+		// why: an object literal cannot carry an own __proto__, so the file is written as JSON text.
+		writeFileSync(
+			path,
+			'{"keybindings":{"__proto__":"alt+p","command.model":"ctrl+l"}}',
+		);
+		saveKeybinding(
+			path,
+			"command.model",
+			parseBindingValue("alt+n", "command.model"),
+			true,
+		);
+		const saved = JSON.parse(readFileSync(path, "utf8"));
+		expect(Object.hasOwn(saved.keybindings, "__proto__")).toBe(true);
+		expect(
+			Object.getOwnPropertyDescriptor(saved.keybindings, "__proto__")?.value,
+		).toBe("alt+p");
+		expect(saved.keybindings["command.model"]).toBe("alt+n");
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 });

@@ -211,7 +211,8 @@ export function saveKeybinding(
 	const config = value === undefined ? {} : object(value, "config");
 	const bindings =
 		"keybindings" in config ? object(config.keybindings, "keybindings") : {};
-	const keybindings: Fields = {};
+	// why: a plain object turns an own "__proto__" from the file into a prototype write and drops it; a null-prototype object keeps every key the file had.
+	const keybindings: Fields = Object.create(null);
 	if (moveToEnd) {
 		for (const [id, previous] of Object.entries(bindings)) {
 			if (id !== action) keybindings[id] = previous;

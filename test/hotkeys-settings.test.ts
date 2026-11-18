@@ -20,6 +20,12 @@ function readConfig(piu: Piu) {
 	return JSON.parse(readFileSync(join(piu.dir, "config.json"), "utf8"));
 }
 
+function topModalTitle(piu: Piu, frame: string) {
+	const bounds = modalBounds(piu);
+	if (!bounds) return "";
+	return frame.split("\n")[bounds.top + 1] ?? "";
+}
+
 async function openHotkeys(piu: Piu) {
 	await openSettings(piu);
 	piu.mockInput.pressKey("\x1b[6;5~");
@@ -272,11 +278,13 @@ test("an occupied shortcut warns, refuses cleanly, then wins on confirmation", a
 	piu.mockInput.pressEnter();
 	piu.mockInput.pressKey("t", { meta: true });
 	await recorded(piu, clock);
-	await piu.waitForFrame(
-		(frame) =>
-			frame.includes('Assign alt+t to "Switch the model"') &&
-			frame.includes("Set the reasoning level"),
-	);
+	await piu.waitForFrame((frame) => {
+		const text = frame.replace(/\s+/g, " ");
+		return (
+			text.includes("Assign alt+t to Switch the model") &&
+			text.includes("Set the reasoning level (command.reasoning)")
+		);
+	});
 	expect(readConfig(piu).keybindings).toBeUndefined();
 
 	piu.mockInput.pressEscape();
@@ -307,13 +315,138 @@ test("an occupied shortcut warns, refuses cleanly, then wins on confirmation", a
 	await clickRow(piu, "Set the reasoning level");
 	await piu.waitForFrame(
 		(frame) =>
-			frame.includes("→ Switch the model") && !frame.includes("Assign alt+t"),
+			frame.includes("→ Switch the model (command.model)") &&
+			!frame.includes("Assign alt+t"),
 	);
 
 	piu.mockInput.pressEscape();
 	await piu.waitForFrame(() => !modalBounds(piu));
 	piu.mockInput.pressKey("t", { meta: true });
 	await piu.waitForFrame((frame) => frame.includes("faux-2"));
+});
+
+test("a free shortcut does not take an already-lost shortcut from another action", async () => {
+	const clock = new ManualClock();
+	await using piu = await startPiu({
+		script: none,
+		clock,
+		height: 34,
+		config: {
+			keybindings: {
+				"command.model": ["ctrl+l", "alt+t"],
+				"command.reasoning": "alt+t",
+			},
+		},
+	});
+	await piu.waitForFrame((frame) => frame.includes("faux-1"));
+	await openHotkeys(piu);
+	await clickRow(piu, "Switch the model");
+	piu.mockInput.pressEnter();
+	piu.mockInput.pressKey("y", { meta: true });
+	await recorded(piu, clock);
+	const frame = await piu.waitForFrame((current) =>
+		current.includes("[alt+y]"),
+	);
+	expect(frame).not.toContain("Assign alt+y");
+	expect(readConfig(piu).keybindings["command.model"]).toEqual([
+		"ctrl+l",
+		"alt+t",
+		"alt+y",
+	]);
+	piu.mockInput.pressEscape();
+	await piu.waitForFrame(() => !modalBounds(piu));
+	piu.mockInput.pressKey("t", { meta: true });
+	await piu.waitForFrame((current) =>
+		topModalTitle(piu, current).includes("Reasoning"),
+	);
+});
+
+test("adding a shortcut keeps the last duplicate of the action in force", async () => {
+	const clock = new ManualClock();
+	await using piu = await startPiu({
+		script: none,
+		clock,
+		height: 34,
+		config: {
+			keybindings: { "command.model": ["y", "y m", "y"] },
+		},
+	});
+	await piu.waitForFrame((frame) => frame.includes("faux-1"));
+	await openHotkeys(piu);
+	await clickRow(piu, "Switch the model");
+	piu.mockInput.pressEnter();
+	piu.mockInput.pressKey("y", { meta: true });
+	await recorded(piu, clock);
+	await piu.waitForFrame((frame) => frame.includes("[alt+y]"));
+	expect(readConfig(piu).keybindings["command.model"]).toEqual([
+		"y m",
+		"y",
+		"alt+y",
+	]);
+	piu.mockInput.pressEscape();
+	await piu.waitForFrame(() => !modalBounds(piu));
+	piu.mockInput.pressKey("y");
+	await piu.waitForFrame((frame) => frame.includes("faux-2"));
+});
+
+test("all shortcuts of an action stay visible at a narrow width", async () => {
+	const shortcuts = [
+		...Array.from({ length: 9 }, (_, at) => `alt+${at + 1}`),
+		"ctrl+1",
+		"ctrl+2",
+		"ctrl+3",
+	];
+	await using piu = await startPiu({
+		script: none,
+		width: 100,
+		height: 30,
+		config: { keybindings: { "focus.next": shortcuts } },
+	});
+	const frame = await openHotkeys(piu);
+	expect(frame).toContain("[alt+1]");
+	const visible = await piu.waitForFrame(
+		(current) =>
+			current.includes("alt+9") &&
+			current.includes("ctrl+3") &&
+			current.includes("[alt+1]"),
+	);
+	expect(visible).toContain("alt+9");
+});
+
+test("an Extension named piu keeps its own group", async () => {
+	await using piu = await startPiu({
+		script: none,
+		extensions,
+		height: 30,
+		config: { placement: { side: ["piu.badge"] } },
+	});
+	const initial = await openHotkeys(piu);
+	expect(initial).not.toContain("Cycle the piu Extension counter");
+	const frame = await (async () => {
+		await clickRow(piu, "Cycle the piu Extension counter");
+		return piu.waitForFrame((current) =>
+			current.includes("Cycle the piu Extension counter"),
+		);
+	})();
+	const lines = frame.split("\n");
+	const at = lines.findIndex((line) =>
+		line.includes("Cycle the piu Extension counter"),
+	);
+	expect(at).toBeGreaterThan(0);
+	expect(lines[at - 1]).toContain("piu");
+});
+
+test("a conflict marker names the winner by ID when descriptions repeat", async () => {
+	await using piu = await startPiu({
+		script: none,
+		config: { keybindings: { "command.q": "alt+t" } },
+	});
+	await openHotkeys(piu);
+	await clickRow(piu, "Set the reasoning level");
+	const frame = await piu.waitForFrame((current) =>
+		current.includes("→ Close the Backend and piu (command.q)"),
+	);
+	expect(frame).toContain("(command.q)");
 });
 
 test("a loaded Extension action is grouped and reassigned from the tab", async () => {
@@ -328,8 +461,10 @@ test("a loaded Extension action is grouped and reassigned from the tab", async (
 	await piu.waitForFrame((frame) => frame.includes("A action: 0"));
 	await openHotkeys(piu);
 	await clickRow(piu, "Cycle the A counter");
-	const found = await piu.waitForFrame((frame) => frame.includes("hotkeys-a"));
-	expect(found).toContain("Cycle the A counter");
+	await piu.waitForFrame(
+		(frame) =>
+			frame.includes("hotkeys-a") && frame.includes("Cycle the A counter"),
+	);
 	piu.mockInput.pressEnter();
 	piu.mockInput.pressKey("y", { meta: true });
 	await recorded(piu, clock);
