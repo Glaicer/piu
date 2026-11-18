@@ -6,7 +6,7 @@
 
 **Blocked by:** None (can start immediately). Пакет `@pify/shell-background` снова включён в Pi settings и вкомпилирован в Pi-Bolt (2026-11-13).
 
-**Status:** ready-for-agent
+**Status:** wontfix
 
 ## Критерии приёмки
 
@@ -30,3 +30,7 @@
 - Как остановить задачу из piu (команда пакета через RPC или свой путь) — решить в плане тикета; убийство процессов не дублировать, если пакет это уже умеет.
 - Команда и Modal живут во встроенной Extension `background`: её Module `background.processes` уже стоит в Placement по умолчанию, поэтому её команды загружаются. Без пина в Placement не будет и команды — так же, как сейчас без пина нет статуса задач.
 - Прочитать `docs/agents/pi-extensions.md` и раздел `docs/agents/testing.md` про stand-in `shell-background` до начала.
+
+## Comments
+
+- Тикет закрыт без реализации: окно фоновых задач больше не актуально.
