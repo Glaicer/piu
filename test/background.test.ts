@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
+import { ManualClock } from "@opentui/core/testing";
 import { blocker } from "./blocker.ts";
 import {
 	inputArea,
@@ -65,13 +66,41 @@ test("a command started in the background is pinned above the input with its job
 			!working(f),
 	);
 
-	expect(pinnedRows(frame)[0]).toMatch(/bg-1 +running +: alpha/);
+	expect(pinnedRows(frame)[0]).toMatch(/bg-1 +: alpha.*◐ running +\d+s\s*$/);
 	const rows = frame.split("\n");
 	const header = rows.findIndex((line) => line.includes(HEADER));
 	expect(header).toBeGreaterThan(rows.findIndex((l) => l.includes("Launched")));
 	expect(header).toBeLessThan(inputTop());
 	expect(agentPanel(frame)).not.toContain(HEADER);
 	expect(agentPanel(frame)).toMatch(/ bash .*bg-1 running/);
+});
+
+test("the pinned timer advances without a new turn and stays visible next to a clipped command", async () => {
+	using job = blocker("alpha");
+	const clock = new ManualClock();
+	await using piu = await start(
+		{
+			replies: [
+				background(`${job.command}; : ${"tail".repeat(40)}`),
+				"Launched it",
+			],
+		},
+		{ clock, width: 54 },
+	);
+	await send(piu, "Go");
+	const first = await piu.waitForFrame(
+		(f) => pinnedRows(f, "alpha").length === 1 && !working(f),
+	);
+	const initial = pinnedRows(first)[0] ?? "";
+	expect(initial).toMatch(/bg-1 +: alpha.*\.{3}.* +◐ running +0s\s*$/);
+
+	clock.advance(65_000);
+	const later = await piu.waitForFrame((f) =>
+		/◐ running +1m 05s\s*$/.test(pinnedRows(f)[0] ?? ""),
+	);
+	const updated = pinnedRows(later)[0] ?? "";
+	expect(updated.indexOf("running")).toBe(initial.indexOf("running"));
+	expect(updated.trimEnd().length).toBe(initial.trimEnd().length);
 });
 
 test("when the process ends the pin goes away without a new message, and its card in the history keeps the final status", async () => {
@@ -112,7 +141,7 @@ test("a foreground command that outlives the auto-background threshold is pinned
 	const moved = await piu.waitForFrame(
 		(f) => pinnedRows(f, "gamma").length === 1 && f.includes("Moved on"),
 	);
-	expect(pinnedRows(moved)[0]).toContain("running");
+	expect(pinnedRows(moved)[0]).toMatch(/◐ running +[1-9]\d*s\s*$/);
 });
 
 test("a foreground command that ends before the threshold is never pinned", async () => {

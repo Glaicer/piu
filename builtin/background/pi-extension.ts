@@ -8,7 +8,7 @@ import type {
 import {
 	BACKGROUND_STATUS_KEY,
 	type BackgroundJob,
-	jobStatuses,
+	parseJob,
 	serializeJobs,
 } from "../../src/background.ts";
 
@@ -26,10 +26,7 @@ function sidecarPath(ctx: ExtensionContext, id: string) {
 
 function readJob(path: string, id: string): BackgroundJob | undefined {
 	try {
-		const raw = JSON.parse(readFileSync(path, "utf8"));
-		return typeof raw.command === "string" && jobStatuses.includes(raw.status)
-			? { id, command: raw.command, status: raw.status }
-			: undefined;
+		return parseJob({ ...JSON.parse(readFileSync(path, "utf8")), id });
 	} catch {
 		return undefined;
 	}

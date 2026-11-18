@@ -13,7 +13,32 @@ export type BackgroundJob = {
 	readonly id: string;
 	readonly command: string;
 	readonly status: (typeof jobStatuses)[number];
+	readonly startedAt?: number;
 };
+
+export function parseJob(value: unknown): BackgroundJob | undefined {
+	if (!value || typeof value !== "object") return undefined;
+	const { id, command, status, startedAt } = value as Partial<BackgroundJob>;
+	if (
+		typeof id !== "string" ||
+		typeof command !== "string" ||
+		status === undefined ||
+		!jobStatuses.includes(status)
+	) {
+		return undefined;
+	}
+	return {
+		id,
+		command,
+		status,
+		startedAt:
+			typeof startedAt === "number" &&
+			Number.isFinite(startedAt) &&
+			startedAt > 0
+				? startedAt
+				: undefined,
+	};
+}
 
 type Snapshot = { readonly v: 1; readonly jobs: readonly BackgroundJob[] };
 
@@ -31,10 +56,5 @@ export function parseJobs(text: string | undefined): BackgroundJob[] {
 	}
 	const { v, jobs } = (parsed ?? {}) as Partial<Snapshot>;
 	if (v !== 1 || !Array.isArray(jobs)) return [];
-	return jobs.filter(
-		(job): job is BackgroundJob =>
-			typeof job?.id === "string" &&
-			typeof job.command === "string" &&
-			jobStatuses.includes(job.status),
-	);
+	return jobs.map(parseJob).filter((job) => job !== undefined);
 }
