@@ -55,6 +55,14 @@ type Row = {
 	readonly tokens: string;
 };
 
+const COLUMN_WIDTHS = { name: 20, tokens: 6, source: 25 } as const;
+const COLUMN_GAP = 4;
+const NAME_AT = 1;
+const TOKENS_AT = NAME_AT + COLUMN_WIDTHS.name + 1;
+const SOURCE_AT = TOKENS_AT + COLUMN_WIDTHS.tokens + COLUMN_GAP;
+const SOURCE_END = SOURCE_AT + COLUMN_WIDTHS.source;
+const COLUMN_HEADER = ` ${" ".repeat(COLUMN_WIDTHS.name)} ${"tokens".padStart(COLUMN_WIDTHS.tokens)}${" ".repeat(COLUMN_GAP)}source`;
+
 const GROUPS = ["System prompt", "Tools", "Messages"] as const;
 
 function rowsOf(piu: Piu, frame: string): Record<string, Row[]> {
@@ -75,15 +83,12 @@ function rowsOf(piu: Piu, frame: string): Record<string, Row[]> {
 			current = undefined;
 			continue;
 		}
-		const fields = line.trim().split(/\s{2,}/);
 		groups[current]?.push({
-			name: fields[0] ?? "",
-			origin: fields[1] ?? "",
+			name: line.slice(NAME_AT, NAME_AT + COLUMN_WIDTHS.name).trimEnd(),
+			origin: line.slice(SOURCE_AT, SOURCE_END).trimEnd(),
 			requestOnly:
-				fields.length > 3
-					? (fields[2] ?? "").replace(/^request only · /, "")
-					: "",
-			tokens: (fields.at(-1) ?? "").replace(/ tokens$/, ""),
+				/request only · (\w+)/.exec(line.slice(SOURCE_END))?.[1] ?? "",
+			tokens: line.slice(TOKENS_AT, TOKENS_AT + COLUMN_WIDTHS.tokens).trim(),
 		});
 	}
 	return groups;
@@ -151,14 +156,34 @@ test("a section added in before_agent_start is listed with its size", async () =
 	);
 
 	const frame = await openInjections(piu);
+	const text = modalText(piu, frame);
+	const lines = text.split("\n");
+	expect(lines.find((line) => line.trimEnd() === COLUMN_HEADER)).toBeDefined();
+	const toolsAt = lines.findIndex((line) => line.startsWith("Tools · "));
+	if (toolsAt < 0) throw new Error(`No Tools header:\n${text}`);
+	expect(lines[toolsAt - 1]?.trim()).toBe("");
 	const system = rowsOf(piu, frame)["System prompt"] ?? [];
 	const probe = system.find((row) => row.name === "probe_notes");
-	if (!probe) throw new Error(`No probe_notes row:\n${modalText(piu, frame)}`);
+	if (!probe) throw new Error(`No probe_notes row:\n${text}`);
+	const probeTokens = formatTokens(
+		Math.ceil(`<probe_notes>\n${body}\n</probe_notes>`.length / 4),
+	);
 	expect(probe.origin).toBe("Pi extension");
-	expect(probe.tokens).toBe(
-		formatTokens(
-			Math.ceil(`<probe_notes>\n${body}\n</probe_notes>`.length / 4),
-		),
+	expect(probe.tokens).toBe(probeTokens);
+	const probeLine = lines.find(
+		(line) =>
+			line.slice(NAME_AT, NAME_AT + COLUMN_WIDTHS.name).trimEnd() ===
+			"probe_notes",
+	);
+	if (!probeLine) throw new Error(`No probe_notes line:\n${text}`);
+	expect(probeLine.slice(NAME_AT, NAME_AT + COLUMN_WIDTHS.name)).toBe(
+		"probe_notes".padEnd(COLUMN_WIDTHS.name),
+	);
+	expect(probeLine.slice(TOKENS_AT, TOKENS_AT + COLUMN_WIDTHS.tokens)).toBe(
+		probeTokens.padStart(COLUMN_WIDTHS.tokens),
+	);
+	expect(probeLine.slice(SOURCE_AT, SOURCE_END)).toBe(
+		"Pi extension".padEnd(COLUMN_WIDTHS.source),
 	);
 	const preamble = system.find((row) => row.name === "preamble");
 	expect(preamble?.origin).toBe("Pi");
@@ -225,6 +250,49 @@ test("a click opens an injection's full text", async () => {
 	expect(modalText(piu, detail)).toContain("esc back");
 }, 20000);
 
+test("the Back button returns from an injection's text", async () => {
+	const body = "PROBE_SECTION_BODY ".repeat(20).trim();
+	await using piu = await startPiu(
+		fixture({ replies: ["Answer"] }, { PIU_CONTEXT_SECTION: body }),
+	);
+	await piu.waitForFrame((frame) => frame.includes("faux-1"));
+	await send(piu, "Hello");
+	await piu.waitForFrame(
+		(frame) => agentPanel(frame).includes("Answer") && !working(frame),
+	);
+	await openInjections(piu);
+	await pressDownTo(piu, "probe_notes");
+	piu.mockInput.pressEnter();
+	const detail = await piu.waitForFrame(
+		(frame) => modalText(piu, frame).includes("PROBE_SECTION_BODY"),
+		8000,
+	);
+
+	const text = modalText(piu, detail).split("\n");
+	const backAt = text.findIndex((line) => line.trim() === "Back");
+	if (backAt < 0) throw new Error(`No Back button:\n${modalText(piu, detail)}`);
+	expect(text[backAt - 1]?.trim()).toBe("");
+
+	const lines = detail.split("\n");
+	const backRow = lines.findIndex((line) => line.trim() === "Back");
+	const backColumn = (lines[backRow] ?? "").indexOf("Back");
+	expect(backRow).toBeGreaterThan(0);
+	expect(backColumn).toBeGreaterThan(0);
+	const backSpan = piu
+		.captureSpans()
+		.lines[backRow]?.spans.find((span) => span.text.includes("Back"));
+	if (!backSpan) throw new Error(`No Back span:\n${modalText(piu, detail)}`);
+	expect(backSpan.bg.equals(RGBA.fromHex(darkTheme.bar))).toBe(true);
+	expect(backSpan.fg.equals(RGBA.fromHex(darkTheme.barText))).toBe(true);
+	await piu.mockMouse.click(backColumn + 1, backRow);
+	const list = await piu.waitForFrame(
+		(frame) => modalText(piu, frame).includes("System prompt · "),
+		8000,
+	);
+	expect(modalText(piu, list)).not.toContain("esc back");
+	expect(modalBounds(piu)).toBeDefined();
+}, 20000);
+
 test("the listed tools are the tools the faux model received", async () => {
 	await using piu = await startPiu(fixture({ replies: ["Tools: {tools}"] }));
 	await piu.waitForFrame((frame) => frame.includes("faux-1"));
@@ -265,10 +333,16 @@ test("a message an extension adds is listed as saved", async () => {
 	);
 
 	const frame = await openInjections(piu);
+	const text = modalText(piu, frame);
+	const messagesAt = text
+		.split("\n")
+		.findIndex((line) => line.startsWith("Messages · "));
+	expect(messagesAt).toBeGreaterThan(0);
+	expect(text.split("\n")[messagesAt - 1]?.trim()).toBe("");
 	const messages = rowsOf(piu, frame).Messages ?? [];
 	const note = messages.find((row) => row.name === "probe-note");
 	if (!note) {
-		throw new Error(`No probe-note row:\n${modalText(piu, frame)}`);
+		throw new Error(`No probe-note row:\n${text}`);
 	}
 	expect(note.origin).toBe("Pi extension");
 	expect(note.requestOnly).toBe("");

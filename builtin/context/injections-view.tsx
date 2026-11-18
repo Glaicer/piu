@@ -13,8 +13,21 @@ import { type ContextModalState, switchTabKey } from "./state.ts";
 const NOTE =
 	"Edits made after piu's hook (later context_with_system handlers, provider payload rewrites) are not shown.";
 
+const NAME_WIDTH = 20;
+const TOKENS_WIDTH = 6;
+const SOURCE_WIDTH = 25;
+const COLUMN_GAP = 4;
+
+const COLUMN_HEADER = ` ${" ".repeat(NAME_WIDTH)} ${"tokens".padStart(TOKENS_WIDTH)}${" ".repeat(COLUMN_GAP)}source`;
+
+const fitLeft = (text: string, width: number) =>
+	text.length > width ? `${text.slice(0, width - 1)}…` : text.padEnd(width);
+const fitRight = (text: string, width: number) =>
+	text.length > width ? `${text.slice(0, width - 1)}…` : text.padStart(width);
+
 type Line =
 	| { readonly kind: "group"; readonly label: string; readonly count: number }
+	| { readonly kind: "blank" }
 	| {
 			readonly kind: "item";
 			readonly item: ContextInjection;
@@ -32,6 +45,7 @@ function listLines(items: readonly ContextInjection[]): Line[] {
 			.map((item, index) => ({ item, index }))
 			.filter(({ item }) => item.group === group.id);
 		if (members.length === 0) continue;
+		if (result.length > 0) result.push({ kind: "blank" });
 		result.push({ kind: "group", label: group.label, count: members.length });
 		for (const member of members)
 			result.push({ kind: "item", item: member.item, index: member.index });
@@ -42,6 +56,7 @@ function listLines(items: readonly ContextInjection[]): Line[] {
 function InjectionDetail(props: {
 	item: () => ContextInjection | undefined;
 	theme: Theme;
+	onBack: () => void;
 }) {
 	const meta = () => {
 		const item = props.item();
@@ -53,6 +68,22 @@ function InjectionDetail(props: {
 	};
 	return (
 		<box flexDirection="column">
+			<text> </text>
+			<box
+				alignSelf="flex-start"
+				flexShrink={0}
+				backgroundColor={props.theme.bar}
+				paddingX={1}
+				onMouseDown={(event) => {
+					event.preventDefault();
+					props.onBack();
+				}}
+			>
+				<text fg={props.theme.barText} attributes={TextAttributes.BOLD}>
+					Back
+				</text>
+			</box>
+			<text> </text>
 			<text fg={props.theme.text} attributes={TextAttributes.BOLD}>
 				{props.item()?.name ?? ""}
 			</text>
@@ -72,8 +103,12 @@ function InjectionsList(props: {
 	const lines = () => listLines(props.items);
 	return (
 		<box flexDirection="column">
+			<Show when={lines().length > 0}>
+				<text fg={props.theme.faint}>{COLUMN_HEADER}</text>
+			</Show>
 			<For each={lines()}>
 				{(line) => {
+					if (line.kind === "blank") return <text> </text>;
 					if (line.kind === "group")
 						return (
 							<text
@@ -97,25 +132,22 @@ function InjectionsList(props: {
 							<text
 								fg={selected() ? props.theme.barText : props.theme.text}
 								attributes={TextAttributes.BOLD}
-								flexShrink={1}
 								wrapMode="none"
-								truncate
-							>{` ${line.item.name}`}</text>
+							>{` ${fitLeft(line.item.name, NAME_WIDTH)}`}</text>
+							<text
+								fg={selected() ? props.theme.barText : props.theme.text}
+								wrapMode="none"
+							>{` ${fitRight(formatTokens(line.item.tokens), TOKENS_WIDTH)}`}</text>
 							<text
 								fg={selected() ? props.theme.barMuted : props.theme.muted}
-								flexShrink={0}
-								maxWidth="30%"
 								wrapMode="none"
-								truncate
-							>{`  ${originLabel(line.item.origin)}`}</text>
+							>{`${" ".repeat(COLUMN_GAP)}${fitLeft(originLabel(line.item.origin), SOURCE_WIDTH)}`}</text>
 							{line.item.requestOnly && (
 								<text
 									fg={selected() ? props.theme.barText : props.theme.text}
-								>{`  request only · ${line.item.requestOnly}`}</text>
+									wrapMode="none"
+								>{` · request only · ${line.item.requestOnly}`}</text>
 							)}
-							<text
-								fg={selected() ? props.theme.barText : props.theme.text}
-							>{`  ${formatTokens(line.item.tokens).padStart(6)} tokens`}</text>
 						</box>
 					);
 				}}
@@ -196,7 +228,11 @@ export function InjectionsContent(props: {
 						/>
 					}
 				>
-					<InjectionDetail item={state.detail} theme={theme} />
+					<InjectionDetail
+						item={state.detail}
+						theme={theme}
+						onBack={() => state.setDetail(undefined)}
+					/>
 				</Show>
 			</Show>
 		</box>
