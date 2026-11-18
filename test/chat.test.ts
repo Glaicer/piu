@@ -313,7 +313,8 @@ test("chat jump keys and hint follow Config", async () => {
 	const top = await piu.waitForFrame(
 		(frame) =>
 			agentPanel(frame).includes("Line 000") &&
-			agentPanel(frame).includes("alt+d: jump to bottom"),
+			agentPanel(frame).includes("alt+d: jump to bottom") &&
+			!agentPanel(frame).includes("Line 119"),
 	);
 	expect(agentPanel(top)).not.toContain("Line 119");
 
@@ -321,7 +322,8 @@ test("chat jump keys and hint follow Config", async () => {
 	const end = await piu.waitForFrame(
 		(frame) =>
 			agentPanel(frame).includes("Line 119") &&
-			!agentPanel(frame).includes("jump to bottom"),
+			!agentPanel(frame).includes("jump to bottom") &&
+			!agentPanel(frame).includes("Line 000"),
 	);
 	expect(agentPanel(end)).not.toContain("Line 000");
 });

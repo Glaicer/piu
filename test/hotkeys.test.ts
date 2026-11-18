@@ -4,6 +4,7 @@ import { ManualClock } from "@opentui/core/testing";
 import {
 	bottomLine,
 	bottomPanel,
+	focusedPanels,
 	inputArea,
 	inputHints,
 	modalTitle,
@@ -125,7 +126,7 @@ test("an action in a missing Extension is rejected", async () => {
 	).rejects.toThrow("keybindings.missing.cycle");
 });
 
-test("an unplaced Extension is not loaded for its hotkey", async () => {
+test("an unplaced Extension is not loaded for its shortcut", async () => {
 	await using piu = await startPiu({
 		script: none,
 		extensions,
@@ -155,6 +156,20 @@ test("a malformed action export names its Extension", async () => {
 
 	expect(error?.message).toContain("invalid-action");
 	expect(error?.message).toContain("keybindingActions");
+});
+
+test("a sparse default binding list names its Extension and field", async () => {
+	const error = await startPiu({
+		script: none,
+		extensions,
+		config: { placement: { side: ["invalid-defaults.badge"] } },
+	}).then(
+		() => undefined,
+		(e: Error) => e,
+	);
+
+	expect(error?.message).toContain("invalid-defaults");
+	expect(error?.message).toContain("defaultBindings");
 });
 
 test("Extension defaults follow Placement load order", async () => {
@@ -265,6 +280,45 @@ test("miss returns the editing stroke before the letter", async () => {
 	piu.mockInput.pressKey("q");
 	const frame = await rendered(piu);
 	expect(inputArea(frame).trim()).toBe("q");
+});
+
+test("an intervening paste keeps the first stroke before it", async () => {
+	await using piu = await startPiu({
+		script: none,
+		config: { keybindings: { "command.model": "g m" } },
+	});
+
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+	piu.mockInput.pressKey("g");
+	await piu.mockInput.pasteBracketedText("paste");
+	piu.mockInput.pressKey("z");
+	const frame = await rendered(piu);
+	expect(inputArea(frame).trim()).toBe("gpastez");
+	expect(frame).not.toContain("faux-2");
+});
+
+test("a chat shortcut that cannot jump falls back to typing", async () => {
+	await using piu = await startPiu({
+		script: none,
+		extensions,
+		config: {
+			placement: {
+				agent: [],
+				pinned: [],
+				input: ["input.prompt"],
+				status: ["status.line"],
+				side: ["hotkeys-a.tall"],
+				bottom: ["model.current", "input.dir", "status.working"],
+			},
+			keybindings: { "chat.bottom": "z" },
+		},
+	});
+
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+	piu.mockInput.pressTab();
+	await piu.waitForFrame((f) => focusedPanels(piu, f).includes("side"));
+	piu.mockInput.pressKey("z");
+	await piu.waitForFrame((f) => inputArea(f).includes("z"));
 });
 
 test("the unmatched second stroke still runs a single shortcut", async () => {
@@ -401,7 +455,10 @@ test("first assigned newline shortcut is shown and runs", async () => {
 	piu.mockInput.pressKey("n");
 	await piu.mockInput.typeText("two");
 	await piu.waitForFrame(
-		(f) => inputArea(f).includes("one") && inputArea(f).includes("two"),
+		(f) =>
+			inputArea(f).includes("one") &&
+			inputArea(f).includes("two") &&
+			inputHints(f).endsWith("ctrl+x n new line"),
 	);
 	expect(inputHints(piu.captureCharFrame()).endsWith("ctrl+x n new line")).toBe(
 		true,

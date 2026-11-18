@@ -142,14 +142,6 @@ export function matches(chord: Chord, event: KeyEvent) {
 	return sameStroke(chord, eventChord(event));
 }
 
-function strokeKey(chord: Chord) {
-	return `${chord.name}:${chord.ctrl}:${chord.shift}:${chord.meta}`;
-}
-
-function shortcutKey(shortcut: Shortcut) {
-	return shortcut.map(strokeKey).join(" ");
-}
-
 export function resolveKeybindings(
 	actions: readonly KeybindingAction[],
 	overrides: Keybindings,
@@ -166,12 +158,8 @@ export function resolveKeybindings(
 		]),
 	);
 	const assignments: KeybindingAssignment[] = [];
-	const seen = new Set<string>();
 	const assign = (action: string, shortcuts: readonly Shortcut[]) => {
 		for (const shortcut of shortcuts) {
-			const key = `${action}\u0000${shortcutKey(shortcut)}`;
-			if (seen.has(key)) continue;
-			seen.add(key);
 			assignments.push({ action, shortcut });
 		}
 	};
@@ -197,6 +185,12 @@ export function resolveKeybindings(
 			const other = assignments[later];
 			if (other === undefined) continue;
 			if (accepted[later] === undefined) continue;
+			if (
+				candidate.action === other.action &&
+				sameShortcut(candidate.shortcut, other.shortcut)
+			) {
+				continue;
+			}
 			if (!collides(candidate.shortcut, other.shortcut)) continue;
 			if (winnerAt < 0 || later > winnerAt) winnerAt = later;
 		}

@@ -120,6 +120,8 @@ export function createKeybindingRouter(options: {
 		if (single) {
 			if (options.run(single.action, single.shortcut, event)) {
 				consume(event);
+			} else {
+				options.fallback(event);
 			}
 			return;
 		}
@@ -151,6 +153,10 @@ export function createKeybindingRouter(options: {
 		onKey,
 		cancel() {
 			clear();
+		},
+		flush() {
+			const current = clear();
+			if (current && options.enabled()) replay(current.first);
 		},
 	};
 }

@@ -394,6 +394,12 @@ export function parseBindingValue(
 		}
 		const chords = parts.map((part) => parseStroke(part, path));
 		for (const [at, chord] of chords.entries()) {
+			if (chord.name === "c" && chord.ctrl && !chord.shift && !chord.meta) {
+				throw fieldError(
+					path,
+					"Ctrl+C is the emergency exit and cannot be bound",
+				);
+			}
 			if (
 				at > 0 &&
 				chord.name === "escape" &&

@@ -134,3 +134,13 @@ test("a repeated shortcut of one action resolves once without a conflict", () =>
 	expect(effective(resolved)).toEqual({ a: ["x"] });
 	expect(resolved.conflicts).toEqual([]);
 });
+
+test("a later repeated shortcut wins before its own sequence", () => {
+	const resolved = resolveKeybindings(
+		[piu("a", [])],
+		parseKeybindings({ a: ["g", "g m", "g"] }),
+	);
+
+	expect(effective(resolved)).toEqual({ a: ["g"] });
+	expect(conflicts(resolved)).toEqual([["a", "g m", "a", "g"]]);
+});

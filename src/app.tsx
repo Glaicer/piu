@@ -2,6 +2,7 @@ import { join } from "node:path";
 import type { ClipboardService, KeyEvent, Renderable } from "@opentui/core";
 import {
 	useKeyboard,
+	usePaste,
 	useRenderer,
 	useTerminalDimensions,
 } from "@opentui/solid";
@@ -206,6 +207,9 @@ export function prepareKeybindings(
 		if (known.has(id)) continue;
 		const dot = id.indexOf(".");
 		const extension = dot > 0 ? id.slice(0, dot) : "";
+		const name = dot > 0 ? id.slice(dot + 1) : "";
+		const validName =
+			name.length > 0 && !name.includes(".") && !/\s/.test(name);
 		if (extension && extension !== "command") {
 			if (!folders.has(extension)) {
 				throw fieldError(
@@ -213,7 +217,7 @@ export function prepareKeybindings(
 					`unknown action, no Extension named "${extension}"`,
 				);
 			}
-			if (!placement.enabledExtensions.has(extension)) continue;
+			if (validName && !placement.enabledExtensions.has(extension)) continue;
 		}
 		throw fieldError(
 			`keybindings.${id}`,
@@ -446,24 +450,20 @@ function App(props: {
 		}
 		if (action === "focus.next" || action === "focus.previous") {
 			if (focus.held()) return false;
-			event.preventDefault();
 			focus.move(action === "focus.next" ? 1 : -1);
 			return true;
 		}
 		if (action === "chat.top" || action === "chat.bottom") {
 			if (!focus.jumpChat(action === "chat.bottom")) return false;
-			event.preventDefault();
 			return true;
 		}
 		const command = commandById.get(action);
 		if (command) {
-			event.preventDefault();
 			command.run();
 			return true;
 		}
 		const declared = actionById.get(action);
 		if (declared) {
-			event.preventDefault();
 			declared.run(commandContext);
 			return true;
 		}
@@ -473,7 +473,6 @@ function App(props: {
 			focused = focusedAction(action);
 		}
 		if (!focused) return false;
-		event.preventDefault();
 		focused.run();
 		return true;
 	};
@@ -503,6 +502,7 @@ function App(props: {
 		replay: (event) => renderer.keyInput.processParsedKey(event),
 	});
 	useKeyboard(router.onKey);
+	usePaste(() => router.flush());
 	createEffect(() => {
 		if (modals.stack().length > 0) router.cancel();
 	});

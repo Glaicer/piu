@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createSignal, For } from "solid-js";
 import type { Extension } from "../../../../src/module.ts";
 
 globalThis.piuTestHooks.loaded.push("hotkeys-a");
@@ -9,8 +9,19 @@ function Badge() {
 	return <text>{`A action: ${count()}`}</text>;
 }
 
+function Tall() {
+	return (
+		<For each={Array.from({ length: 40 }, (_, index) => `Tall ${index}`)}>
+			{(line) => <text>{line}</text>}
+		</For>
+	);
+}
+
 export default {
-	modules: [{ id: "badge", render: () => <Badge /> }],
+	modules: [
+		{ id: "badge", render: () => <Badge /> },
+		{ id: "tall", render: () => <Tall /> },
+	],
 	keybindingActions: [
 		{
 			name: "cycle",

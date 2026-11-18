@@ -156,6 +156,16 @@ test.each([
 		"keybindings.focus.sideways",
 	],
 	[
+		"an empty action name for an unplaced Extension",
+		{ keybindings: { "lazy.": "alt+m" } },
+		"keybindings.lazy.",
+	],
+	[
+		"a dotted action name for an unplaced Extension",
+		{ keybindings: { "lazy.bad.name": "alt+m" } },
+		"keybindings.lazy.bad.name",
+	],
+	[
 		"a key that cannot be parsed",
 		{ keybindings: { "focus.next": "hyper+tab" } },
 		"keybindings.focus.next",
@@ -313,6 +323,16 @@ test.each([
 	[
 		"Esc finishing a sequence",
 		{ keybindings: { "command.model": "ctrl+x escape" } },
+		"keybindings.command.model",
+	],
+	[
+		"Ctrl+C bound to an action",
+		{ keybindings: { "command.restart": "ctrl+c" } },
+		"keybindings.command.restart",
+	],
+	[
+		"Ctrl+C finishing a sequence",
+		{ keybindings: { "command.model": "ctrl+x ctrl+c" } },
 		"keybindings.command.model",
 	],
 	[

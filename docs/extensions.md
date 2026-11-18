@@ -46,11 +46,13 @@ The full name of the action is `<extension>.<name>`, so this one is `modes.next-
 }
 ```
 
-A value is one shortcut string or an array of them: `"ctrl+l"`, `["ctrl+l", "ctrl+x m"]`, or `[]`. An array replaces the default bindings, and `[]` removes them all. A shortcut is one key with modifiers or a sequence of two keys separated by a space, such as `"ctrl+x m"`; three or more keys are a startup error. `run` receives the same context as a command.
+A value is one shortcut string or an array of them: `"ctrl+l"`, `["ctrl+l", "ctrl+x m"]`, or `[]`. An array replaces the default shortcuts, and `[]` removes them all. A shortcut is one stroke or two strokes separated by a space, such as `"ctrl+x m"`; three or more strokes are a startup error. `run` receives the same context as a command.
 
-Piu's own defaults are assigned first, then the defaults of enabled Extensions in the order they loaded, then the personal Config in key order. When two actions claim the same shortcut, the later assignment wins and the earlier action keeps its other shortcuts; a single key and a sequence that starts with it conflict the same way. This is not a startup error. Commands stay addressable as `command.<name>`, and a command declared by an Extension has no default bindings.
+Piu's own defaults are assigned first, then the defaults of enabled Extensions in the order they loaded, then the personal Config in key order. When two actions claim the same shortcut, the later assignment wins and the earlier action keeps its other shortcuts; a single-stroke shortcut and a two-stroke shortcut that starts with it conflict the same way. This is not a startup error. Commands stay addressable as `command.<name>`; piu gives `/model` and `/reasoning` their defaults, and an Extension's command gets none unless you assign one.
 
 Shift+Enter is the input's fixed newline key. It cannot be assigned to any action except `input.newline`, neither alone nor as a stroke in a sequence, and it cannot start a sequence even for `input.newline`. `input.newline` may add shortcuts, and `[]` removes them all while Shift+Enter keeps inserting a newline.
+
+Esc cancels a waiting sequence, so it cannot be the last stroke of a sequence; a single Esc may still be assigned. Ctrl+C is the terminal's emergency exit and cannot be bound to any action or sequence.
 
 An Extension can add pages to `/settings` with `settingsTabs` on the same default export:
 
