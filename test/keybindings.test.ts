@@ -144,3 +144,18 @@ test("a later repeated shortcut wins before its own sequence", () => {
 	expect(effective(resolved)).toEqual({ a: ["g"] });
 	expect(conflicts(resolved)).toEqual([["a", "g m", "a", "g"]]);
 });
+
+test("a duplicated shortcut of the loser reports one conflict", () => {
+	const resolved = resolveKeybindings(
+		[piu("model", []), piu("reasoning", [])],
+		parseKeybindings({
+			model: ["alt+m", "meta+m"],
+			reasoning: "alt+m",
+		}),
+	);
+
+	expect(effective(resolved)).toEqual({ reasoning: ["alt+m"] });
+	expect(conflicts(resolved)).toEqual([
+		["model", "alt+m", "reasoning", "alt+m"],
+	]);
+});

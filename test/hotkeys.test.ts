@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 import { ManualClock } from "@opentui/core/testing";
 import {
@@ -185,7 +185,9 @@ test("Extension defaults follow Placement load order", async () => {
 		(f) => f.includes("A action: 0") && f.includes("B action: 0"),
 	);
 	pressAlt(piu, "m");
-	const frame = await piu.waitForFrame((f) => f.includes("A action: 1"));
+	const frame = await piu.waitForFrame(
+		(f) => f.includes("A action: 1") && f.includes("B action: 0"),
+	);
 	expect(counter(frame, "B")).toBe(0);
 });
 
@@ -206,7 +208,9 @@ test("personal order beats Extension order at dispatch", async () => {
 		(f) => f.includes("A action: 0") && f.includes("B action: 0"),
 	);
 	pressAlt(piu, "m");
-	const frame = await piu.waitForFrame((f) => f.includes("B action: 1"));
+	const frame = await piu.waitForFrame(
+		(f) => f.includes("B action: 1") && f.includes("A action: 0"),
+	);
 	expect(counter(frame, "A")).toBe(0);
 });
 
@@ -223,7 +227,9 @@ test("Ctrl+X M opens the model picker without touching the prompt", async () => 
 	piu.mockInput.pressKey("m");
 	await piu.waitForFrame((f) => f.includes("faux-2"));
 	piu.mockInput.pressEscape();
-	await piu.waitForFrame((f) => !f.includes("faux-2"));
+	await piu.waitForFrame(
+		(f) => !f.includes("faux-2") && inputArea(f).trim() === "keep",
+	);
 	expect(inputArea(piu.captureCharFrame()).trim()).toBe("keep");
 });
 
@@ -290,11 +296,39 @@ test("an intervening paste keeps the first stroke before it", async () => {
 
 	await piu.waitForFrame((f) => f.includes("faux-1"));
 	piu.mockInput.pressKey("g");
+	expect(inputArea(await rendered(piu)).trim()).toBe("");
 	await piu.mockInput.pasteBracketedText("paste");
+	expect(inputArea(await rendered(piu)).trim()).toBe("gpaste");
 	piu.mockInput.pressKey("z");
 	const frame = await rendered(piu);
 	expect(inputArea(frame).trim()).toBe("gpastez");
 	expect(frame).not.toContain("faux-2");
+});
+
+test("a throwing action keeps the second stroke out of the draft", async () => {
+	const errors = spyOn(console, "error").mockImplementation(() => {});
+	try {
+		await using piu = await startPiu({
+			script: { replies: ["Model got {lastUser}"] },
+			extensions,
+			config: {
+				placement: { side: ["hotkeys-a.badge"] },
+				keybindings: { "hotkeys-a.explode": "g return" },
+			},
+		});
+
+		await piu.waitForFrame((f) => f.includes("faux-1"));
+		await piu.mockInput.typeText("keep");
+		await piu.waitForFrame((f) => inputArea(f).includes("keep"));
+		piu.mockInput.pressKey("g");
+		piu.mockInput.pressEnter();
+		await Bun.sleep(200);
+		const frame = await rendered(piu);
+		expect(inputArea(frame).trim()).toBe("keep");
+		expect(frame).not.toContain("Model got");
+	} finally {
+		errors.mockRestore();
+	}
 });
 
 test("a chat shortcut that cannot jump falls back to typing", async () => {
@@ -332,7 +366,9 @@ test("the unmatched second stroke still runs a single shortcut", async () => {
 	piu.mockInput.pressKey("l", { ctrl: true });
 	await piu.waitForFrame((f) => f.includes("faux-2"));
 	piu.mockInput.pressEscape();
-	await piu.waitForFrame((f) => !f.includes("faux-2"));
+	await piu.waitForFrame(
+		(f) => !f.includes("faux-2") && inputArea(f).trim() === "g",
+	);
 	expect(inputArea(piu.captureCharFrame()).trim()).toBe("g");
 });
 
@@ -473,7 +509,9 @@ test("empty newline list keeps native Shift+Enter and hides Ctrl+J", async () =>
 		config: { keybindings: { "input.newline": [] } },
 	});
 
-	await piu.waitForFrame((f) => f.includes("faux-1"));
+	await piu.waitForFrame(
+		(f) => f.includes("faux-1") && inputHints(f).endsWith("⇧⏎ new line"),
+	);
 	expect(inputHints(piu.captureCharFrame()).endsWith("⇧⏎ new line")).toBe(true);
 
 	await piu.mockInput.typeText("a");
@@ -497,8 +535,7 @@ test("a newline sequence swallows a printable first stroke", async () => {
 	piu.mockInput.pressEnter({ shift: true });
 	await piu.mockInput.typeText("b");
 	piu.mockInput.pressEnter();
-	const frame = await piu.waitForFrame((f) => f.includes("Model got"));
-	expect(frame).toContain('Model got "a\\nb"');
+	await piu.waitForFrame((f) => f.includes('Model got "a\\nb"'));
 });
 
 test("Shift+Enter can finish a newline sequence", async () => {

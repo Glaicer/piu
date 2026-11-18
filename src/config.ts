@@ -370,65 +370,74 @@ export function parseBindingValue(
 	action: string,
 	path = `keybindings.${action}`,
 ): readonly Shortcut[] {
-	const specs = Array.isArray(value) ? value : [value];
-	if (!Array.isArray(value) && typeof value !== "string") {
+	if (Array.isArray(value)) {
+		const parsed: Shortcut[] = [];
+		for (let at = 0; at < value.length; at++) {
+			const spec = value[at];
+			if (typeof spec !== "string") {
+				throw fieldError(path, `expected a string, got ${describe(spec)}`);
+			}
+			parsed.push(parseShortcut(spec, action, path));
+		}
+		return parsed;
+	}
+	if (typeof value !== "string") {
 		throw fieldError(
 			path,
 			`expected a key like "ctrl+j" or an array of them, got ${describe(value)}`,
 		);
 	}
-	return specs.map((spec) => {
-		if (typeof spec !== "string") {
-			throw fieldError(path, `expected a string, got ${describe(spec)}`);
-		}
-		const trimmed = spec.trim();
-		if (!trimmed) {
-			throw fieldError(path, "expected a key, got an empty string");
-		}
-		const parts = trimmed.split(/ +/);
-		if (parts.length > 2) {
+	return [parseShortcut(value, action, path)];
+}
+
+function parseShortcut(spec: string, action: string, path: string): Shortcut {
+	const trimmed = spec.trim();
+	if (!trimmed) {
+		throw fieldError(path, "expected a key, got an empty string");
+	}
+	const parts = trimmed.split(/ +/);
+	if (parts.length > 2) {
+		throw fieldError(
+			path,
+			`expected at most two strokes separated by a space, got ${parts.length}`,
+		);
+	}
+	const chords = parts.map((part) => parseStroke(part, path));
+	for (const [at, chord] of chords.entries()) {
+		if (chord.name === "c" && chord.ctrl && !chord.shift && !chord.meta) {
 			throw fieldError(
 				path,
-				`expected at most two strokes separated by a space, got ${parts.length}`,
+				"Ctrl+C is the emergency exit and cannot be bound",
 			);
 		}
-		const chords = parts.map((part) => parseStroke(part, path));
-		for (const [at, chord] of chords.entries()) {
-			if (chord.name === "c" && chord.ctrl && !chord.shift && !chord.meta) {
-				throw fieldError(
-					path,
-					"Ctrl+C is the emergency exit and cannot be bound",
-				);
-			}
-			if (
-				at > 0 &&
-				chord.name === "escape" &&
-				!chord.ctrl &&
-				!chord.shift &&
-				!chord.meta
-			) {
-				throw fieldError(
-					path,
-					"Esc cancels a waiting sequence and cannot finish one",
-				);
-			}
-			if (!sameShortcut([chord], [shiftEnter])) continue;
-			if (action !== "input.newline") {
-				throw fieldError(
-					path,
-					"Shift+Enter is the newline key and can only be bound to input.newline",
-				);
-			}
-			if (at === 0 && chords.length > 1) {
-				throw fieldError(path, "Shift+Enter cannot start a sequence");
-			}
+		if (
+			at > 0 &&
+			chord.name === "escape" &&
+			!chord.ctrl &&
+			!chord.shift &&
+			!chord.meta
+		) {
+			throw fieldError(
+				path,
+				"An unmodified Esc cancels a waiting sequence and cannot finish one",
+			);
 		}
-		const [first, second] = chords;
-		if (first === undefined) {
-			throw fieldError(path, "expected a key, got an empty string");
+		if (!sameShortcut([chord], [shiftEnter])) continue;
+		if (action !== "input.newline") {
+			throw fieldError(
+				path,
+				"Shift+Enter is the newline key and can only be bound to input.newline",
+			);
 		}
-		return second === undefined ? [first] : [first, second];
-	});
+		if (at === 0 && chords.length > 1) {
+			throw fieldError(path, "Shift+Enter cannot start a sequence");
+		}
+	}
+	const [first, second] = chords;
+	if (first === undefined) {
+		throw fieldError(path, "expected a key, got an empty string");
+	}
+	return second === undefined ? [first] : [first, second];
 }
 
 function parseStroke(spec: string, path: string): Chord {

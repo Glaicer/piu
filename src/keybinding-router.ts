@@ -55,6 +55,15 @@ export function createKeybindingRouter(options: {
 		}
 		return undefined;
 	};
+	const runAction = (action: string, shortcut: Shortcut, event: KeyEvent) => {
+		try {
+			return options.run(action, shortcut, event);
+		} catch (error) {
+			// why: a handler that throws must not let a captured stroke reach the focused text field, where Enter would submit the draft.
+			consume(event);
+			throw error;
+		}
+	};
 	const candidatesFor = (event: KeyEvent) =>
 		Object.entries(options.bindings()).flatMap(([action, shortcuts]) =>
 			shortcuts.flatMap((shortcut) =>
@@ -68,7 +77,7 @@ export function createKeybindingRouter(options: {
 	const replayKey = (event: KeyEvent) => {
 		if (!options.enabled()) return;
 		const single = singleFor(event);
-		if (single && options.run(single.action, single.shortcut, event)) {
+		if (single && runAction(single.action, single.shortcut, event)) {
 			consume(event);
 			return;
 		}
@@ -106,7 +115,7 @@ export function createKeybindingRouter(options: {
 					options.canUseSequence(candidate.action),
 			);
 			clear();
-			if (second && options.run(second.action, second.shortcut, event)) {
+			if (second && runAction(second.action, second.shortcut, event)) {
 				consume(event);
 				return;
 			}
@@ -118,7 +127,7 @@ export function createKeybindingRouter(options: {
 		if (!options.enabled()) return;
 		const single = singleFor(event);
 		if (single) {
-			if (options.run(single.action, single.shortcut, event)) {
+			if (runAction(single.action, single.shortcut, event)) {
 				consume(event);
 			} else {
 				options.fallback(event);

@@ -29,5 +29,13 @@ export default {
 			defaultBindings: ["alt+m"],
 			run: () => setCount((value) => value + 1),
 		},
+		{
+			name: "explode",
+			description: "Throw from the handler",
+			defaultBindings: ["alt+x"],
+			run: () => {
+				throw new Error("boom");
+			},
+		},
 	],
 } satisfies Extension;

@@ -211,8 +211,7 @@ function collectKeybindingActions(
 					`Extension "${extensionName}" ${field}.description: expected a non-empty description`,
 				);
 			}
-			const defaultBindings = stringItems(declared.defaultBindings);
-			if (!defaultBindings) {
+			if (!Array.isArray(declared.defaultBindings)) {
 				throw new StartupError(
 					`Extension "${extensionName}" ${field}.defaultBindings: expected an array of strings`,
 				);
@@ -234,7 +233,7 @@ function collectKeybindingActions(
 				description,
 				source: { kind: "extension", name: extensionName },
 				defaults: parseBindingValue(
-					defaultBindings,
+					declared.defaultBindings,
 					id,
 					`Extension "${extensionName}".${field}.defaultBindings`,
 				),
@@ -247,17 +246,6 @@ function collectKeybindingActions(
 
 function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function stringItems(value: unknown): string[] | undefined {
-	if (!Array.isArray(value)) return undefined;
-	const items: string[] = [];
-	for (let at = 0; at < value.length; at++) {
-		const item = value[at];
-		if (typeof item !== "string") return undefined;
-		items.push(item);
-	}
-	return items;
 }
 
 async function loadExtension(name: string, dir: string): Promise<Extension> {

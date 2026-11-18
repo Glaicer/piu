@@ -126,6 +126,16 @@ function collides(a: Shortcut, b: Shortcut) {
 		: false;
 }
 
+function shortcutKey(shortcut: Shortcut) {
+	return shortcut
+		.map((chord) => `${chord.name}:${chord.ctrl}:${chord.shift}:${chord.meta}`)
+		.join(" ");
+}
+
+function assignmentKey(assignment: KeybindingAssignment) {
+	return `${assignment.action}\u0000${shortcutKey(assignment.shortcut)}`;
+}
+
 const KEY_LABELS: Readonly<Record<string, string>> = {
 	return: "⏎",
 };
@@ -172,29 +182,30 @@ export function resolveKeybindings(
 	for (const [id, shortcuts] of Object.entries(overrides)) {
 		if (catalog.has(id)) assign(id, shortcuts);
 	}
+	const lastAt = new Map<string, number>();
+	for (const [at, assignment] of assignments.entries()) {
+		lastAt.set(assignmentKey(assignment), at);
+	}
+	const ordered = assignments.filter(
+		(assignment, at) => lastAt.get(assignmentKey(assignment)) === at,
+	);
 
 	const accepted: (KeybindingAssignment | undefined)[] = new Array(
-		assignments.length,
+		ordered.length,
 	);
 	const conflicts: KeybindingConflict[] = [];
-	for (let at = assignments.length - 1; at >= 0; at--) {
-		const candidate = assignments[at];
+	for (let at = ordered.length - 1; at >= 0; at--) {
+		const candidate = ordered[at];
 		if (candidate === undefined) continue;
 		let winnerAt = -1;
-		for (let later = at + 1; later < assignments.length; later++) {
-			const other = assignments[later];
+		for (let later = at + 1; later < ordered.length; later++) {
+			const other = ordered[later];
 			if (other === undefined) continue;
 			if (accepted[later] === undefined) continue;
-			if (
-				candidate.action === other.action &&
-				sameShortcut(candidate.shortcut, other.shortcut)
-			) {
-				continue;
-			}
 			if (!collides(candidate.shortcut, other.shortcut)) continue;
 			if (winnerAt < 0 || later > winnerAt) winnerAt = later;
 		}
-		const winner = winnerAt < 0 ? undefined : assignments[winnerAt];
+		const winner = winnerAt < 0 ? undefined : ordered[winnerAt];
 		if (winner === undefined) accepted[at] = candidate;
 		else {
 			conflicts.push({

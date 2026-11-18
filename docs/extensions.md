@@ -23,7 +23,7 @@ export default {
 
 An Extension can also export `commands: [{ name, description, takesArguments, run(context, args) }]`. They appear in the prompt's `/` autocomplete and run locally instead of going to the model, and they exist exactly when the Extension is enabled. Picking one with Enter or Tab runs it at once when it takes no arguments (`takesArguments: false`) and the input holds nothing but that command; otherwise it is inserted as `/name ` for the user to finish. A command takes arguments unless it says otherwise, and a Backend command always does, because `get_commands` does not report whether it takes any. A command name must be unique across Extensions, and it hides a Backend command of the same name.
 
-An Extension can declare keys of its own with `keybindingActions` on the same default export:
+An Extension can declare keybinding actions of its own with `keybindingActions` on the same default export:
 
 ```tsx
 keybindingActions: [
@@ -36,7 +36,7 @@ keybindingActions: [
 ],
 ```
 
-The full name of the action is `<extension>.<name>`, so this one is `modes.next-mode`. Its `defaultBindings` apply while the Extension is enabled, which is exactly while one of its Modules is in the Placement. Assign it in your personal `~/.piu/config.json` like any built-in action:
+The full name of the action is `<extension>.<name>`, so this one is `modes.next-mode`. The `defaultBindings` shortcuts apply while the Extension is enabled, which is exactly while one of its Modules is in the Placement. Assign it in your personal `~/.piu/config.json` like any built-in action:
 
 ```json
 {
@@ -52,7 +52,7 @@ Piu's own defaults are assigned first, then the defaults of enabled Extensions i
 
 Shift+Enter is the input's fixed newline key. It cannot be assigned to any action except `input.newline`, neither alone nor as a stroke in a sequence, and it cannot start a sequence even for `input.newline`. `input.newline` may add shortcuts, and `[]` removes them all while Shift+Enter keeps inserting a newline.
 
-Esc cancels a waiting sequence, so it cannot be the last stroke of a sequence; a single Esc may still be assigned. Ctrl+C is the terminal's emergency exit and cannot be bound to any action or sequence.
+An unmodified Esc cancels a waiting sequence, so it cannot be the last stroke of a sequence; a modified Esc can finish one, and a single Esc may still be assigned. Ctrl+C is the terminal's emergency exit and cannot be bound to any action or sequence.
 
 An Extension can add pages to `/settings` with `settingsTabs` on the same default export:
 
