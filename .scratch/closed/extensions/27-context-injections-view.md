@@ -26,7 +26,7 @@
 
 ## После приёмки (вручную)
 
-- [ ] Удалить пакет `pi-context-view` (`pi-bolt remove npm:pi-context-view`) и пересобрать Pi-Bolt (`pi-bolt compile`).
+- [x] Удалить пакет `pi-context-view` (`pi-bolt remove npm:pi-context-view`) и пересобрать Pi-Bolt (`pi-bolt compile`).
 
 ## Ticket plan
 
