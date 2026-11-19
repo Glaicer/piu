@@ -24,6 +24,7 @@ import { sequenceTimeoutMs } from "./keybinding-router.ts";
 import {
 	type Chord,
 	chordFromEvent,
+	editKeybinding,
 	formatChord,
 	type KeybindingAction,
 	type Keybindings,
@@ -110,28 +111,6 @@ function groupActions(actions: readonly KeybindingAction[]): Group[] {
 		name: group.name,
 		rows: group.actions.map((action) => ({ action, index: index++ })),
 	}));
-}
-
-function assignLayer(
-	personal: Keybindings,
-	action: string,
-	list: readonly Shortcut[],
-): Keybindings {
-	return { ...resetLayer(personal, action), [action]: list };
-}
-
-function withList(
-	personal: Keybindings,
-	action: string,
-	list: readonly Shortcut[],
-): Keybindings {
-	return { ...personal, [action]: list };
-}
-
-function resetLayer(personal: Keybindings, action: string): Keybindings {
-	const next = { ...personal };
-	delete next[action];
-	return next;
 }
 
 function errorMessage(error: unknown) {
@@ -299,7 +278,7 @@ export function createHotkeysTab(options: HotkeysOptions) {
 			),
 			candidate,
 		];
-		const keptPersonal = withList(base.personal, action.id, list);
+		const keptPersonal = editKeybinding(base.personal, action.id, list);
 		const kept = resolveKeybindings(
 			options.keybindings().actions,
 			keptPersonal,
@@ -309,7 +288,7 @@ export function createHotkeysTab(options: HotkeysOptions) {
 		);
 		const personal = liveInKept
 			? keptPersonal
-			: assignLayer(base.personal, action.id, list);
+			: editKeybinding(base.personal, action.id, list, true);
 		const resolved = liveInKept
 			? kept
 			: resolveKeybindings(options.keybindings().actions, personal);
@@ -398,7 +377,7 @@ export function createHotkeysTab(options: HotkeysOptions) {
 		const at = Math.min(keyIndex(), list.length - 1);
 		if (list.length === 0 || at < 0) return;
 		const next = list.filter((_, position) => position !== at);
-		const personal = withList(options.personal(), action.id, next);
+		const personal = editKeybinding(options.personal(), action.id, next);
 		setKeyIndex(Math.max(0, Math.min(at, next.length - 1)));
 		setMode({ kind: "idle" });
 		commit(action.id, personal);
@@ -409,7 +388,7 @@ export function createHotkeysTab(options: HotkeysOptions) {
 		if (!action) return;
 		setKeyIndex(0);
 		setMode({ kind: "idle" });
-		commit(action.id, withList(options.personal(), action.id, []));
+		commit(action.id, editKeybinding(options.personal(), action.id, []));
 	};
 
 	const resetAction = () => {
@@ -418,7 +397,7 @@ export function createHotkeysTab(options: HotkeysOptions) {
 		if (!options.keybindings().overridden.has(action.id)) return;
 		setKeyIndex(0);
 		setMode({ kind: "idle" });
-		commit(action.id, resetLayer(options.personal(), action.id));
+		commit(action.id, editKeybinding(options.personal(), action.id, undefined));
 	};
 
 	const onKeyDown = (event: KeyEvent, list: BoxRenderable) => {

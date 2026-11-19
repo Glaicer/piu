@@ -37,7 +37,10 @@ export type Command = {
 	run(context: CommandContext, args: string): void;
 };
 
-export type BoundCommand = Omit<Command, "run"> & { run(args?: string): void };
+export type BoundCommand = Omit<Command, "run"> & {
+	readonly aliases?: readonly string[];
+	run(args?: string): void;
+};
 
 export type ModuleContext = CommandContext & {
 	readonly cwd: string;

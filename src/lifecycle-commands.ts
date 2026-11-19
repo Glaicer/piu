@@ -1,13 +1,8 @@
 import type { Command } from "./module.ts";
 
-const quit = (name: string): Command => ({
-	name,
-	description: "Close the Backend and piu",
-	takesArguments: false,
-	run: ({ actions }) => actions.quit(),
-});
+type LifecycleCommand = Command & { readonly aliases?: readonly string[] };
 
-export const lifecycleCommands: readonly Command[] = [
+export const lifecycleCommands: readonly LifecycleCommand[] = [
 	{
 		name: "settings",
 		description: "Open piu settings",
@@ -26,7 +21,17 @@ export const lifecycleCommands: readonly Command[] = [
 		takesArguments: false,
 		run: ({ actions }) => actions.restart(),
 	},
-	quit("q"),
-	quit("quit"),
-	quit("exit"),
+	{
+		name: "quit",
+		aliases: ["q", "exit"],
+		description: "Close the Backend and piu",
+		takesArguments: false,
+		run: ({ actions }) => actions.quit(),
+	},
 ];
+
+export const lifecycleCommandAliases = new Map(
+	lifecycleCommands.flatMap(({ name, aliases }) =>
+		(aliases ?? []).map((alias) => [alias, name] as const),
+	),
+);

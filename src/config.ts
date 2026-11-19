@@ -3,6 +3,7 @@ import type { BackendConfig } from "./backend.ts";
 import { readJson, writeJson } from "./json-file.ts";
 import {
 	type Chord,
+	editKeybinding,
 	isKeyName,
 	type Keybindings,
 	parseChord,
@@ -241,25 +242,12 @@ function writeKeybinding(
 	shortcuts: readonly Shortcut[] | undefined,
 	moveToEnd: boolean,
 ) {
-	// why: a plain object turns an own "__proto__" from the file into a prototype write and drops it; a null-prototype object keeps every key the file had.
-	const keybindings: Fields = Object.create(null);
-	if (moveToEnd) {
-		for (const [id, previous] of Object.entries(bindings)) {
-			if (id !== action) keybindings[id] = previous;
-		}
-	} else {
-		for (const [id, previous] of Object.entries(bindings)) {
-			if (id !== action) keybindings[id] = previous;
-			else if (shortcuts !== undefined)
-				keybindings[id] = bindingValue(shortcuts);
-		}
-	}
-	if (
-		shortcuts !== undefined &&
-		(moveToEnd || !Object.hasOwn(bindings, action))
-	) {
-		keybindings[action] = bindingValue(shortcuts);
-	}
+	const keybindings = editKeybinding<unknown>(
+		bindings,
+		action,
+		shortcuts === undefined ? undefined : bindingValue(shortcuts),
+		moveToEnd,
+	);
 	writeJson(path, { ...config, keybindings }, 2);
 }
 

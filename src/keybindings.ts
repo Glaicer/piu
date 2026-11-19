@@ -1,4 +1,5 @@
 import { type KeyEvent, terminalNamedSingleStrokeKeys } from "@opentui/core";
+import { lifecycleCommandAliases } from "./lifecycle-commands.ts";
 
 export type Chord = {
 	readonly name: string;
@@ -48,6 +49,36 @@ export const shiftEnter: Chord = {
 };
 
 export const commandAction = (name: string) => `command.${name}`;
+
+const actionAliases = new Map(
+	[...lifecycleCommandAliases].map(([alias, name]) => [
+		commandAction(alias),
+		commandAction(name),
+	]),
+);
+
+export function canonicalAction(id: string) {
+	return actionAliases.get(id) ?? id;
+}
+
+export function editKeybinding<T>(
+	bindings: Readonly<Record<string, T>>,
+	action: string,
+	value: T | undefined,
+	moveToEnd = false,
+): Record<string, T> {
+	const entries = Object.entries(bindings);
+	const last = moveToEnd
+		? -1
+		: entries.findLastIndex(([id]) => canonicalAction(id) === action);
+	const next: [string, T][] = [];
+	for (const [at, [id, previous]] of entries.entries()) {
+		if (canonicalAction(id) !== action) next.push([id, previous]);
+		else if (at === last && value !== undefined) next.push([action, value]);
+	}
+	if (last < 0 && value !== undefined) next.push([action, value]);
+	return Object.fromEntries(next);
+}
 
 const MODIFIERS = new Map<string, "ctrl" | "shift" | "meta">([
 	["ctrl", "ctrl"],
@@ -158,12 +189,18 @@ export function resolveKeybindings(
 	const catalog = new Map(
 		actions.map((action) => [action.id, action] as const),
 	);
-	const ownOverride = (id: string) =>
-		Object.hasOwn(overrides, id) ? overrides[id] : undefined;
+	const personal = new Map<string, Shortcut[]>();
+	for (const [id, shortcuts] of Object.entries(overrides)) {
+		const action = canonicalAction(id);
+		if (!catalog.has(action)) continue;
+		const list = personal.get(action);
+		if (list) list.push(...shortcuts);
+		else personal.set(action, [...shortcuts]);
+	}
 	const requested = Object.fromEntries(
 		actions.map((action) => [
 			action.id,
-			ownOverride(action.id) ?? action.defaults,
+			personal.get(action.id) ?? action.defaults,
 		]),
 	);
 	const assignments: KeybindingAssignment[] = [];
@@ -174,12 +211,13 @@ export function resolveKeybindings(
 	};
 	// why: the catalog arrives ordered piu defaults first, then Extension defaults, so one pass keeps the layer order while a definition's owner stays independent of its layer.
 	for (const action of actions) {
-		if (!Object.hasOwn(overrides, action.id)) {
+		if (!personal.has(action.id)) {
 			assign(action.id, action.defaults);
 		}
 	}
 	for (const [id, shortcuts] of Object.entries(overrides)) {
-		if (catalog.has(id)) assign(id, shortcuts);
+		const action = canonicalAction(id);
+		if (catalog.has(action)) assign(action, shortcuts);
 	}
 	const ordered = assignments.filter(
 		(assignment, at) =>
@@ -236,6 +274,6 @@ export function resolveKeybindings(
 		requested,
 		effective,
 		conflicts,
-		overridden: new Set(Object.keys(overrides).filter((id) => catalog.has(id))),
+		overridden: new Set(personal.keys()),
 	};
 }

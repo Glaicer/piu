@@ -148,6 +148,13 @@ function Prompt(props: { context: ModuleContext }) {
 			void listFiles(props.context.cwd).then(setFiles);
 		}),
 	);
+	const appCommands = new Map(
+		props.context.commands.flatMap((command) =>
+			[command.name, ...(command.aliases ?? [])].map(
+				(name) => [name, command] as const,
+			),
+		),
+	);
 	const entries = createMemo((): Entry[] => {
 		const current = trigger();
 		if (current?.kind === "file") {
@@ -157,12 +164,17 @@ function Prompt(props: { context: ModuleContext }) {
 			}));
 		}
 		if (current?.kind !== "slash") return [];
-		const app = new Map(
-			props.context.commands.map((command) => [command.name, command] as const),
-		);
 		const commands = [
-			...app.values(),
-			...props.context.pi.commands.filter((command) => !app.has(command.name)),
+			...Array.from(appCommands, ([name, command]) => ({
+				name,
+				description:
+					name === command.name
+						? command.description
+						: `Alias for /${command.name}`,
+			})),
+			...props.context.pi.commands.filter(
+				(command) => !appCommands.has(command.name),
+			),
 		];
 		// why: get_commands reports no argument hint, so only an app command can be known to take none.
 		return narrow(commands, current.query, (command) => command.name).map(
@@ -170,7 +182,7 @@ function Prompt(props: { context: ModuleContext }) {
 				label: `/${command.name}`,
 				detail: command.description,
 				insert: `/${command.name} `,
-				command: app.get(command.name),
+				command: appCommands.get(command.name),
 			}),
 		);
 	});
@@ -329,11 +341,11 @@ function Prompt(props: { context: ModuleContext }) {
 			const { actions, pi } = props.context;
 			const [, name = "", args = ""] =
 				/^\/(\S+)(?:\s+([\s\S]*))?$/.exec(value.trim()) ?? [];
-			const command = props.context.commands.find(
-				(c) => c.name.toLowerCase() === name.toLowerCase(),
-			);
-			if (command) {
-				command.run(args);
+			const match = appCommands
+				.entries()
+				.find(([command]) => command.toLowerCase() === name.toLowerCase());
+			if (match) {
+				match[1].run(args);
 				return;
 			}
 			const accepted = event.meta

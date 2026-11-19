@@ -92,6 +92,19 @@ test("the Hotkeys tab groups actions by source and marks changed shortcuts", asy
 	expect(selected).toContain("changed");
 });
 
+test("Hotkeys lists quit once when no alias has a shortcut", async () => {
+	await using piu = await startPiu({ script: none, height: 40 });
+	await openHotkeys(piu);
+	const frame = await piu.waitForFrame((current) =>
+		current.includes("Switch the model"),
+	);
+	const rows = frame
+		.split("\n")
+		.filter((line) => /Close the Backend and piu|alias for \/quit/.test(line));
+	expect(rows).toHaveLength(1);
+	expect(rows[0]?.trimStart()).toMatch(/^Close the Backend and piu\s/);
+});
+
 test("a personal key equal to the default is not marked changed", async () => {
 	await using piu = await startPiu({
 		script: none,
@@ -542,17 +555,68 @@ test("an Extension named piu keeps its own group", async () => {
 	expect(lines[at - 1]).toContain("piu");
 });
 
-test("a conflict marker names the winner by ID when descriptions repeat", async () => {
+test("legacy quit shortcuts share a single editable action and keep conflict order", async () => {
 	await using piu = await startPiu({
 		script: none,
-		config: { keybindings: { "command.q": "alt+t" } },
+		height: 40,
+		config: {
+			keybindings: {
+				"command.q": ["alt+q", "alt+t"],
+				"command.model": "alt+q",
+				"command.exit": "alt+x",
+			},
+		},
 	});
 	await openHotkeys(piu);
-	await clickRow(piu, "Set the reasoning level");
 	const frame = await piu.waitForFrame((current) =>
-		current.includes("→ Close the Backend and piu (command.q)"),
+		current.includes("Set the reasoning level"),
 	);
-	expect(frame).toContain("(command.q)");
+	const rows = frame
+		.split("\n")
+		.filter(
+			(line) =>
+				line.includes("Close the Backend and piu") &&
+				!line.includes("→ Close the Backend and piu"),
+		);
+	expect(rows).toHaveLength(1);
+	expect(rows[0]).toContain("alt+q → Switch the model (command.model)");
+	expect(rows[0]).toContain("alt+t");
+	expect(rows[0]).toContain("alt+x");
+	await clickRow(piu, "Set the reasoning level");
+	await piu.waitForFrame((current) =>
+		current.includes("[alt+t] → Close the Backend and piu (command.quit)"),
+	);
+	piu.mockInput.pressKey("ARROW_UP");
+	piu.mockInput.pressKey("ARROW_UP");
+	await piu.waitForFrame((current) =>
+		current
+			.split("\n")
+			.some(
+				(line) =>
+					line.includes("Close the Backend and piu") &&
+					line.includes("[alt+q]"),
+			),
+	);
+	piu.mockInput.pressKey("BACKSPACE");
+	await piu.waitForFrame((current) =>
+		current
+			.split("\n")
+			.some(
+				(line) =>
+					line.includes("Close the Backend and piu") &&
+					line.includes("[alt+t]"),
+			),
+	);
+	expect(readConfig(piu).keybindings).toEqual({
+		"command.model": "alt+q",
+		"command.quit": ["alt+t", "alt+x"],
+	});
+	piu.mockInput.pressKey("r");
+	await piu.waitForFrame(
+		(current) =>
+			!current.includes("(command.quit)") && !current.includes("alt+x"),
+	);
+	expect(readConfig(piu).keybindings).toEqual({ "command.model": "alt+q" });
 });
 
 test("a loaded Extension action is grouped and reassigned from the tab", async () => {

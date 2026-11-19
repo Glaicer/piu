@@ -38,6 +38,7 @@ import { piuHome } from "./home.ts";
 import type { InstallLease } from "./install-lock.ts";
 import { createKeybindingRouter } from "./keybinding-router.ts";
 import {
+	canonicalAction,
 	commandAction,
 	type KeybindingAction,
 	type Keybindings,
@@ -48,7 +49,10 @@ import {
 	shiftEnter,
 } from "./keybindings.ts";
 import { SlotView } from "./layout.tsx";
-import { lifecycleCommands } from "./lifecycle-commands.ts";
+import {
+	lifecycleCommandAliases,
+	lifecycleCommands,
+} from "./lifecycle-commands.ts";
 import { createModals, ModalLayer } from "./modal.tsx";
 import { createModelFavorites } from "./model-favorites.ts";
 import { createModelSelection } from "./model-selection.ts";
@@ -86,7 +90,10 @@ export async function createApp(options: {
 	const placement = await resolvePlacement(config, folders);
 	const { panels, settingsTabs, channelTitles, piExtensions } = placement;
 	const commands = placement.commands.map(({ command }) => command);
-	for (const { name } of lifecycleCommands) {
+	for (const name of [
+		...lifecycleCommands.map((command) => command.name),
+		...lifecycleCommandAliases.keys(),
+	]) {
 		if (commands.some((command) => command.name === name)) {
 			throw new StartupError(
 				`Command "/${name}" is built into piu and cannot be defined by an Extension`,
@@ -205,7 +212,7 @@ export function prepareKeybindings(
 		...Object.keys(defaultConfig.keybindings),
 	]);
 	for (const id of Object.keys(config.keybindings)) {
-		if (known.has(id)) continue;
+		if (known.has(canonicalAction(id))) continue;
 		const dot = id.indexOf(".");
 		const extension = dot > 0 ? id.slice(0, dot) : "";
 		const name = dot > 0 ? id.slice(dot + 1) : "";
