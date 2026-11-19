@@ -6,8 +6,14 @@ import { contains } from "./focus.ts";
 import { createHotkeysTab } from "./hotkeys.tsx";
 import type { Keybindings, ResolvedKeybindings } from "./keybindings.ts";
 import { moduleModal } from "./modal.tsx";
-import type { CommandContext, SettingsTab } from "./module.ts";
+import type {
+	BuiltinSettingsTab,
+	CommandContext,
+	SettingsTab,
+} from "./module.ts";
+import { PickerLink } from "./picker.tsx";
 import { scrollIntoView, scrollKeys } from "./scroll.ts";
+import { openSystemShortcuts } from "./system-shortcuts.tsx";
 import { Tabs } from "./tabs.tsx";
 import { type Theme, type ThemePreference, themeModes } from "./theme.ts";
 
@@ -96,8 +102,10 @@ export function createSettings(options: {
 	return {
 		mode,
 		animations,
-		open(context: CommandContext) {
-			const [active, setActive] = createSignal(0);
+		open(context: CommandContext, tab: BuiltinSettingsTab = "global") {
+			const [active, setActive] = createSignal(
+				tabs.indexOf(tab === "hotkeys" ? hotkeys.tab : global),
+			);
 			hotkeys.reset();
 			const current = () => tabs[active()] ?? global;
 			let resetScroll: (() => void) | undefined;
@@ -116,14 +124,25 @@ export function createSettings(options: {
 						render: (moduleContext) => {
 							resetScroll = moduleContext.resetScroll;
 							return (
-								<Tabs
-									scrollable
-									tabs={keys}
-									active={active()}
-									label={(key) => tabs[key]?.title ?? String(key)}
-									theme={context.theme}
-									onSelect={select}
-								/>
+								<box flexDirection="column">
+									<Tabs
+										scrollable
+										tabs={keys}
+										active={active()}
+										label={(key) => tabs[key]?.title ?? String(key)}
+										theme={context.theme}
+										onSelect={select}
+									/>
+									<Show when={current() === hotkeys.tab && !hotkeys.busy()}>
+										<box alignSelf="flex-start" paddingLeft={1}>
+											<PickerLink
+												context={context}
+												label="System shortcuts [?]"
+												onPress={() => openSystemShortcuts(context)}
+											/>
+										</box>
+									</Show>
+								</box>
 							);
 						},
 					},
@@ -140,7 +159,7 @@ export function createSettings(options: {
 						id: "settings-hints",
 						footer: true,
 						render: () => (
-							<box flexDirection="column" flexShrink={0}>
+							<box flexDirection="column" flexShrink={0} paddingTop={1}>
 								<Show when={status(active())}>
 									<text fg={context.theme.error} wrapMode="word">
 										{` ${status(active()) ?? ""}`}
@@ -158,6 +177,16 @@ export function createSettings(options: {
 				},
 				onKey(event) {
 					if (hotkeys.busy()) return;
+					if (
+						current() === hotkeys.tab &&
+						event.sequence === "?" &&
+						!event.ctrl &&
+						!event.meta
+					) {
+						event.preventDefault();
+						openSystemShortcuts(context);
+						return;
+					}
 					if (
 						!event.ctrl ||
 						event.meta ||

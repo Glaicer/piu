@@ -4,7 +4,6 @@ import { join } from "node:path";
 export type SessionSummary = {
 	readonly file: string;
 	readonly title: string;
-	readonly messages: number;
 	readonly modified: Date;
 };
 
@@ -26,10 +25,15 @@ export function oneLine(text: string): string {
 	return text.replace(/\s+/g, " ").trim();
 }
 
+export function expandedSkill(text: string) {
+	return text.match(
+		/^<skill name="([^"]+)" location="[^"]+">\n[\s\S]*?\n<\/skill>(?:\n\n([\s\S]+))?$/,
+	);
+}
+
 function summarize(file: string, modified: Date, text: string) {
 	let name: string | undefined;
 	let firstPrompt: string | undefined;
-	let messages = 0;
 	for (const raw of text.split("\n")) {
 		let line: Line;
 		try {
@@ -39,14 +43,16 @@ function summarize(file: string, modified: Date, text: string) {
 		}
 		if (line.type === "session_info") name = line.name || name;
 		if (line.type !== "message") continue;
-		const role = line.message?.role;
-		if (role === "user" || role === "assistant") messages++;
-		if (role === "user" && firstPrompt === undefined) {
-			firstPrompt = oneLine(contentText(line.message?.content));
+		if (line.message?.role === "user" && firstPrompt === undefined) {
+			const prompt = contentText(line.message.content);
+			const skill = expandedSkill(prompt);
+			firstPrompt = oneLine(skill ? skill[2] || skill[1] || "" : prompt);
 		}
 	}
 	const title = name ?? firstPrompt;
-	return title === undefined ? undefined : { file, title, messages, modified };
+	return title === undefined
+		? undefined
+		: { file, title: oneLine(title) || "Untitled session", modified };
 }
 
 export async function listSessions(

@@ -173,10 +173,31 @@ test("/resume lists the saved sessions, and picking one shows its conversation",
 	await piu.waitForFrame((f) => agentPanel(f).includes('Reply to "Beta'));
 
 	await send(piu, "/resume");
-	const listed = await piu.waitForFrame((f) => f.includes("Alpha question"));
-	expect(listed).toContain("Beta question");
+	const listed = await piu.waitForFrame(
+		(f) => f.includes("Resume session") && f.includes("Alpha question"),
+	);
+	const rows = listed.split("\n");
+	const alpha = rows.find((line) =>
+		/Alpha question +Today \d{2}:\d{2}/.test(line),
+	);
+	const beta = rows.find((line) =>
+		/Beta question +current {4,}Today \d{2}:\d{2}/.test(line),
+	);
+	expect(alpha).toBeDefined();
+	expect(beta).toBeDefined();
+	expect(alpha?.indexOf("Today")).toBe(beta?.indexOf("Today"));
+	expect(listed).not.toContain(" messages");
 
-	const { x, y } = locate(listed, "Alpha question");
+	await piu.mockInput.typeText("Alpha");
+	const filtered = await piu.waitForFrame(
+		(f) =>
+			f
+				.split("\n")
+				.some((line) => /Alpha question +Today \d{2}:\d{2}/.test(line)) &&
+			!f.split("\n").some((line) => /Beta question +current/.test(line)),
+	);
+
+	const { x, y } = locate(filtered, "Alpha question");
 	await piu.mockMouse.click(x, y);
 	const switched = await piu.waitForFrame(
 		(f) =>
@@ -185,6 +206,63 @@ test("/resume lists the saved sessions, and picking one shows its conversation",
 			!f.includes(" messages"),
 	);
 	expect(agentPanel(switched)).toContain(messageBar("Alpha question"));
+});
+
+test("/resume keeps one marker column for short and long titles", async () => {
+	await using piu = await startPiu({
+		width: 79,
+		script: { replies: ["Done"] },
+		persistSession: true,
+	});
+	await send(piu, `Long title ${"lots of words ".repeat(9)}`);
+	await piu.waitForFrame((f) => agentPanel(f).includes("Done"));
+	await send(piu, "/new");
+	await piu.waitForFrame((f) => !agentPanel(f).includes("Done"));
+	await send(piu, "Short title");
+	await piu.waitForFrame((f) => agentPanel(f).includes("Done"));
+	await send(piu, "/resume");
+
+	const sessionRows = (frame: string) =>
+		frame
+			.split("\n")
+			.filter((line) => /(?:Short|Long) title.*Today/.test(line));
+	const [first, second] = sessionRows(
+		await piu.waitForFrame((f) => sessionRows(f).length === 2),
+	);
+	expect(first).toMatch(/^\s*› Short title/);
+	const column = first?.indexOf("Short title") ?? -1;
+	expect(second?.indexOf("Long title")).toBe(column);
+	expect(second?.slice(column - 2, column)).toBe("  ");
+
+	piu.mockInput.pressArrow("down");
+	const [previous, selected] = sessionRows(
+		await piu.waitForFrame((f) =>
+			sessionRows(f).some((line) => /^\s+Short title/.test(line)),
+		),
+	);
+	expect(previous?.slice(column - 2, column)).toBe("  ");
+	expect(selected?.slice(column - 2)).toStartWith("› Long title");
+
+	await piu.mockInput.typeText("Long title");
+	const [only] = sessionRows(
+		await piu.waitForFrame((f) => sessionRows(f).length === 1),
+	);
+	expect(only?.slice(column - 2)).toStartWith("› Long title");
+});
+
+test("/resume shows the request instead of the expanded skill instructions", async () => {
+	await using piu = await startPiu({
+		script: { replies: ["Done"] },
+		persistSession: true,
+	});
+	await send(
+		piu,
+		'<skill name="implement" location="/demo/SKILL.md">\nExpanded instructions\n</skill>\n\nImplement the compact picker',
+	);
+	await piu.waitForFrame((f) => agentPanel(f).includes("Done"));
+	await send(piu, "/resume");
+	const frame = await piu.waitForFrame((f) => f.includes("Resume session"));
+	expect(frame).toMatch(/Implement the compact picker +current/);
 });
 
 test("/tree shows a branched session, and picking an earlier prompt forks from it and puts that prompt back in the input", async () => {

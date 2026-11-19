@@ -1,7 +1,8 @@
 import type { Command, CommandContext } from "../../src/module.ts";
 import { openPicker } from "../../src/picker.tsx";
+import { openResumePicker } from "./resume-picker.tsx";
 import { currentPromptId, promptRows, type TreeRow } from "./session-tree.ts";
-import { listSessions, type SessionSummary } from "./sessions.ts";
+import { listSessions } from "./sessions.ts";
 
 async function tree(context: CommandContext) {
 	const { tree: nodes, leafId } = await context.actions.sessionTree();
@@ -27,19 +28,7 @@ async function resume(context: CommandContext) {
 		context.actions.showToast("No saved sessions");
 		return;
 	}
-	openPicker<SessionSummary>(context, {
-		id: "resume-picker",
-		width: 70,
-		items: () =>
-			sessions.map((session) => ({
-				label: session.title.slice(0, 50),
-				detail: `${session.messages} messages`,
-				value: session,
-			})),
-		selected: () =>
-			sessions.findIndex((session) => session.file === context.pi.sessionFile),
-		onPick: (session) => void context.actions.switchSession(session.file),
-	});
+	openResumePicker(context, sessions);
 }
 
 export const sessionCommands: readonly Command[] = [

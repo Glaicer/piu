@@ -30,6 +30,52 @@ function span(piu: Piu, text: string) {
 		.find((span) => span.text.trim() === text);
 }
 
+test("System shortcuts opens a read-only reference from Hotkeys and Esc returns", async () => {
+	await using piu = await startPiu({ script, height: 42 });
+	await piu.mockInput.typeText("/hotkeys");
+	piu.mockInput.pressEnter();
+	const frame = await piu.waitForFrame(
+		(f) => f.includes("System shortcuts") && f.includes("Focus the next Panel"),
+	);
+	expect(frame.indexOf("System shortcuts")).toBeLessThan(
+		frame.indexOf("Focus the next Panel"),
+	);
+	await clickText(piu, "System shortcuts");
+	await piu.waitForFrame(
+		(f) => f.includes("Navigation") && f.includes("Home | Ctrl+A"),
+	);
+	piu.mockInput.pressKey("END", { ctrl: true });
+	await piu.waitForFrame((f) => f.includes("! | !!"));
+	piu.mockInput.pressEscape();
+	await piu.waitForFrame(
+		(f) => f.includes("Focus the next Panel") && !f.includes("! | !!"),
+	);
+});
+
+test("? opens System shortcuts from the Hotkeys list", async () => {
+	await using piu = await startPiu({ script });
+	await piu.mockInput.typeText("/hotkeys");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) => f.includes("Focus the next Panel"));
+	piu.mockInput.pressKey("?");
+	await piu.waitForFrame((f) =>
+		f.includes("These shortcuts cannot be reassigned."),
+	);
+});
+
+test("/hotkeys opens Settings directly on Hotkeys and /settings still opens Global", async () => {
+	await using piu = await startPiu({ script });
+	await piu.mockInput.typeText("/hotkeys");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame(
+		(f) => f.includes("Settings") && f.includes("Focus the next Panel"),
+	);
+	piu.mockInput.pressEscape();
+	await piu.waitForFrame(() => !modalBounds(piu));
+	const global = await openSettings(piu);
+	expect(global).not.toContain("Focus the next Panel");
+});
+
 test("Settings opens centered and applies a theme without losing other Config keys", async () => {
 	await using piu = await startPiu({
 		script,

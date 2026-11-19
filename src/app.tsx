@@ -464,7 +464,7 @@ function App(props: {
 			readClipboard: clipboard.read,
 			restartBackend: () => void retryBackend(),
 			openModal: modals.open,
-			openSettings: () => settings.open(commandContext),
+			openSettings: (tab) => settings.open(commandContext, tab),
 			showToast: toasts.show,
 			quit: () => void leave(false),
 			restart: () => void leave(true),

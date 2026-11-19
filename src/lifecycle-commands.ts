@@ -10,6 +10,12 @@ export const lifecycleCommands: readonly LifecycleCommand[] = [
 		run: ({ actions }) => actions.openSettings(),
 	},
 	{
+		name: "hotkeys",
+		description: "Open keyboard shortcuts in piu settings",
+		takesArguments: false,
+		run: ({ actions }) => actions.openSettings("hotkeys"),
+	},
+	{
 		name: "update",
 		description: "Update the configured Backend",
 		takesArguments: false,

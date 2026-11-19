@@ -14,13 +14,15 @@ export type Presence = "hidden" | "shown" | "exclusive";
 
 export type ModuleSettings = Readonly<Record<string, unknown>>;
 
+export type BuiltinSettingsTab = "global" | "hotkeys";
+
 export type UiActions = {
 	openModal(request: ModalRequest): () => void;
 	showToast(message: string, kind?: ToastKind): void;
 	quit(): void;
 	restart(): void;
 	updateBackend(): void;
-	openSettings(): void;
+	openSettings(tab?: BuiltinSettingsTab): void;
 	readClipboard(): Promise<ClipboardReadResult>;
 	editExternally(text: string): Promise<string | undefined>;
 };

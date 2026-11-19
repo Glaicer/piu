@@ -15,7 +15,7 @@ import { BackendCard } from "./backend-card.tsx";
 import { createSyntaxStyle, Markdown } from "./markdown.tsx";
 import { createSelection, type Selection } from "./selection.ts";
 import { sessionCommands } from "./session-commands.tsx";
-import { contentText } from "./sessions.ts";
+import { contentText, expandedSkill } from "./sessions.ts";
 import { SubagentCard, type SubagentRow } from "./subagent-card.tsx";
 import { subagentModule } from "./subagent-view.tsx";
 import { Thinking } from "./thinking.tsx";
@@ -222,11 +222,7 @@ function UserMessage(props: {
 			: text();
 	};
 	// why: Pi expands /skill before RPC delivers the message; only the chat projection strips the instructions.
-	const skill = createMemo(() =>
-		text().match(
-			/^<skill name="([^"]+)" location="[^"]+">\n[\s\S]*?\n<\/skill>(?:\n\n([\s\S]+))?$/,
-		),
-	);
+	const skill = createMemo(() => expandedSkill(text()));
 	const request = () => skill()?.[2];
 	const theme = props.theme;
 	const author = () => (

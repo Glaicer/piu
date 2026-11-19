@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hotkeys — reference prototype</title>
+<!-- Throwaway prototype: open the read-only shortcut tables from the top of Hotkeys. -->
+<style>
+  * { box-sizing: border-box; }
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px 16px 76px; background: #0d0d0d; color: #ededed; font: 14px/1.45 ui-monospace, monospace; }
+  main { position: relative; display: flex; flex-direction: column; margin: auto; max-width: 1100px; height: min(720px, 80vh); min-height: 360px; background: #141414; border-top: 3px solid #ededed; padding: 12px 24px; }
+  h1, h2, h3, p { margin: 0; font-size: inherit; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .muted, footer, .group { color: #a1a1a1; }
+  .tabs { display: flex; gap: 24px; border-bottom: 1px solid #323232; margin-top: 16px; margin-bottom: 10px; align-items: center; }
+  .tabs > * { padding: 5px 0; }
+  .tabs strong { border-bottom: 2px solid #ededed; }
+  button { font: inherit; color: inherit; background: #242424; border: 1px solid #535353; padding: 2px 9px; cursor: pointer; }
+  button:hover { background: #e4e4e4; color: #141414; }
+  button:focus-visible { outline: 2px solid #77aaff; outline-offset: 2px; }
+  #view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .scroll { overflow: auto; min-height: 0; flex: 1; }
+  .editable p { display: flex; justify-content: space-between; gap: 12px; padding: 2px 8px; }
+  .editable .group { margin-top: 12px; justify-content: start; }
+  .editable .selected { background: #262626; font-weight: bold; }
+  footer { padding-top: 1lh; }
+  #system-shortcuts { align-self: flex-start; margin-left: 8px; }
+  .reference { padding: 0 2px 10px; }
+  .reference section { margin-top: 14px; }
+  .reference h3 { margin-bottom: 3px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #3d3d3d; text-align: left; padding: 3px 8px; vertical-align: top; }
+  th { color: #adadad; }
+  td:first-child { width: 48%; color: #e7cfa6; }
+  dialog { width: min(820px, calc(100% - 36px)); max-height: 70vh; color: inherit; background: #191919; border: 1px solid #505050; border-top: 3px solid #ededed; padding: 12px 18px; }
+  dialog[open] { display: flex; flex-direction: column; }
+  dialog::backdrop { background: #000a; }
+  .reference-toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 6px; }
+  @media (max-width: 650px) { main { padding-inline: 10px; } }
+</style>
+<main>
+  <header><h1>Settings</h1><span class="muted">esc</span></header>
+  <div class="tabs"><span class="muted">Global</span><strong>Hotkeys</strong></div>
+  <div id="view">
+    <button id="system-shortcuts" type="button" aria-haspopup="dialog">System shortcuts</button>
+    <div id="actions" class="editable scroll"></div>
+  </div>
+  <footer>↑/↓ action   ←/→ key   ⏎ add   ⌫ remove   c clear   r reset   ctrl+PgUp/PgDn tabs   esc close</footer>
+  <dialog id="dialog" aria-labelledby="system-title">
+    <div class="reference-toolbar">
+      <h2 id="system-title">System shortcuts</h2>
+      <form method="dialog"><button autofocus>Close · Esc</button></form>
+    </div>
+    <div class="reference scroll" id="reference" tabindex="0"></div>
+  </dialog>
+</main>
+<script>
+  const fixed = {
+    Navigation: [
+      ["↑ / ↓", "Move the cursor vertically or browse prompt history"],
+      ["← / Ctrl+B · → / Ctrl+F", "Move the cursor left or right"],
+      ["Alt+← / Ctrl+← / Alt+B · Alt+→ / Ctrl+→ / Alt+F", "Move by word"],
+      ["Home / Ctrl+A · End / Ctrl+E", "Move to the start or end of the line"],
+      ["Ctrl+] · Ctrl+Alt+]", "Jump forward or backward to the next typed character"],
+      ["PgUp / Ctrl+PgUp · PgDn / Ctrl+PgDn", "Scroll by a page"],
+    ],
+    Editing: [
+      ["Enter", "Send message"],
+      ["Shift+Enter", "Insert a newline (Ctrl+J can be reassigned)"],
+      ["Ctrl+W / Alt+Backspace · Alt+D / Alt+Delete", "Delete a word backward or forward"],
+      ["Ctrl+U · Ctrl+K", "Delete to the start or end of the line"],
+      ["Ctrl+Y · Alt+Y", "Paste the most recently deleted text or cycle through deletions"],
+      ["Ctrl+-", "Undo"],
+    ],
+    Other: [
+      ["Tab", "Accept autocomplete; Panel navigation is configurable separately"],
+      ["Escape", "Cancel autocomplete or abort streaming"],
+      ["Ctrl+C", "Clear the draft; with an empty prompt, show an exit hint and press again to exit"],
+      ["Ctrl+D", "Exit when the prompt is empty"],
+      ["Alt+Enter", "Queue a follow-up message"],
+      ["/", "Start a slash command"],
+      ["! · !!", "Run a shell command, with or without adding its output to model context"],
+    ],
+  };
+  const editable = {
+    piu: [
+      ["Focus the next Panel", "[tab]"], ["Focus the previous Panel", "⇧tab"],
+      ["Insert a newline", "ctrl+j   ⇧⏎ fixed"], ["Jump to the top of the chat", "ctrl+home"],
+      ["Jump to the bottom of the chat", "ctrl+end"], ["Edit the prompt in an external editor", "ctrl+g"],
+      ["Paste from the clipboard", "ctrl+v"], ["Restore queued messages to the prompt", "alt+up"],
+      ["Suspend piu", "ctrl+z"], ["Cycle to the next model", "ctrl+p"],
+      ["Cycle to the previous model", "ctrl+⇧p"], ["Cycle the reasoning level", "alt+⇧t"],
+      ["Toggle tool output", "ctrl+o"], ["Toggle thinking blocks", "ctrl+t"],
+      ["Copy the selection or last assistant message", "ctrl+x"], ["Open piu settings", ""],
+      ["Open keyboard shortcuts in piu settings", ""], ["Update the configured Backend", ""],
+      ["Restart the Backend and piu, keeping this session", ""], ["Close the Backend and piu", ""],
+    ],
+    model: [["Switch the model", "ctrl+l"], ["Set the reasoning level", "alt+t"]],
+    chat: [["Start a new session", ""], ["Resume another session", ""], ["Fork from an earlier prompt", ""], ["Compact the context", ""]],
+  };
+  const byId = id => document.getElementById(id);
+  const dialog = byId("dialog");
+  const table = ([name, rows]) => `<section><h3>${name}</h3><table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody>${rows.map(([key, action]) => `<tr><td>${key}</td><td>${action}</td></tr>`).join("")}</tbody></table></section>`;
+  byId("reference").innerHTML = `<p class="muted">Built into piu · cannot be reassigned here</p>${Object.entries(fixed).map(table).join("")}`;
+  byId("actions").innerHTML = Object.entries(editable).map(([group, rows]) => `<p class="group">${group}</p>${rows.map(([label, binding]) => `<p${binding === "[tab]" ? ' class="selected"' : ""}><span>${label}</span><span class="muted">${binding}</span></p>`).join("")}`).join("");
+  byId("system-shortcuts").onclick = () => {
+    byId("reference").scrollTop = 0;
+    dialog.showModal();
+  };
+</script>
+</html>
