@@ -8,8 +8,9 @@ export function Thinking(props: {
 	animate: Animate;
 	selection: Selection;
 	theme: Theme;
+	group?: () => boolean | undefined;
 }) {
-	const reveal = createReveal(props.animate);
+	const reveal = createReveal(props.animate, props.group);
 	const filled = () => props.text.trim() !== "";
 	const label = selectable(props.selection, () => {
 		if (filled()) reveal.toggle();

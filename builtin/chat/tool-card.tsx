@@ -73,8 +73,9 @@ export function ToolCard(props: {
 	animate: Animate;
 	selection: Selection;
 	theme: Theme;
+	group?: () => boolean | undefined;
 }) {
-	const reveal = createReveal(props.animate);
+	const reveal = createReveal(props.animate, props.group);
 	const row = selectable(props.selection, reveal.toggle);
 	const jobId = () => launchedJobId(props.result());
 	const status = createMemo(() => {

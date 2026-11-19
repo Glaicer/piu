@@ -24,4 +24,4 @@ const view = await createApp({
 	console.error(error.message);
 	process.exit(1);
 });
-await render(view, { exitOnCtrlC: true });
+await render(view, { exitOnCtrlC: false });

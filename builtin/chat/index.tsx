@@ -179,6 +179,7 @@ function Messages(props: { context: ModuleContext }) {
 										syntaxStyle={syntaxStyle()}
 										theme={theme}
 										animate={props.context.animateReveal}
+										display={props.context.chatDisplay}
 									/>
 								)}
 							</Index>
@@ -208,6 +209,18 @@ function UserMessage(props: {
 	theme: Theme;
 }) {
 	const text = () => contentText(props.message.content);
+	const promptText = () => {
+		const content = props.message.content;
+		const images =
+			typeof content === "string"
+				? 0
+				: content.filter((block) => block.type === "image").length;
+		return images
+			? [text(), `[${images} image${images === 1 ? "" : "s"}]`]
+					.filter(Boolean)
+					.join("\n")
+			: text();
+	};
 	// why: Pi expands /skill before RPC delivers the message; only the chat projection strips the instructions.
 	const skill = createMemo(() =>
 		text().match(
@@ -238,7 +251,7 @@ function UserMessage(props: {
 				when={skill()}
 				fallback={
 					<>
-						{prompt(text())}
+						{prompt(promptText())}
 						{author()}
 					</>
 				}
@@ -302,6 +315,7 @@ function AssistantBlock(props: {
 	syntaxStyle: SyntaxStyle;
 	theme: Theme;
 	animate: Animate;
+	display: ModuleContext["chatDisplay"];
 }) {
 	// why: text_end replaces the block object; switching on the type alone keeps the renderable mounted so finished code is not re-highlighted.
 	const type = createMemo(() => props.block.type);
@@ -320,6 +334,7 @@ function AssistantBlock(props: {
 			{type() === "thinking" ? (
 				<Thinking
 					text={text()}
+					group={props.display.thinking}
 					animate={props.animate}
 					selection={props.selection}
 					theme={props.theme}
@@ -346,6 +361,7 @@ function AssistantBlock(props: {
 					when={subagent()}
 					fallback={
 						<ToolCard
+							group={props.display.tools}
 							grouped={props.groupedTools.has(toolCall()?.id ?? "")}
 							call={toolCall}
 							result={() => {

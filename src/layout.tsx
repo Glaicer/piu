@@ -151,6 +151,10 @@ export function SlotView(props: SlotProps) {
 		entries.some((entry) => shown(entry) && entry.placed.module.followsOutput);
 	let element: Renderable | undefined;
 	let frameElement: Renderable | undefined;
+	const chatScroll = () =>
+		visible() && followsOutput() && element instanceof ScrollBoxRenderable
+			? element
+			: undefined;
 	focus?.register({
 		id: slot.id,
 		element: () => element,
@@ -158,14 +162,17 @@ export function SlotView(props: SlotProps) {
 		handlesKeys: () =>
 			entries.some((entry) => shown(entry) && entry.keyHandlers.length > 0),
 		jumpChat: (bottom) => {
-			if (
-				!visible() ||
-				!followsOutput() ||
-				!(element instanceof ScrollBoxRenderable)
-			)
-				return false;
+			const chat = chatScroll();
+			if (!chat) return false;
 			smoothScroll.cancel();
-			element.scrollTo(bottom ? Infinity : 0);
+			chat.scrollTo(bottom ? Infinity : 0);
+			return true;
+		},
+		pageChat: (direction) => {
+			const chat = chatScroll();
+			if (!chat) return false;
+			smoothScroll.cancel();
+			chat.scrollBy(direction * chat.viewport.height);
 			return true;
 		},
 	});

@@ -34,6 +34,49 @@ for (const alias of ["/q", "/quit", "/exit"]) {
 	}, 20000);
 }
 
+for (const key of ["\x04", "\x03"]) {
+	test(`${key === "\x04" ? "Ctrl+D" : "confirmed Ctrl+C"} exits and restores terminal modes`, async () => {
+		const fixture = prepareFixture({ script: { replies: [] } });
+		try {
+			await using piu = spawnPiu(fixture, { env: { PI_OFFLINE: "1" } });
+			await piu.waitForText("faux-1");
+			piu.type(key);
+			if (key === "\x03") {
+				await piu.waitForText("Press Ctrl+C");
+				await Bun.sleep(600);
+				piu.type(key);
+			}
+			expect(await piu.proc.exited).toBe(0);
+			expect(piu.pids().map((e) => e.event)).toContain("shutdown");
+			expect(leftModes(piu.raw)).toEqual({ on: [], cursorShown: true });
+		} finally {
+			fixture.removeDir();
+		}
+	}, 15000);
+}
+
+test("Ctrl+G edits the draft and resumes input", async () => {
+	const fixture = prepareFixture({
+		script: { replies: ["Model got {lastUser}"] },
+	});
+	try {
+		const editor = join(fixture.dir, "editor.sh");
+		writeFileSync(editor, '#!/bin/sh\nprintf " edited" >> "$1"\n', {
+			mode: 0o700,
+		});
+		await using piu = spawnPiu(fixture, { env: { VISUAL: editor } });
+		await piu.waitForText("faux-1");
+		piu.type("draft");
+		await piu.waitForText("draft");
+		piu.type("\x07");
+		await piu.waitForText("draft edited");
+		piu.type("\r");
+		await piu.waitForText('Model got "draft edited"');
+	} finally {
+		fixture.removeDir();
+	}
+}, 15000);
+
 test("favorites and the selected model and reasoning survive a full process exit", async () => {
 	const fixture = prepareFixture({
 		script: {

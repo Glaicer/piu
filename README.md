@@ -26,6 +26,12 @@ Modules travel in packages called extensions. A package can carry a Pi extension
 
 People who use Pi every day and want their terminal to work the way they do, and tinkerers who would rather build their own piece than wait for someone else's. If you've ever looked at an agent's interface and thought, "I'd put that over there," that includes you.
 
+## Keyboard
+
+The prompt supports Pi's editing and navigation shortcuts. `Tab` accepts a completion (`/` commands, `@` files, or `./` paths); otherwise it moves between Panels. `Shift+Tab` keeps backward Panel navigation, so piu uses `Alt+Shift+T` to cycle reasoning instead. `Ctrl+P` and `Ctrl+Shift+P` cycle models; Pi's RPC exposes scoped cycling only in the forward direction.
+
+Use `Ctrl+G` to edit the draft in `$VISUAL` or `$EDITOR` (`nano` by default), and `Ctrl+Z` to suspend in a terminal that supports Unix job control. A prompt starting with `!` runs a shell command through Pi; `!!` shows the result without adding it to model context. Configurable shortcuts are listed in `/settings` → Hotkeys.
+
 ## Status
 
 The core works: a customizable layout, a chat, an input, model and reasoning pickers, and live cards for running subagents. The way you write modules will probably change before it settles.

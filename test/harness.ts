@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { JsonObject } from "@earendil-works/pi-ai";
 import {
+	type ClipboardRepresentation,
 	type ClipboardService,
 	type ClipboardWriteOptions,
 	type Renderable,
@@ -441,9 +442,17 @@ export function prepareFixture(options: FixtureOptions) {
 }
 
 // why: the real clipboard is the developer's own and OSC 52 throws in the test renderer, so every app in a test gets this recorder.
-export function recordingClipboard(failure?: Error | "reports") {
+export function recordingClipboard(
+	failure?: Error | "reports",
+	contents?: ClipboardRepresentation,
+) {
 	const writes: { text: string; options: ClipboardWriteOptions }[] = [];
 	const service = {
+		async read() {
+			return contents
+				? { status: "read", representation: contents }
+				: { status: "empty" };
+		},
 		async writeText(text: string, options: ClipboardWriteOptions) {
 			writes.push({ text, options });
 			if (failure instanceof Error) throw failure;
@@ -471,10 +480,14 @@ export async function startPiu(
 		motion?: boolean;
 		terminalBackground?: ThemeMode;
 		clipboardError?: Error | "reports";
+		clipboardContents?: ClipboardRepresentation;
 	},
 ) {
 	const { dir, home, removeDir } = prepareFixture(options);
-	const clipboard = recordingClipboard(options.clipboardError);
+	const clipboard = recordingClipboard(
+		options.clipboardError,
+		options.clipboardContents,
+	);
 	const savedEnv = { HOME: process.env.HOME, PIU_HOME: process.env.PIU_HOME };
 	if (options.homeFromHomeDir) {
 		process.env.HOME = dir;
@@ -501,6 +514,7 @@ export async function startPiu(
 		restoreEnv(savedEnv);
 	}
 	const setup = await testRender(view, {
+		exitOnCtrlC: false,
 		width: options.width ?? 160,
 		height: options.height ?? 30,
 		// why: without the kitty protocol a terminal sends Shift+Enter as a plain Enter; the real renderer enables it by default.

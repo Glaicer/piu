@@ -39,27 +39,28 @@ async function clickRow(piu: Piu, text: string) {
 	for (let attempt = 0; attempt < 40; attempt++) {
 		const bounds = modalBounds(piu);
 		if (!bounds) throw new Error("no Modal");
-		const frame = await piu
-			.waitForFrame(
-				(current) => current.split("\n").some((line) => line.includes(text)),
-				250,
-			)
-			.catch(() => undefined);
-		if (frame) {
-			const rows = frame.split("\n");
-			const y = rows.findLastIndex((row) => row.includes(text));
-			const x = rows[y]?.indexOf(text) ?? -1;
-			if (y >= bounds.top && y < bounds.top + bounds.height && x >= 0) {
-				await piu.mockMouse.click(x, y);
-				return;
-			}
+		await piu.renderOnce();
+		const rows = piu.captureCharFrame().split("\n");
+		const y = rows.findIndex(
+			(row, index) =>
+				index >= bounds.top &&
+				index < bounds.top + bounds.height &&
+				row
+					.slice(bounds.left, bounds.left + bounds.width)
+					.trimStart()
+					.replace(/^›\s*/, "")
+					.startsWith(text),
+		);
+		const x = rows[y]?.indexOf(text, bounds.left) ?? -1;
+		if (x >= 0) {
+			await piu.mockMouse.click(x, y);
+			return;
 		}
 		await piu.mockMouse.scroll(
 			bounds.left + 5,
 			bounds.top + bounds.height - 5,
 			"down",
 		);
-		await piu.waitForFrame(() => true);
 	}
 	throw new Error(`row not found: ${text}`);
 }
@@ -93,7 +94,7 @@ test("the Hotkeys tab groups actions by source and marks changed shortcuts", asy
 });
 
 test("Hotkeys lists quit once when no alias has a shortcut", async () => {
-	await using piu = await startPiu({ script: none, height: 40 });
+	await using piu = await startPiu({ script: none, height: 55 });
 	await openHotkeys(piu);
 	const frame = await piu.waitForFrame((current) =>
 		current.includes("Switch the model"),
@@ -189,6 +190,11 @@ test("adding a sequence applies at once and writes the personal Config", async (
 	piu.mockInput.pressKey("x", { ctrl: true });
 	piu.mockInput.pressKey("m");
 	await piu.waitForFrame(
+		(frame) =>
+			frame.includes("Assign ctrl+x m") && frame.includes("(chat.copy)"),
+	);
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame(
 		(frame) => frame.includes("[ctrl+x m]") && frame.includes("changed"),
 	);
 	expect(readConfig(piu).keybindings["command.model"]).toEqual([
@@ -235,17 +241,17 @@ test("a newline shortcut added in the tab reaches the prompt without Restart", a
 	await openHotkeys(piu);
 	await clickRow(piu, "Insert a newline");
 	piu.mockInput.pressEnter();
-	piu.mockInput.pressKey("x", { ctrl: true });
+	piu.mockInput.pressKey("s", { ctrl: true });
 	piu.mockInput.pressKey("n");
-	await piu.waitForFrame((frame) => frame.includes("[ctrl+x n]"));
+	await piu.waitForFrame((frame) => frame.includes("[ctrl+s n]"));
 	expect(readConfig(piu).keybindings["input.newline"]).toEqual([
 		"ctrl+j",
-		"ctrl+x n",
+		"ctrl+s n",
 	]);
 	piu.mockInput.pressEscape();
 	await piu.waitForFrame(() => !modalBounds(piu));
 	await piu.mockInput.typeText("one");
-	piu.mockInput.pressKey("x", { ctrl: true });
+	piu.mockInput.pressKey("s", { ctrl: true });
 	piu.mockInput.pressKey("n");
 	await piu.mockInput.typeText("two");
 	piu.mockInput.pressEnter();
@@ -388,7 +394,7 @@ test("an occupied shortcut warns, refuses cleanly, then wins on confirmation", a
 		(frame) =>
 			modalBounds(piu) !== undefined &&
 			!frame.includes("Assign alt+t") &&
-			frame.includes("Focus the next Panel"),
+			frame.includes("Switch the model"),
 	);
 	expect(readConfig(piu).keybindings).toBeUndefined();
 
@@ -558,7 +564,7 @@ test("an Extension named piu keeps its own group", async () => {
 test("legacy quit shortcuts share a single editable action and keep conflict order", async () => {
 	await using piu = await startPiu({
 		script: none,
-		height: 40,
+		height: 55,
 		config: {
 			keybindings: {
 				"command.q": ["alt+q", "alt+t"],
@@ -725,6 +731,7 @@ test("Shift+Enter cannot be assigned to another action and the Config stays unto
 	piu.mockInput.pressEnter({ shift: true });
 	await piu.waitForFrame((frame) => frame.includes("Shift+Enter"));
 	expect(readConfig(piu).keybindings).toBeUndefined();
+	piu.mockInput.pressKey("HOME");
 	const fixed = await piu.waitForFrame((frame) => frame.includes("⇧⏎ fixed"));
 	expect(fixed).toContain("⇧⏎ fixed");
 });
@@ -795,8 +802,8 @@ test("the launcher reloads a Hotkeys assignment on Restart", async () => {
 		piu.type("\x1b[B\x1b[B");
 		piu.type("\r");
 		await piu.waitForText("press a shortcut");
-		piu.type("\x18n");
-		await piu.waitForText("ctrl+x n");
+		piu.type("\x13n");
+		await piu.waitForText("ctrl+s n");
 		piu.type("\x1b[27u");
 		const beforeRestart = piu.mark();
 		piu.submit("/restart");
@@ -804,7 +811,7 @@ test("the launcher reloads a Hotkeys assignment on Restart", async () => {
 		await piu.waitForText("faux-1", beforeRestart);
 		const reopened = piu.mark();
 		piu.type("one");
-		piu.type("\x18n");
+		piu.type("\x13n");
 		piu.type("two\r");
 		await piu.waitForText('Model got "one\\ntwo"', reopened);
 	} finally {

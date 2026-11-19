@@ -1,5 +1,10 @@
 import { join } from "node:path";
-import type { ClipboardService, KeyEvent, Renderable } from "@opentui/core";
+import {
+	type ClipboardService,
+	EditBufferRenderable,
+	type KeyEvent,
+	type Renderable,
+} from "@opentui/core";
 import {
 	useKeyboard,
 	usePaste,
@@ -66,6 +71,7 @@ import { createPiState } from "./pi-state.ts";
 import { restartArgs } from "./restart.ts";
 import { createSettings } from "./settings.tsx";
 import { StartupError } from "./startup-error.ts";
+import { terminalActions } from "./terminal-actions.ts";
 import { createTheme } from "./theme.ts";
 import { createToasts, ToastLayer } from "./toast.tsx";
 
@@ -142,6 +148,16 @@ const piuKeybindingDescriptions: Readonly<Record<string, string>> = {
 	"input.newline": "Insert a newline",
 	"chat.top": "Jump to the top of the chat",
 	"chat.bottom": "Jump to the bottom of the chat",
+	"input.external-editor": "Edit the prompt in an external editor",
+	"input.paste": "Paste from the clipboard",
+	"input.dequeue": "Restore queued messages to the prompt",
+	"app.suspend": "Suspend piu",
+	"model.next": "Cycle to the next model",
+	"model.previous": "Cycle to the previous model",
+	"reasoning.cycle": "Cycle the reasoning level",
+	"chat.toggle-tools": "Toggle tool output",
+	"chat.toggle-thinking": "Toggle thinking blocks",
+	"chat.copy": "Copy the selection or last assistant message",
 };
 
 export function prepareKeybindings(
@@ -282,7 +298,7 @@ function App(props: {
 	const animate = createAnimate(renderer, props.motion);
 	const instant = createAnimate(renderer, false);
 	onCleanup(toasts.dispose);
-	useCopyOnSelect(renderer, props.clipboard, toasts.show);
+	const clipboard = useCopyOnSelect(renderer, props.clipboard, toasts.show);
 	let nextLease = props.startupLease;
 	let disposed = false;
 	const startup = Promise.withResolvers<void>();
@@ -410,6 +426,33 @@ function App(props: {
 			restart ? { restartArgs: restartArgs(props.cliArgs, sessionFile) } : {},
 		);
 	}
+	const { editExternally, suspend } = terminalActions(
+		renderer,
+		props.cwd,
+		toasts.show,
+	);
+	function copyMessage() {
+		const current = renderer.currentFocusedRenderable;
+		const selected =
+			renderer.getSelection()?.getSelectedText() ||
+			(current instanceof EditBufferRenderable
+				? current.getSelectedText()
+				: "");
+		if (selected) {
+			void clipboard.copy(selected);
+			return;
+		}
+		for (let index = pi.state.messages.length - 1; index >= 0; index--) {
+			const message = pi.state.messages[index];
+			if (message?.role !== "assistant") continue;
+			const text = message.content
+				.flatMap((block) => (block.type === "text" ? [block.text] : []))
+				.join("\n");
+			if (!text.trim()) continue;
+			void clipboard.copy(text);
+			return;
+		}
+	}
 	const commandContext: CommandContext = {
 		pi: pi.state,
 		modelFavorites: createModelFavorites(props.home, (message) =>
@@ -417,6 +460,8 @@ function App(props: {
 		),
 		actions: {
 			...pi.actions,
+			editExternally,
+			readClipboard: clipboard.read,
 			restartBackend: () => void retryBackend(),
 			openModal: modals.open,
 			openSettings: () => settings.open(commandContext),
@@ -430,6 +475,17 @@ function App(props: {
 		theme,
 	};
 	const focus = createPanelFocus();
+	const [tools, setTools] = createSignal<boolean>();
+	const [thinking, setThinking] = createSignal<boolean>();
+	const globalActions: Readonly<Record<string, () => void>> = {
+		"app.suspend": suspend,
+		"model.next": () => void pi.actions.cycleModel(1),
+		"model.previous": () => void pi.actions.cycleModel(-1),
+		"reasoning.cycle": () => void pi.actions.cycleThinking(),
+		"chat.toggle-tools": () => setTools((open) => !open),
+		"chat.toggle-thinking": () => setThinking((open) => !open),
+		"chat.copy": copyMessage,
+	};
 	const commands = [...props.commands, ...lifecycleCommands].map((command) => ({
 		...command,
 		run: (args = "") => command.run(commandContext, args),
@@ -476,6 +532,11 @@ function App(props: {
 		}
 		if (action === "chat.top" || action === "chat.bottom") {
 			if (!focus.jumpChat(action === "chat.bottom")) return false;
+			return true;
+		}
+		const global = globalActions[action];
+		if (global) {
+			global();
 			return true;
 		}
 		const command = commandById.get(action);
@@ -531,6 +592,8 @@ function App(props: {
 	const context = {
 		cwd: props.cwd,
 		...commandContext,
+		chatDisplay: { tools, thinking },
+		pageChat: focus.pageChat,
 		commands,
 		keybindings,
 		registerFocusedAction: (

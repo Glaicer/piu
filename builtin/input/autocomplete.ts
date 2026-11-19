@@ -1,7 +1,7 @@
 import type { BoundCommand } from "../../src/module.ts";
 
 export type Trigger = {
-	readonly kind: "slash" | "file";
+	readonly kind: "slash" | "file" | "path";
 	readonly query: string;
 };
 
@@ -18,6 +18,8 @@ export function findTrigger(before: string): Trigger | undefined {
 	}
 	const file = /(?:^|\s)@(\S*)$/.exec(before);
 	if (file?.[1] !== undefined) return { kind: "file", query: file[1] };
+	const path = /(?:^|\s)\.\/(\S*)$/.exec(before);
+	if (path?.[1] !== undefined) return { kind: "path", query: path[1] };
 }
 
 export function narrow<T>(

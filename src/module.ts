@@ -1,4 +1,4 @@
-import type { KeyEvent, Renderable } from "@opentui/core";
+import type { ClipboardReadResult, KeyEvent, Renderable } from "@opentui/core";
 import type { JSX } from "@opentui/solid";
 import type { Accessor } from "solid-js";
 import type { Animate } from "./animate.ts";
@@ -21,6 +21,8 @@ export type UiActions = {
 	restart(): void;
 	updateBackend(): void;
 	openSettings(): void;
+	readClipboard(): Promise<ClipboardReadResult>;
+	editExternally(text: string): Promise<string | undefined>;
 };
 
 export type CommandContext = {
@@ -51,6 +53,11 @@ export type ModuleContext = CommandContext & {
 	readonly animate: Animate;
 	readonly animateReveal: Animate;
 	readonly bar: boolean;
+	readonly chatDisplay: {
+		readonly tools: Accessor<boolean | undefined>;
+		readonly thinking: Accessor<boolean | undefined>;
+	};
+	pageChat(direction: 1 | -1): boolean;
 	onCleanup(cleanup: () => void): void;
 	onKey(handler: (event: KeyEvent) => void): void;
 	holdFocusKeys(active: Accessor<boolean>): void;

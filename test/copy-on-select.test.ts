@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { startPiu } from "./harness.ts";
+import { startPiu, working } from "./harness.ts";
 
 const REPLY = "hello selectable world";
 
@@ -9,7 +9,7 @@ async function chatWithReply(
 	const piu = await startPiu({ script: { replies: [REPLY] }, ...options });
 	await piu.mockInput.typeText("hi");
 	piu.mockInput.pressEnter();
-	const frame = await piu.waitForFrame((f) => f.includes(REPLY));
+	const frame = await piu.waitForFrame((f) => f.includes(REPLY) && !working(f));
 	const rows = frame.split("\n");
 	const row = rows.findIndex((text) => text.includes(REPLY));
 	return { piu, row, column: (rows[row] ?? "").indexOf(REPLY) };

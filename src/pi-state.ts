@@ -5,6 +5,7 @@ import type {
 	RpcSessionState,
 	SessionTreeNode,
 } from "@earendil-works/pi-coding-agent";
+import { stripAnsiSequences } from "@opentui/core";
 import { batch } from "solid-js";
 import { createStore, produce, reconcile } from "solid-js/store";
 import type { Backend, BackendHealth, BackendRecord } from "./backend.ts";
@@ -57,7 +58,7 @@ type AssistantUpdate = Extract<
 >["assistantMessageEvent"];
 
 export type ServiceRow = {
-	readonly kind: "compaction" | "retry" | "interruption";
+	readonly kind: "compaction" | "retry" | "interruption" | "bash";
 	readonly position: number;
 	readonly status: "active" | "ok" | "failed";
 	readonly text: string;
@@ -67,9 +68,14 @@ export type PendingMessage = {
 	readonly id: number;
 	readonly text: string;
 	readonly mode: "prompt" | "steer" | "followUp";
+	readonly images?: PromptImage[];
 };
 
 export type ThinkingLevel = RpcSessionState["thinkingLevel"];
+export type PromptImage = NonNullable<
+	Extract<RpcCommand, { type: "prompt" }>["images"]
+>[number];
+export type RestoredPrompt = Pick<PendingMessage, "text" | "images">;
 
 export type ModelInfo = {
 	readonly provider: string;
@@ -141,11 +147,16 @@ export type PiState = {
 };
 
 export type PiActions = {
-	prompt(text: string): Promise<boolean>;
-	steer(text: string): Promise<boolean>;
-	followUp(text: string): Promise<boolean>;
+	prompt(text: string, images?: PromptImage[]): Promise<boolean>;
+	steer(text: string, images?: PromptImage[]): Promise<boolean>;
+	followUp(text: string, images?: PromptImage[]): Promise<boolean>;
 	answerDialog(id: string, answer: DialogAnswer): void;
-	abort(): Promise<readonly string[]>;
+	abort(): Promise<readonly RestoredPrompt[]>;
+	dequeue(): Promise<readonly RestoredPrompt[]>;
+	bash(command: string, excludeFromContext: boolean): Promise<boolean>;
+	abortBash(): boolean;
+	cycleModel(step: 1 | -1): Promise<void>;
+	cycleThinking(): Promise<void>;
 	setModel(model: ModelInfo, level?: ThinkingLevel): Promise<void>;
 	setThinkingLevel(level: ThinkingLevel): Promise<void>;
 	newSession(): Promise<void>;
@@ -237,6 +248,7 @@ export function createPiState(options: {
 	}
 
 	let lastPendingId = 0;
+	let shellRun: { epoch: number; label: string; output: string } | undefined;
 	// why: Pi answers a send only after it has queued it, and the message can start before that answer is read, so the end of a run drops only the entries whose answer has arrived.
 	const unconfirmed = new Set<number>();
 	const inFlight = new Set<Promise<boolean>>();
@@ -413,6 +425,12 @@ export function createPiState(options: {
 
 	function applyRecord(record: BackendRecord) {
 		switch (record.type) {
+			case "bash_execution_update":
+				if (shellRun?.epoch === sessionEpoch) {
+					shellRun.output = (shellRun.output + record.delta).slice(-16_384);
+					startRow("bash", shellOutput(shellRun.label, shellRun.output));
+				}
+				break;
 			case "agent_start":
 				setState("working", true);
 				break;
@@ -821,8 +839,12 @@ export function createPiState(options: {
 	}
 
 	// why: `prompt` with streamingBehavior starts a run when Pi is idle and queues otherwise, so a message sent in the gap before `agent_start` arrives is not lost; the `steer` and `follow_up` commands would be refused there.
-	function send(text: string, mode: PendingMessage["mode"]): Promise<boolean> {
-		const entry: PendingMessage = { id: ++lastPendingId, text, mode };
+	function send(
+		text: string,
+		mode: PendingMessage["mode"],
+		images?: PromptImage[],
+	): Promise<boolean> {
+		const entry: PendingMessage = { id: ++lastPendingId, text, mode, images };
 		unconfirmed.add(entry.id);
 		setState("pending", state.pending.length, entry);
 		const drop = () => clearPending(({ id }) => id === entry.id);
@@ -832,6 +854,7 @@ export function createPiState(options: {
 				backend.request({
 					type: "prompt",
 					message: text,
+					images,
 					streamingBehavior: mode === "prompt" ? undefined : mode,
 				}),
 			)
@@ -868,21 +891,98 @@ export function createPiState(options: {
 		return response?.success === true;
 	}
 
+	async function dequeue() {
+		// why: clear_queue must not overtake a prompt still being accepted by Pi.
+		await Promise.all(inFlight);
+		const cleared = await backend
+			.request({ type: "clear_queue" })
+			.catch(ignoreDeadBackend);
+		if (!cleared?.success || cleared.command !== "clear_queue") return [];
+		const restore = (mode: "steer" | "followUp", texts: string[]) => {
+			const pending = state.pending.filter((entry) => entry.mode === mode);
+			return texts.map((text) => {
+				const at = pending.findIndex((entry) => entry.text === text);
+				const [entry] = at >= 0 ? pending.splice(at, 1) : [];
+				return { text, images: entry?.images };
+			});
+		};
+		const restored = [
+			...restore("steer", cleared.data.steering),
+			...restore("followUp", cleared.data.followUp),
+		];
+		clearPending(({ id, mode }) => mode !== "prompt" && !unconfirmed.has(id));
+		return restored;
+	}
+
+	function shellOutput(label: string, output: string) {
+		return [label, stripAnsiSequences(output).trimEnd()]
+			.filter(Boolean)
+			.join("\n");
+	}
+
 	const actions: PiActions = {
-		prompt: (text) => send(text, "prompt"),
-		steer: (text) => send(text, "steer"),
-		followUp: (text) => send(text, "followUp"),
+		prompt: (text, images) => send(text, "prompt", images),
+		steer: (text, images) => send(text, "steer", images),
+		followUp: (text, images) => send(text, "followUp", images),
 		answerDialog,
+		dequeue,
+		async bash(command, excludeFromContext) {
+			if (shellRun?.epoch === sessionEpoch) {
+				notify("A shell command is already running", "warning");
+				return false;
+			}
+			const label = `${excludeFromContext ? "!!" : "!"}${command}`;
+			const run = { epoch: sessionEpoch, label, output: "" };
+			shellRun = run;
+			startRow("bash", label);
+			try {
+				await ready;
+				if (run.epoch !== sessionEpoch) return false;
+				const response = await backend.request({
+					type: "bash",
+					command,
+					excludeFromContext,
+				});
+				if (run.epoch !== sessionEpoch) return false;
+				if (!response.success) {
+					finishRow("bash", {
+						status: "failed",
+						text: `${label}\n${response.error}`,
+					});
+					return false;
+				}
+				if (response.command !== "bash") return false;
+				const { output, exitCode, cancelled, fullOutputPath } = response.data;
+				const status = cancelled
+					? "cancelled"
+					: exitCode
+						? `exit ${exitCode}`
+						: "";
+				finishRow("bash", {
+					status: status ? "failed" : "ok",
+					text: [shellOutput(label, output), status, fullOutputPath]
+						.filter(Boolean)
+						.join("\n"),
+				});
+				return true;
+			} catch {
+				if (run.epoch === sessionEpoch)
+					finishRow("bash", { status: "failed", text: label });
+				return false;
+			} finally {
+				if (shellRun === run) shellRun = undefined;
+			}
+		},
+		abortBash() {
+			if (!shellRun || shellRun.epoch !== sessionEpoch) return false;
+			void refuseToToast({ type: "abort_bash" });
+			return true;
+		},
 		async abort() {
 			const wasWorking = state.working;
 			for (const { id } of state.dialogs) answerDialog(id, { cancelled: true });
-			// why: Pi queues a message some time after reading it, so a clear_queue sent at once could overtake the message the user just sent and let it run after the abort.
-			await Promise.all(inFlight);
 			// why: Pi continues queued messages after an abort, so the queue is emptied first and its text goes back to the caller.
-			const cleared = await backend
-				.request({ type: "clear_queue" })
-				.catch(ignoreDeadBackend);
-			clearPending(({ id, mode }) => mode !== "prompt" && !unconfirmed.has(id));
+			const cleared = await dequeue();
 			const aborted = await backend
 				.request({ type: "abort" })
 				.catch(ignoreDeadBackend);
@@ -894,9 +994,49 @@ export function createPiState(options: {
 					text: "request interrupted",
 				});
 			}
-			return cleared?.success && cleared.command === "clear_queue"
-				? [...cleared.data.steering, ...cleared.data.followUp]
-				: [];
+			return cleared;
+		},
+		async cycleModel(step) {
+			sessionTransition = sessionTransition.then(async () => {
+				await ready;
+				if (step === 1) {
+					if (await refuseToToast({ type: "cycle_model" })) {
+						await refreshSession();
+						saveSelection();
+					}
+					return;
+				}
+				// why: Pi's cycle_model RPC has no direction argument.
+				const { models, model } = state;
+				if (models.length < 2) return;
+				const current = models.findIndex((entry) => sameModel(entry, model));
+				const next =
+					models[(Math.max(current, 0) - 1 + models.length) % models.length];
+				if (
+					next &&
+					(await refuseToToast({
+						type: "set_model",
+						provider: next.provider,
+						modelId: next.id,
+					}))
+				) {
+					await refreshSession();
+					saveSelection();
+				}
+			});
+			await sessionTransition;
+		},
+		async cycleThinking() {
+			sessionTransition = sessionTransition.then(async () => {
+				await ready;
+				const { thinkingLevels, thinkingLevel } = state;
+				const level =
+					thinkingLevels[
+						(thinkingLevels.indexOf(thinkingLevel) + 1) % thinkingLevels.length
+					];
+				if (level !== undefined) await actions.setThinkingLevel(level);
+			});
+			await sessionTransition;
 		},
 		async setModel(model, level) {
 			// why: Pi switches the model and level in separate RPCs; a prompt must wait for both.

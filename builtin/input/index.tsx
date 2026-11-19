@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import {
 	type BoxRenderable,
 	CliRenderEvents,
@@ -27,11 +28,14 @@ import {
 	shiftEnter,
 } from "../../src/keybindings.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
+import type { PromptImage, RestoredPrompt } from "../../src/pi-state.ts";
 import { type Entry, findTrigger, narrow } from "./autocomplete.ts";
 import { Directory } from "./dir.tsx";
+import { createPromptEditing } from "./editing.ts";
 import { listFiles } from "./files.ts";
 
 const MAX_LIST_ROWS = 8;
+const EXIT_CONFIRM_MS = 2_000;
 const MIN_LINES = 4;
 const MAX_LINES = 16;
 
@@ -39,6 +43,8 @@ export const promptFieldId = "input.prompt.field";
 
 const keyBindings = [
 	{ name: "return", shift: true, action: "newline" as const },
+	{ name: "home", action: "line-home" as const },
+	{ name: "end", action: "line-end" as const },
 ];
 const defaultNewlineChord = parseChord(
 	defaultConfig.keybindings["input.newline"] ?? "",
@@ -49,16 +55,94 @@ const defaultNewline: readonly Shortcut[] = defaultNewlineChord
 
 function Prompt(props: { context: ModuleContext }) {
 	let field: TextareaRenderable | undefined;
-	const unregisterNewline = props.context.registerFocusedAction(
-		"input.newline",
-		() => field,
-		() => field?.newLine(),
-	);
-	props.context.onCleanup(unregisterNewline);
+	const { actions, pi } = props.context;
+	const [images, setImages] = createSignal<PromptImage[]>([]);
+	const edit = createPromptEditing();
+	const focusedActions = {
+		"input.newline": () => field?.newLine(),
+		"input.dequeue": () => void actions.dequeue().then(restore),
+		"input.external-editor": () => {
+			const current = field;
+			if (!current) return;
+			void actions.editExternally(current.plainText).then((text) => {
+				if (text !== undefined && !current.isDestroyed) {
+					current.replaceText(text);
+					current.gotoBufferEnd();
+				}
+			});
+		},
+		"input.paste": () => void pasteClipboard(),
+	};
+	for (const [id, run] of Object.entries(focusedActions)) {
+		props.context.onCleanup(
+			props.context.registerFocusedAction(id, () => field, run),
+		);
+	}
 	const history: string[] = [];
 	let recalled = 0;
 
 	const renderer = useRenderer();
+	const [confirmExit, setConfirmExit] = createSignal(false);
+	let exitTimer: ReturnType<typeof renderer.clock.setTimeout> | undefined;
+	function cancelExit() {
+		if (exitTimer !== undefined) renderer.clock.clearTimeout(exitTimer);
+		exitTimer = undefined;
+		setConfirmExit(false);
+	}
+	onCleanup(cancelExit);
+	async function pasteClipboard() {
+		const current = field;
+		if (!current) return;
+		try {
+			const result = await actions.readClipboard();
+			if (current.isDestroyed) return;
+			if (result.status !== "read") {
+				if (result.status !== "empty")
+					actions.showToast("Could not read the clipboard", "warning");
+				return;
+			}
+			const { mimeType, bytes } = result.representation;
+			if (mimeType.startsWith("image/")) {
+				setImages((previous) => [
+					...previous,
+					{
+						type: "image",
+						data: Buffer.from(bytes).toString("base64"),
+						mimeType,
+					},
+				]);
+			} else if (mimeType === "text/uri-list") {
+				const paths = new TextDecoder()
+					.decode(bytes)
+					.split(/\r?\n/)
+					.flatMap((line) => {
+						if (!line.startsWith("file:")) return [];
+						try {
+							const path = fileURLToPath(line);
+							return /\p{Cc}/u.test(path) ? [] : [path];
+						} catch {
+							return [];
+						}
+					});
+				const shell = current.plainText.trimStart().startsWith("!");
+				const parts = shell
+					? paths.map((path) => `'${path.replaceAll("'", "'\\''")}'`)
+					: paths;
+				if (parts.length === 0) return;
+				const before = current.getTextRange(0, current.cursorOffset);
+				const after = current.plainText.slice(before.length);
+				current.insertText(
+					`${/\S$/.test(before) ? " " : ""}${parts.join(shell ? " " : "\n")}${/^\S/.test(after) ? " " : ""}`,
+				);
+			} else if (mimeType === "text/plain") {
+				current.insertText(
+					new TextDecoder().decode(bytes).replace(/\r\n?/g, "\n"),
+				);
+			}
+		} catch {
+			actions.showToast("Could not read the clipboard", "warning");
+		}
+	}
 	let syncingScrollbar = false;
 	const scrollbar = new ScrollBarRenderable(renderer, {
 		orientation: "vertical",
@@ -91,12 +175,17 @@ function Prompt(props: { context: ModuleContext }) {
 			sameShortcut(first, defaultNewline[0]);
 		return formatChord(first === undefined || atDefault ? [shiftEnter] : first);
 	};
-	const keyHints = () =>
-		props.context.pi.working
+	const keyHints = () => {
+		if (confirmExit()) return "Press Ctrl+C once again to exit";
+		return pi.working
 			? "esc stop   alt+⏎ queue"
 			: `⏎ send   ${newlineKey()} new line`;
+	};
 	const [before, setBefore] = createSignal("");
 	const [empty, setEmpty] = createSignal(true);
+	createEffect(() => {
+		if (!empty() || images().length) cancelExit();
+	});
 	const [lineCount, setLineCount] = createSignal(1);
 	const height = () => Math.max(MIN_LINES, Math.min(MAX_LINES, lineCount()));
 	const [anchor, setAnchor] = createSignal(
@@ -141,7 +230,10 @@ function Prompt(props: { context: ModuleContext }) {
 	const [dismissed, setDismissed] = createSignal(false);
 	const trigger = createMemo(() => findTrigger(before()));
 	const [files, setFiles] = createSignal<readonly string[]>([]);
-	const searching = () => trigger()?.kind === "file";
+	const searching = () => {
+		const kind = trigger()?.kind;
+		return kind === "file" || kind === "path";
+	};
 	createEffect(
 		on(searching, (active) => {
 			if (!active) return;
@@ -157,10 +249,11 @@ function Prompt(props: { context: ModuleContext }) {
 	);
 	const entries = createMemo((): Entry[] => {
 		const current = trigger();
-		if (current?.kind === "file") {
+		if (current?.kind === "file" || current?.kind === "path") {
+			const prefix = current.kind === "file" ? "@" : "./";
 			return narrow(files(), current.query, (path) => path).map((path) => ({
-				label: `@${path}`,
-				insert: `@${path} `,
+				label: `${prefix}${path}`,
+				insert: `${prefix}${path} `,
 			}));
 		}
 		if (current?.kind !== "slash") return [];
@@ -228,7 +321,9 @@ function Prompt(props: { context: ModuleContext }) {
 	function accept(entry: Entry) {
 		const current = trigger();
 		if (!field || !current) return;
-		const typed = `${current.kind === "slash" ? "/" : "@"}${current.query}`;
+		const prefix =
+			current.kind === "slash" ? "/" : current.kind === "file" ? "@" : "./";
+		const typed = `${prefix}${current.query}`;
 		const command = entry.command;
 		if (command?.takesArguments === false && field.plainText === typed) {
 			field.setText("");
@@ -247,19 +342,31 @@ function Prompt(props: { context: ModuleContext }) {
 	}
 
 	function routeList(event: KeyEvent) {
+		if (
+			event.meta ||
+			(event.ctrl && event.name !== "pageup" && event.name !== "pagedown")
+		)
+			return;
 		const list = entries();
 		if (event.name === "escape") {
 			event.preventDefault();
 			setDismissed(true);
-		} else if (event.name === "up" || event.name === "down") {
+		} else if (["up", "down", "pageup", "pagedown"].includes(event.name)) {
 			event.preventDefault();
-			const step = event.name === "up" ? -1 : 1;
+			const step =
+				event.name === "up"
+					? -1
+					: event.name === "down"
+						? 1
+						: event.name === "pageup"
+							? -MAX_LIST_ROWS
+							: MAX_LIST_ROWS;
 			const next = Math.max(0, Math.min(list.length - 1, selected() + step));
 			setSelected(next);
 			reveal(next);
 		} else if (
 			event.name === "tab" ||
-			(event.name === "return" && !event.shift && !event.meta)
+			(event.name === "return" && !event.shift && trigger()?.kind !== "path")
 		) {
 			const entry = list[selected()];
 			if (!entry) return;
@@ -276,8 +383,9 @@ function Prompt(props: { context: ModuleContext }) {
 	}
 
 	function show(text: string) {
-		field?.setText(text);
-		field?.gotoBufferEnd();
+		if (!field || field.isDestroyed) return;
+		field.setText(text);
+		field.gotoBufferEnd();
 	}
 
 	createEffect(
@@ -288,9 +396,17 @@ function Prompt(props: { context: ModuleContext }) {
 		),
 	);
 
-	function restore(queued: readonly string[]) {
+	function restore(queued: readonly RestoredPrompt[]) {
 		if (!field || queued.length === 0) return;
-		show([...queued, field.plainText].filter(Boolean).join("\n\n"));
+		setImages((current) => [
+			...queued.flatMap((entry) => entry.images ?? []),
+			...current,
+		]);
+		show(
+			[...queued.map((entry) => entry.text), field.plainText]
+				.filter(Boolean)
+				.join("\n\n"),
+		);
 	}
 
 	function remember(text: string) {
@@ -300,16 +416,19 @@ function Prompt(props: { context: ModuleContext }) {
 
 	function take() {
 		const value = field?.plainText ?? "";
-		if (!value.trim()) return;
-		remember(value);
+		if (!value.trim() && images().length === 0) return;
+		if (value.trim()) remember(value);
 		field?.setText("");
 		return value;
 	}
 
 	function walkHistory(event: KeyEvent, step: -1 | 1) {
-		if (!field || event.shift || event.meta || event.ctrl) return;
+		if (!field || event.shift || event.meta || event.ctrl || event.super)
+			return;
 		if (field.plainText && field.plainText !== history[recalled]) return;
-		if (field.editorView.getTotalVirtualLineCount() > 1) return;
+		const row = field.visualCursor.visualRow + field.scrollY;
+		const edge = step < 0 ? 0 : field.editorView.getTotalVirtualLineCount() - 1;
+		if (row !== edge) return;
 		const next = recalled + step;
 		if (next < 0 || next > history.length) return;
 		event.preventDefault();
@@ -318,9 +437,22 @@ function Prompt(props: { context: ModuleContext }) {
 	}
 
 	function onKeyDown(event: KeyEvent) {
+		if (!field) return;
+		const isCtrlC =
+			event.ctrl &&
+			event.name === "c" &&
+			!event.shift &&
+			!event.meta &&
+			!event.super &&
+			!event.hyper;
+		if (!isCtrlC) cancelExit();
 		if (event.name === "up" || event.name === "down") queueMicrotask(sync);
 		// why: the textarea itself turns a bare line feed (Ctrl+J without the kitty protocol) into a newline, so even an empty input.newline has to swallow it.
 		if (event.name === "linefeed") {
+			event.preventDefault();
+			return;
+		}
+		if (edit(field, event)) {
 			event.preventDefault();
 			return;
 		}
@@ -328,17 +460,66 @@ function Prompt(props: { context: ModuleContext }) {
 			routeList(event);
 			if (event.defaultPrevented) return;
 		}
-		if (event.name === "escape" && props.context.pi.working) {
+		if (event.name === "escape" && (pi.working || actions.abortBash())) {
 			event.preventDefault();
-			void props.context.actions.abort().then(restore);
+			if (pi.working) void actions.abort().then(restore);
+			return;
+		}
+		if (!event.shift && !event.meta && !event.super) {
+			if (isCtrlC) {
+				event.preventDefault();
+				if (event.repeated || event.eventType === "repeat") return;
+				if (field.plainText || images().length) {
+					cancelExit();
+					field.setText("");
+					setImages([]);
+				} else if (confirmExit()) {
+					cancelExit();
+					actions.quit();
+				} else {
+					setConfirmExit(true);
+					exitTimer = renderer.clock.setTimeout(cancelExit, EXIT_CONFIRM_MS);
+				}
+				return;
+			}
+			if (
+				event.ctrl &&
+				event.name === "d" &&
+				!field.plainText &&
+				!images().length
+			) {
+				event.preventDefault();
+				actions.quit();
+				return;
+			}
+			if (event.name === "pageup" || event.name === "pagedown") {
+				if (props.context.pageChat(event.name === "pageup" ? -1 : 1))
+					event.preventDefault();
+				return;
+			}
 		}
 		if (event.name === "up") walkHistory(event, -1);
 		if (event.name === "down") walkHistory(event, 1);
-		if (event.name === "return" && !event.shift) {
+		if (
+			event.name === "return" &&
+			!event.shift &&
+			!event.ctrl &&
+			!event.super
+		) {
 			event.preventDefault();
 			const value = take();
 			if (value === undefined) return;
-			const { actions, pi } = props.context;
+			const trimmed = value.trim();
+			const excluded = trimmed.startsWith("!!");
+			const shell = trimmed.startsWith("!")
+				? trimmed.slice(excluded ? 2 : 1).trim()
+				: "";
+			if (shell) {
+				void actions.bash(shell, excluded).then((ok) => {
+					if (!ok) restore([{ text: value }]);
+				});
+				return;
+			}
 			const [, name = "", args = ""] =
 				/^\/(\S+)(?:\s+([\s\S]*))?$/.exec(value.trim()) ?? [];
 			const match = appCommands
@@ -348,13 +529,17 @@ function Prompt(props: { context: ModuleContext }) {
 				match[1].run(args);
 				return;
 			}
+			const attachments = images();
+			setImages([]);
 			const accepted = event.meta
-				? actions.followUp(value)
+				? actions.followUp(value, attachments)
 				: pi.working
-					? actions.steer(value)
-					: actions.prompt(value);
+					? actions.steer(value, attachments)
+					: actions.prompt(value, attachments);
 			void accepted.then((ok) => {
-				if (!ok) restore([value]);
+				if (!ok) {
+					restore([{ text: value, images: attachments }]);
+				}
 			});
 		}
 	}
@@ -406,7 +591,13 @@ function Prompt(props: { context: ModuleContext }) {
 				/>
 			</box>
 			<box flexDirection="row" flexShrink={0} paddingLeft={2}>
-				<Show when={empty()}>
+				<Show when={images().length}>
+					<text
+						flexShrink={0}
+						fg={props.context.theme.muted}
+					>{`${images().length} image${images().length === 1 ? "" : "s"}`}</text>
+				</Show>
+				<Show when={empty() && !images().length && !confirmExit()}>
 					<text flexShrink={0} wrapMode="none" fg={props.context.theme.faint}>
 						{"/ commands   @ files"}
 					</text>
