@@ -87,21 +87,19 @@ test("Agentic shows user files, filtered installed packages and Pi built-ins", a
 				packages: [{ source: "./pkg", extensions: [] }],
 			}),
 		);
-		const view = await openExtensions(
-			piu,
-			(frame) =>
-				frame.includes("builtin:tool-search") &&
-				frame.includes("extensions/third"),
+		const rows = [
+			/active\s+file: extensions\/active\.ts\s+enabled/u,
+			/index\s+file: extensions\/nested\/index\.js\s+enabled/u,
+			/off\s+file: extensions\/off\.ts\s+disabled/u,
+			/extensions\/third\s+package: \.\/pkg\s+disabled/u,
+			/builtin:tool-search\s+builtin\s+enabled/u,
+			/builtin:mcp\s+builtin\s+disabled/u,
+		];
+		const view = await openExtensions(piu, (frame) =>
+			rows.every((row) => row.test(frame)),
 		);
 		expect(view).toMatch(/^Agentic\b/mu);
-		expect(view).toMatch(/active\s+file: extensions\/active\.ts\s+enabled/u);
-		expect(view).toMatch(
-			/index\s+file: extensions\/nested\/index\.js\s+enabled/u,
-		);
-		expect(view).toMatch(/off\s+file: extensions\/off\.ts\s+disabled/u);
-		expect(view).toMatch(/extensions\/third\s+package: \.\/pkg\s+disabled/u);
-		expect(view).toMatch(/builtin:tool-search\s+builtin\s+enabled/u);
-		expect(view).toMatch(/builtin:mcp\s+builtin\s+disabled/u);
+		for (const row of rows) expect(view).toMatch(row);
 		expect(view).toContain("Interface");
 	} finally {
 		rmSync(agentDir, { recursive: true, force: true });
@@ -283,7 +281,11 @@ test("The Extensions list scrolls below fixed tabs and resets on tab switch", as
 		await piu.mockMouse.scroll(bounds.left + 5, bounds.top + 9, "down");
 		await piu.renderOnce();
 	}
-	const scrolled = await piu.waitForFrame((frame) => frame.includes("ext-30"));
+	const scrolled = await piu.waitForFrame(
+		(frame) =>
+			frame.includes("ext-30") &&
+			modalScrollBox(piu)?.verticalScrollBar.visible === true,
+	);
 	expect(scrolled).not.toContain("ext-01");
 	expect(scrolled).toMatch(/Global +Extensions +Hotkeys/u);
 	const scrollbox = modalScrollBox(piu);
@@ -419,7 +421,7 @@ test("Agentic lists one row for a package reached through a symlink", async () =
 		await openExtensions(piu, (frame) => frame.includes("extensions/keep"));
 		const disabledFirst = await rows();
 		expect(disabledFirst).toHaveLength(1);
-		expect(disabledFirst[0]).toMatch(/enabled/u);
+		expect(disabledFirst[0]).toMatch(/disabled/u);
 		writeFileSync(
 			join(agentDir, "settings.json"),
 			JSON.stringify({
@@ -434,5 +436,121 @@ test("Agentic lists one row for a package reached through a symlink", async () =
 		expect(disabledLast[0]).toMatch(/enabled/u);
 	} finally {
 		rmSync(agentDir, { recursive: true, force: true });
+	}
+});
+
+test("Agentic filters a package manifest before collapsing symlinked paths", async () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "piu-agent-"));
+	try {
+		await using piu = await startPiu({
+			script,
+			height: 40,
+			backendEnv: { PI_CODING_AGENT_DIR: agentDir },
+		});
+		await piu.waitForFrame((frame) => frame.includes("faux-1"));
+		mkdirSync(join(agentDir, "pkg"), { recursive: true });
+		writeFileSync(
+			join(agentDir, "pkg", "package.json"),
+			JSON.stringify({
+				name: "pkg",
+				pi: { extensions: ["./real.ts", "./alias.ts", "-./real.ts"] },
+			}),
+		);
+		writeFileSync(join(agentDir, "pkg", "real.ts"), emptyExtension);
+		symlinkSync("real.ts", join(agentDir, "pkg", "alias.ts"));
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({ packages: ["./pkg"] }),
+		);
+		const view = await openExtensions(piu, (frame) => frame.includes("alias"));
+		expect(view).toMatch(/alias\s+package: \.\/pkg\s+enabled/u);
+		expect(view).not.toContain("real");
+	} finally {
+		rmSync(agentDir, { recursive: true, force: true });
+	}
+});
+
+test("Agentic finds a git package whose source names the ref after .git", async () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "piu-agent-"));
+	try {
+		await using piu = await startPiu({
+			script,
+			height: 40,
+			backendEnv: { PI_CODING_AGENT_DIR: agentDir },
+		});
+		await piu.waitForFrame((frame) => frame.includes("faux-1"));
+		const root = join(agentDir, "git", "github.com", "example", "pi-tools");
+		mkdirSync(join(root, "src"), { recursive: true });
+		writeFileSync(
+			join(root, "package.json"),
+			JSON.stringify({
+				name: "pi-tools",
+				pi: { extensions: ["./src/tool.ts"] },
+			}),
+		);
+		writeFileSync(join(root, "src", "tool.ts"), emptyExtension);
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({
+				packages: ["https://github.com/example/pi-tools.git@v1"],
+			}),
+		);
+		const view = await openExtensions(piu, (frame) =>
+			frame.includes("src/tool"),
+		);
+		expect(view).toMatch(
+			/src\/tool\s+package: https:\/\/github\.com\/example\/pi-tools\.git@v1\s+enabled/u,
+		);
+		expect(view).not.toContain("unavailable");
+	} finally {
+		rmSync(agentDir, { recursive: true, force: true });
+	}
+});
+
+test("an unreadable Pi settings entry reports an error and keeps the rest of the tab", async () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "piu-agent-"));
+	try {
+		await using piu = await startPiu({
+			script,
+			height: 40,
+			backendEnv: { PI_CODING_AGENT_DIR: agentDir },
+		});
+		await piu.waitForFrame((frame) => frame.includes("faux-1"));
+		mkdirSync(join(agentDir, "extensions"), { recursive: true });
+		writeFileSync(join(agentDir, "extensions", "active.ts"), emptyExtension);
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({ extensions: ["file://host/foo"] }),
+		);
+		const view = await openExtensions(
+			piu,
+			(frame) => frame.includes("file://host/foo") && frame.includes("chat"),
+		);
+		expect(view).toContain("file://host/foo");
+		expect(view).toMatch(/active\s+file: extensions\/active\.ts\s+enabled/u);
+		expect(view).toMatch(/^ {2}chat\s+builtin\s+enabled/mu);
+	} finally {
+		rmSync(agentDir, { recursive: true, force: true });
+	}
+});
+
+test("Agentic keeps the agent dir exactly as the Backend environment spells it", async () => {
+	const base = mkdtempSync(join(tmpdir(), "piu-agent-"));
+	const agentDir = join(base, "agent ");
+	try {
+		await using piu = await startPiu({
+			script,
+			height: 40,
+			backendEnv: { PI_CODING_AGENT_DIR: agentDir },
+		});
+		await piu.waitForFrame((frame) => frame.includes("faux-1"));
+		mkdirSync(join(agentDir, "extensions"), { recursive: true });
+		writeFileSync(join(agentDir, "extensions", "spaced.ts"), emptyExtension);
+		const view = await openExtensions(piu, (frame) =>
+			frame.includes("extensions/spaced.ts"),
+		);
+		expect(view).toMatch(/spaced\s+file: extensions\/spaced\.ts\s+enabled/u);
+	} finally {
+		rmSync(base, { recursive: true, force: true });
 	}
 });

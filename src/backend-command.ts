@@ -51,13 +51,13 @@ export function backendEnvironment(
 	return merged;
 }
 
-// why: Pi resolves a leading `~` and a `file:` URL in a resource path against the home of the process that reads it, which for the Backend is the one its command line sets.
-export function expandPath(value: string, home: string) {
-	const trimmed = value.trim();
-	if (trimmed.startsWith("file://")) return fileURLToPath(trimmed);
-	if (trimmed === "~") return home;
-	if (trimmed.startsWith("~/")) return join(home, trimmed.slice(2));
-	return trimmed;
+// why: Pi resolves a leading `~` and a `file:` URL against the home of the process that reads the path, which for the Backend is the one its command line sets; it trims a resource path from settings but not the agent dir in its environment.
+export function expandPath(value: string, home: string, trim = false) {
+	const path = trim ? value.trim() : value;
+	if (path.startsWith("file://")) return fileURLToPath(path);
+	if (path === "~") return home;
+	if (path.startsWith("~/")) return join(home, path.slice(2));
+	return path;
 }
 
 // why: the agent dir Pi reads its settings from follows the Backend's own environment, so `PI_CODING_AGENT_DIR` and `HOME` come from its command line rather than from piu's.

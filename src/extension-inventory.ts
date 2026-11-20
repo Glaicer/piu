@@ -94,11 +94,12 @@ function agenticRows(
 	}
 	const settings = readSettings(join(agentDir, "settings.json"));
 	const filters = splitFilters(strings(settings.value.extensions));
-	const files = collectFiles(agentDir, home, filters);
+	const failures: string[] = [];
+	const files = collectFiles(agentDir, home, filters, failures);
 	// why: the same file can reach Pi through `extensions` and through a package, and the explicit and discovered rows are the ones a user recognizes; an Extension's own Pi file belongs to Interface, not here.
 	const listed = new Set(files.map((file) => canonical(file.path)));
 	const packages = uniquePackages(
-		collectPackages(settings.value.packages, agentDir, home),
+		collectPackages(settings.value.packages, agentDir, home, failures),
 		(path) => listed.has(path) || piFiles.has(path),
 	);
 	const rows = [
@@ -106,13 +107,12 @@ function agenticRows(
 		...packages,
 		...builtinRows(filters),
 	].sort(compareRows);
-	return {
-		rows,
-		...(settings.error === undefined ? {} : { error: settings.error }),
-	};
+	const error =
+		settings.error ?? (failures.length > 0 ? failures.join("; ") : undefined);
+	return { rows, ...(error === undefined ? {} : { error }) };
 }
 
-// why: two declarations can reach one file through a symlink, and Pi loads it if either of them enables it, so the enabled row is the one worth showing.
+// why: two declarations can reach one file through a symlink, and Pi keeps the first of them by declaration order, its `enabled` flag included.
 function uniquePackages(
 	entries: readonly { path?: string; row: AgenticRow }[],
 	skip: (path: string) => boolean,
@@ -125,11 +125,8 @@ function uniquePackages(
 			continue;
 		}
 		const path = canonical(entry.path);
-		if (skip(path)) continue;
-		const found = kept.get(path);
-		if (!found) kept.set(path, entry.row);
-		else if (found.state !== "enabled" && entry.row.state === "enabled")
-			kept.set(path, entry.row);
+		if (skip(path) || kept.has(path)) continue;
+		kept.set(path, entry.row);
 	}
 	return [...rest, ...kept.values()];
 }
@@ -316,6 +313,7 @@ function collectFiles(
 	agentDir: string,
 	home: string,
 	filters: Filters,
+	failures: string[],
 ): FileEntry[] {
 	const entries = new Map<string, FileEntry>();
 	const add = (path: string) => {
@@ -325,9 +323,16 @@ function collectFiles(
 			enabled: enabledByFilters(path, agentDir, filters),
 		});
 	};
-	for (const entry of filters.adds)
-		for (const path of discover(resolve(agentDir, expandPath(entry, home))))
-			add(path);
+	for (const entry of filters.adds) {
+		try {
+			for (const path of discover(
+				resolve(agentDir, expandPath(entry, home, true)),
+			))
+				add(path);
+		} catch (failure) {
+			failures.push(`extensions "${entry}": ${message(failure)}`);
+		}
+	}
 	for (const path of discover(join(agentDir, "extensions"))) add(path);
 	return [...entries.values()];
 }
@@ -359,7 +364,9 @@ function entryFiles(root: string, seen: Set<string>): string[] | undefined {
 function expandManifestEntry(entry: string, root: string, seen: Set<string>) {
 	if (!/[*?{[\]]/.test(entry)) {
 		const path = resolve(root, entry);
-		return existsSync(path) ? discover(path, seen) : [];
+		const stats = statsOf(path);
+		if (stats?.isFile()) return [path];
+		return stats?.isDirectory() ? discover(path, seen) : [];
 	}
 	try {
 		return [...new Bun.Glob(entry).scanSync({ cwd: root, absolute: true })]
@@ -444,9 +451,17 @@ function collectPackages(
 	packages: unknown,
 	agentDir: string,
 	home: string,
+	failures: string[],
 ): { path?: string; row: AgenticRow }[] {
 	if (!Array.isArray(packages)) return [];
-	return packages.flatMap((entry) => packageRows(entry, agentDir, home));
+	return packages.flatMap((entry) => {
+		try {
+			return packageRows(entry, agentDir, home);
+		} catch (failure) {
+			failures.push(`packages ${JSON.stringify(entry)}: ${message(failure)}`);
+			return [];
+		}
+	});
 }
 
 function packageRows(
@@ -526,7 +541,7 @@ function packageEntries(root: string): string[] {
 		overrides.length === 0
 			? new Set(allowed)
 			: filtered(allowed, overrides, root);
-	return allowed.filter((path) => enabled.has(path)).sort(compareText);
+	return allowed.filter((path) => enabled.has(path));
 }
 
 function filtered(
@@ -599,9 +614,10 @@ function builtinRows(filters: Filters): AgenticRow[] {
 function packageRoot(source: string, agentDir: string, home: string) {
 	if (source.startsWith("npm:"))
 		return npmRoot(source.slice(4).trim(), agentDir);
-	if (isLocalSource(source)) return resolve(agentDir, expandPath(source, home));
+	if (isLocalSource(source))
+		return resolve(agentDir, expandPath(source, home, true));
 	const git = parseGitSource(source);
-	if (!git) return resolve(agentDir, expandPath(source, home));
+	if (!git) return resolve(agentDir, expandPath(source, home, true));
 	const root = join(agentDir, "git");
 	const path = resolve(root, git.host, git.path);
 	return isInside(root, path) ? path : undefined;
@@ -635,12 +651,13 @@ function parseGitSource(source: string) {
 	if (!prefixed && !/^(https?|ssh|git):\/\//i.test(url)) return undefined;
 	const bare = (url.split("#")[0] ?? url)
 		.replace(/^[a-z]+:\/\//i, "")
-		.replace(/^git@/, "")
-		.replace(/\.git$/i, "")
-		.replace(/\/+$/, "");
+		.replace(/^git@/, "");
 	const [host, ...rest] = bare.split("/");
 	if (!host || rest.length === 0) return undefined;
-	return { host, path: rest.join("/").split("@")[0] ?? "" };
+	const path = (rest.join("/").split("@")[0] ?? "")
+		.replace(/\/+$/, "")
+		.replace(/\.git$/i, "");
+	return { host, path };
 }
 
 function isInside(root: string, path: string) {
