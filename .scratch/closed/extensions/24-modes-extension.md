@@ -29,7 +29,7 @@
 - [x] Проверка через `startPiu` с временным agent dir и двумя файлами режимов: Alt+M дважды, индикатор показывает каждый режим по очереди, затем снова `Build`.
 - [x] Проверка: в режиме с `tools` faux model получает только эти tools в запросе после tool result.
 - [x] Проверка: `/mode <name>`, Restart, режим восстановлен.
-- [ ] Ручная проверка `! bun scripts/pi-bolt-compat/run.ts` на настоящем agent dir; до неё тикет отмечает это как непроверенное. В agent dir с 2026-11-13 нет пакета rpiv, поэтому проверка скрипта, рассчитанная на него, ничего о rpiv не скажет.
+- [x] Ручная проверка `! bun scripts/pi-bolt-compat/run.ts` на настоящем agent dir; до неё тикет отмечает это как непроверенное. В agent dir с 2026-11-13 нет пакета rpiv, поэтому проверка скрипта, рассчитанная на него, ничего о rpiv не скажет.
 
 ## Notes
 
@@ -156,3 +156,4 @@ Seam: `startPiu` for the prompt, Config, Alt+M, slash list, Dialog, Toast and fa
 - Имя модуля `bridge` (`modes.bridge`) оставлено по плану, хотя GLOSSARY.md избегает «Bridge» для Extension channel.
 - Замечания code-review, оставлены осознанно: `fgAt` скопирован в test/modes.test.ts вместо переноса в test/harness.ts (файл вне Changes; импорт test/composer.test.ts запустил бы её тесты), `withModes`/`writeModes` дублируют запись файлов режимов в двух тестах.
 - Усиление по ревью (testing.md: ждать данные Backend перед `not.toContain`): отсутствие ответа от модели проверяется после проверочного запроса `ping`, чей ответ именует свой запрос, — чужой `REPLY "/mode …"` был бы виден после ответа более позднего запроса.
+- Ручная проверка `! bun scripts/pi-bolt-compat/run.ts` выполнена пользователем 2026-11-20 (Pi-Bolt 1.2.1, agent dir по умолчанию): (b) compiled-in Pi extensions в `--mode rpc` не пишут в stdout ничего кроме протокола, stderr пуст; (c) без нашего Pi extension faux-модель не получает `ask_user_question`, с `builtin/ask-user-question/pi-extension.ts` получает `ask_user`; стартовых ошибок на stderr нет, закрытие stdin завершает процесс с кодом 0. Как и предупреждал тикет, приоритет tools с rpiv не доказан: пакета rpiv в agent dir нет, секции (a) и (c) скрипта отвечают «proves nothing».
