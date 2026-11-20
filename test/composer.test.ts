@@ -252,7 +252,7 @@ function fgAt(piu: Piu, x: number, y: number) {
 }
 
 const idleHints = (frame: string) =>
-	inputHints(frame).startsWith("Build · / commands");
+	inputHints(frame).startsWith("Build · / commands   @ files");
 
 test("one blank row separates the heavy line from the first input row", async () => {
 	await using piu = await startPiu({ script: { replies: [] }, width: 80 });
@@ -306,7 +306,10 @@ test("the cursor is a signal red block", async () => {
 test("Build leads the idle hints in agentMode, commands faint beside it and keys on the right", async () => {
 	await using piu = await startPiu({ script: { replies: [] }, width: 80 });
 	const frame = await piu.waitForFrame(
-		(f) => f.includes("faux-1") && idleHints(f),
+		(f) =>
+			f.includes("faux-1") &&
+			idleHints(f) &&
+			inputHints(f).endsWith("⏎ send   ⇧⏎ new line"),
 	);
 	const hints = inputHints(frame);
 	expect(hints.startsWith("Build · / commands   @ files")).toBe(true);
@@ -356,7 +359,10 @@ test("while the agent works the hints name stop and queue, and no Working line i
 	await piu.mockInput.typeText("go");
 	piu.mockInput.pressEnter();
 	const busy = await piu.waitForFrame(
-		(f) => working(f) && inputHints(f).endsWith("esc stop   alt+⏎ queue"),
+		(f) =>
+			working(f) &&
+			idleHints(f) &&
+			inputHints(f).endsWith("esc stop   alt+⏎ queue"),
 	);
 	expect(busy).not.toContain("Working");
 	expect(inputHints(busy)).not.toContain("send");

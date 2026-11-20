@@ -29,6 +29,10 @@ function hintCell(frame: string, needle: string) {
 	return { row, column };
 }
 
+function wholeLine(frame: string, text: string) {
+	return frame.split("\n").some((line) => line.trim() === text);
+}
+
 function withModes(files: Record<string, string>) {
 	const dir = mkdtempSync(join(tmpdir(), "piu-test-"));
 	const modes = join(dir, "agent", "modes");
@@ -110,9 +114,14 @@ test("slash picker marks current and selects a mode", async () => {
 	await piu.waitForFrame((f) => f.includes("faux-1"));
 	await piu.mockInput.typeText("/mode");
 	piu.mockInput.pressEnter();
-	const dialog = await piu.waitForFrame((f) =>
-		modalText(piu, f).includes("Build (current)"),
-	);
+	const dialog = await piu.waitForFrame((f) => {
+		const text = modalText(piu, f);
+		return (
+			text.includes("Build (current)") &&
+			text.includes("Alpha") &&
+			text.includes("Zulu")
+		);
+	});
 	const text = modalText(piu, dialog);
 	const order = ["Build (current)", "Alpha", "Zulu"].map((label) =>
 		text.indexOf(label),
@@ -137,8 +146,11 @@ test("unknown mode lists available names and leaves the mode unchanged", async (
 	await piu.waitForFrame((f) => f.includes("faux-1"));
 	await piu.mockInput.typeText("/mode missing");
 	piu.mockInput.pressEnter();
-	const toast = await piu.waitForFrame((f) =>
-		f.includes("Unknown mode missing"),
+	const toast = await piu.waitForFrame(
+		(f) =>
+			f.includes("Unknown mode missing") &&
+			f.includes("Available: Build, Alpha, Zulu") &&
+			inputHints(f).startsWith("Build ·"),
 	);
 	expect(toast).toContain("Available: Build, Alpha, Zulu");
 	expect(inputHints(toast).startsWith("Build")).toBe(true);
@@ -156,8 +168,10 @@ test("slash completion offers one mode command", async () => {
 	});
 	await piu.waitForFrame((f) => f.includes("faux-1"));
 	await piu.mockInput.typeText("/mode");
-	const frame = await piu.waitForFrame((f) =>
-		f.includes("Switch the agent mode"),
+	const rowOf = (frame: string, label: string) =>
+		frame.split("\n").some((line) => line.slice(1).startsWith(` ${label}`));
+	const frame = await piu.waitForFrame(
+		(f) => rowOf(f, "/mode ") && rowOf(f, "/model"),
 	);
 	const rows = frame
 		.split("\n")
@@ -200,12 +214,20 @@ test("mode cycle can be rebound", async () => {
 	});
 	await piu.waitForFrame((f) => f.includes("faux-1"));
 	piu.mockInput.pressKey("m", { meta: true });
+	await piu.mockInput.typeText("/mode");
+	piu.mockInput.pressEnter();
+	const unchanged = await piu.waitForFrame((f) =>
+		modalText(piu, f).includes("Build (current)"),
+	);
+	expect(modalText(piu, unchanged)).toContain("Build (current)");
+	piu.mockInput.pressEscape();
+	await piu.waitForFrame((f) => !modalText(piu, f));
 	piu.mockInput.pressKey("y", { meta: true });
 	await piu.waitForFrame((f) => inputHints(f).startsWith("Alpha ·"));
 	await piu.mockInput.typeText("/mode");
 	piu.mockInput.pressEnter();
 	const dialog = await piu.waitForFrame((f) =>
-		modalText(piu, f).includes("(current)"),
+		modalText(piu, f).includes("Alpha (current)"),
 	);
 	expect(modalText(piu, dialog)).toContain("Alpha (current)");
 });
@@ -225,7 +247,10 @@ test("mode change is refused during a turn", async () => {
 	await piu.waitForFrame((f) => working(f));
 	piu.mockInput.pressKey("m", { meta: true });
 	const toast = await piu.waitForFrame(
-		(f) => f.includes("Cannot change the agent mode") && working(f),
+		(f) =>
+			f.includes("Cannot change the agent mode") &&
+			working(f) &&
+			inputHints(f).startsWith("Build ·"),
 	);
 	expect(inputHints(toast).startsWith("Build ·")).toBe(true);
 	block.release();
@@ -237,6 +262,77 @@ tools: [read, ask_user, ask_user_question]
 ---
 Alpha instructions here.
 `;
+
+test("names with edge whitespace or a current-marker suffix are skipped", async () => {
+	using fixture = withModes({
+		"Alpha .md": plainMode("Spacey instructions."),
+		"Build (current).md": plainMode("Marker instructions."),
+		"Zulu.md": plainMode("Zulu instructions here."),
+	});
+	await using piu = await startPiu({
+		script: { replies: ["REPLY {lastUser}"] },
+		dir: fixture.dir,
+	});
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+	await piu.mockInput.typeText("/mode");
+	piu.mockInput.pressEnter();
+	const dialog = await piu.waitForFrame(
+		(f) =>
+			modalText(piu, f).includes("Zulu") &&
+			modalText(piu, f).includes("Build (current)"),
+	);
+	const text = modalText(piu, dialog);
+	expect(text.match(/Build \(current\)/g)).toHaveLength(1);
+	expect(text).not.toContain("Alpha");
+	expect(text).not.toContain("Marker instructions.");
+	piu.mockInput.pressEscape();
+	await piu.waitForFrame((f) => !modalText(piu, f));
+	await piu.mockInput.typeText("/mode alpha");
+	piu.mockInput.pressEnter();
+	const toast = await piu.waitForFrame(
+		(f) =>
+			f.includes("Unknown mode alpha") && f.includes("Available: Build, Zulu"),
+	);
+	expect(toast).toContain("Available: Build, Zulu");
+});
+
+test("a tool whitelist holds for the whole run against a late setActiveTools", async () => {
+	using fixture = withModes({
+		"Alpha.md": `---
+tools: [read, bash, edit, write, ask_user]
+---
+Alpha instructions here.
+`,
+	});
+	await using piu = await startPiu({
+		script: {
+			replies: [
+				{
+					text: "first {tools}",
+					toolCalls: [{ name: "bash", args: { command: "true" } }],
+				},
+				"after {tools}",
+			],
+		},
+		dir: fixture.dir,
+		extraBackendArgs: ["--tools", "read,bash,edit,write,ask_user"],
+		installedPiExtensions: [
+			join(import.meta.dir, "fixtures/pi-extensions/late-tool.ts"),
+		],
+	});
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+	await piu.mockInput.typeText("/mode alpha");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((f) => inputHints(f).startsWith("Alpha ·"));
+	await piu.mockInput.typeText("go");
+	piu.mockInput.pressEnter();
+	const tools = "ask_user,bash,edit,read,write";
+	const frame = await piu.waitForFrame(
+		(f) => wholeLine(f, `first ${tools}`) && wholeLine(f, `after ${tools}`),
+	);
+	expect(wholeLine(frame, `first ${tools}`)).toBe(true);
+	expect(wholeLine(frame, `after ${tools}`)).toBe(true);
+});
 
 test("mode tool allowlist holds before and after a tool result", async () => {
 	using fixture = withModes({ "Alpha.md": allowlistMode });
@@ -273,9 +369,11 @@ test("mode tool allowlist holds before and after a tool result", async () => {
 	piu.mockInput.pressEnter();
 	const frame = await piu.waitForFrame(
 		(f) =>
-			f.includes("after ask_user,read") && f.includes("first ask_user,read"),
+			wholeLine(f, "first ask_user,read") &&
+			wholeLine(f, "after ask_user,read"),
 	);
-	expect(frame).toContain("first ask_user,read");
+	expect(wholeLine(frame, "first ask_user,read")).toBe(true);
+	expect(wholeLine(frame, "after ask_user,read")).toBe(true);
 });
 
 test("the mode hint keeps its Config color even with a draft", async () => {

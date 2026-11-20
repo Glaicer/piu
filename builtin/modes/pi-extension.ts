@@ -39,6 +39,12 @@ function parseMode(path: string): Mode {
 	if (!name.trim() || /\p{Cc}/u.test(name)) {
 		throw new Error("the file name must be a printable mode name");
 	}
+	if (name !== name.trim()) {
+		throw new Error("the file name must not start or end with whitespace");
+	}
+	if (name.toLowerCase().endsWith(" (current)")) {
+		throw new Error(`"${name}" clashes with the picker's current marker`);
+	}
 	if (RESERVED.has(name.toLowerCase())) {
 		throw new Error(`"${name}" is reserved`);
 	}
@@ -188,10 +194,11 @@ export default function modes(pi: ExtensionAPI) {
 		const allowed = mode && allowedToolsFor(mode, ctx);
 		await setModel(mode?.model ?? base.model, ctx);
 		pi.setThinkingLevel(mode?.thinking ?? base.thinking);
+		// why: the candidate loadout must stay broader than the whitelist so the hook's intersection is always an explicit selectedTools edit; on a no-op edit Pi treats the live loadout as authoritative and a later setActiveTools() from an installed extension can widen the run beyond the whitelist.
 		pi.setActiveTools(
 			allowed === undefined
 				? base.tools
-				: [...new Set([...base.tools, ...allowed])],
+				: pi.getAllTools().map((tool) => tool.name),
 		);
 		active = mode && { mode, base, allowedTools: allowed };
 		ctx.ui.setStatus(MODE_STATUS_KEY, mode?.name ?? BUILD_MODE);

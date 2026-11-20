@@ -428,11 +428,12 @@ test("/restart restores the session's agent mode", async () => {
 		if (!newBackend) throw new Error("no new Backend");
 		expect(newBackend.pid).not.toBe(oldBackend?.pid);
 		// why: the incremental terminal diff patches the mode name in place, so the raw write carries the hint row's position and the name alone never repeats elsewhere in the output.
+		const esc = String.fromCharCode(27);
+		const hintPatch = new RegExp(
+			`${esc}\\[\\d+;5H(?:${esc}\\[[0-9;]*m)*Kalimba`,
+		);
 		await eventually(
-			() =>
-				/\x1b\[\d+;5H(?:\x1b\[[0-9;]*m)*Kalimba/.test(
-					piu.raw.slice(beforeRestart),
-				) || undefined,
+			() => hintPatch.test(piu.raw.slice(beforeRestart)) || undefined,
 			"the restored mode at the start of the hint row",
 		);
 		const restarted = piu.mark();
