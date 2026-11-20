@@ -35,17 +35,17 @@ test("the default side Panel is hidden while the chat shows its welcome", async 
 	);
 });
 
-test("the idle composer shows only command and file hints", async () => {
+test("the idle composer shows the mode and only command and file hints", async () => {
 	await using piu = await startPiu({ script: { replies: [] }, width: 80 });
 	const frame = await piu.waitForFrame(
 		(frame) =>
 			bottomLine(frame).includes(basename(piu.dir)) &&
-			inputHints(frame).startsWith("/ commands   @ files"),
+			inputHints(frame).startsWith("Build · / commands   @ files"),
 	);
 	expect(inputArea(frame).trim()).toBe("");
 	expect(inputArea(frame).split("\n")).toHaveLength(4);
 	expect(inputHints(frame).replace(/\s+/g, " ")).toBe(
-		"/ commands @ files ⏎ send ⇧⏎ new line",
+		"Build · / commands @ files ⏎ send ⇧⏎ new line",
 	);
 });
 

@@ -8,6 +8,7 @@ import type {
 import { stripAnsiSequences } from "@opentui/core";
 import { batch } from "solid-js";
 import { createStore, produce, reconcile } from "solid-js/store";
+import { BUILD_MODE, MODE_STATUS_KEY } from "../builtin/modes/protocol.ts";
 import type { Backend, BackendHealth, BackendRecord } from "./backend.ts";
 import {
 	BACKGROUND_STATUS_KEY,
@@ -136,6 +137,7 @@ export type PiState = {
 	readonly backendHealth: BackendHealth;
 	readonly dialogs: readonly Dialog[];
 	readonly statuses: Readonly<Record<string, string>>;
+	readonly agentMode: string;
 	readonly backgroundJobs: readonly BackgroundJob[];
 	readonly subagents: readonly Subagent[];
 	readonly subagentLogs: Readonly<Record<string, readonly SubagentEntry[]>>;
@@ -196,6 +198,7 @@ export function createPiState(options: {
 		backendHealth: BackendHealth;
 		dialogs: Dialog[];
 		statuses: Record<string, string>;
+		agentMode: string;
 		backgroundJobs: BackgroundJob[];
 		subagents: Subagent[];
 		subagentLogs: Record<string, SubagentEntry[]>;
@@ -220,6 +223,7 @@ export function createPiState(options: {
 		backendHealth: { status: "running" },
 		dialogs: [],
 		statuses: {},
+		agentMode: BUILD_MODE,
 		backgroundJobs: [],
 		subagents: [],
 		subagentLogs: {},
@@ -280,6 +284,7 @@ export function createPiState(options: {
 		runningTools.clear();
 		closeDialogs(() => true);
 		setState("statuses", reconcile({}));
+		setState("agentMode", BUILD_MODE);
 		setState("backgroundJobs", []);
 		setState("btw", null);
 		setState("contextUsage", null);
@@ -322,6 +327,7 @@ export function createPiState(options: {
 			if (health.status !== "running") {
 				setState("contextUsage", null);
 				setState("contextInjections", null);
+				setState("agentMode", BUILD_MODE);
 			}
 		});
 		detach = () => {
@@ -596,6 +602,10 @@ export function createPiState(options: {
 				notify(record.message, record.notifyType ?? "info");
 				break;
 			case "setStatus": {
+				if (record.statusKey === MODE_STATUS_KEY) {
+					setState("agentMode", record.statusText || BUILD_MODE);
+					break;
+				}
 				if (record.statusKey === CONTEXT_USAGE_STATUS_KEY) {
 					setState(
 						"contextUsage",

@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { type FauxStep, prepareFixture } from "./harness.ts";
 import {
@@ -376,6 +382,100 @@ test("leaving a test without quitting ends the launcher, the app and its Backend
 		}
 		expect(alive(backend?.ppid ?? 0)).toBe(false);
 		expect(alive(backend?.pid ?? 0)).toBe(false);
+	} finally {
+		fixture.removeDir();
+	}
+}, 20000);
+
+const kalimbaFile = `---
+tools: [read]
+---
+Do the thing.
+`;
+const modeReply = "{lastUser} got |{modeInstructions}| {tools}.";
+
+function writeModes(
+	fixture: ReturnType<typeof prepareFixture>,
+	files: Record<string, string>,
+) {
+	const dir = join(fixture.dir, "agent", "modes");
+	mkdirSync(dir, { recursive: true });
+	for (const [name, body] of Object.entries(files)) {
+		writeFileSync(join(dir, name), body);
+	}
+	return dir;
+}
+
+test("/restart restores the session's agent mode", async () => {
+	const fixture = prepareFixture({
+		script: { replies: [modeReply, modeReply, modeReply] },
+		persistSession: true,
+	});
+	writeModes(fixture, { "Kalimba.md": kalimbaFile });
+	try {
+		await using piu = spawnPiu(fixture);
+		await piu.waitForText("faux-1");
+		piu.submit("/mode kalimba");
+		await piu.waitForText("Kalimba");
+		piu.submit("first");
+		await piu.waitForText('"first" got |');
+		const [oldBackend] = await piu.waitForStarts(1);
+
+		const beforeRestart = piu.mark();
+		piu.submit("/restart");
+
+		const [, newBackend] = await piu.waitForStarts(2);
+		if (!newBackend) throw new Error("no new Backend");
+		expect(newBackend.pid).not.toBe(oldBackend?.pid);
+		// why: the incremental terminal diff patches the mode name in place, so the raw write carries the hint row's position and the name alone never repeats elsewhere in the output.
+		await eventually(
+			() =>
+				/\x1b\[\d+;5H(?:\x1b\[[0-9;]*m)*Kalimba/.test(
+					piu.raw.slice(beforeRestart),
+				) || undefined,
+			"the restored mode at the start of the hint row",
+		);
+		const restarted = piu.mark();
+		piu.submit("second");
+		await piu.waitForText(
+			'"second" got |<mode>Do the thing.</mode>| read.',
+			restarted,
+		);
+	} finally {
+		fixture.removeDir();
+	}
+}, 20000);
+
+test("/restart warns and returns to Build when the mode file vanished", async () => {
+	const fixture = prepareFixture({
+		script: { replies: [modeReply, modeReply, modeReply] },
+		persistSession: true,
+	});
+	const modesDir = writeModes(fixture, { "Kalimba.md": kalimbaFile });
+	try {
+		await using piu = spawnPiu(fixture);
+		await piu.waitForText("faux-1");
+		piu.submit("zero");
+		await piu.waitForText('"zero" got ||');
+		const baseTools = await eventually(
+			() => /"zero" got \|\| (\S+)\./.exec(piu.text)?.[1],
+			"the base tools",
+		);
+		piu.submit("/mode kalimba");
+		await piu.waitForText("Kalimba");
+		piu.submit("first");
+		await piu.waitForText('"first" got |');
+
+		const beforeRestart = piu.mark();
+		rmSync(join(modesDir, "Kalimba.md"));
+		piu.submit("/restart");
+
+		await piu.waitForStarts(2);
+		await piu.waitForText("no longer exists", beforeRestart);
+		await piu.waitForText("Build ·", beforeRestart);
+		const restarted = piu.mark();
+		piu.submit("second");
+		await piu.waitForText(`"second" got || ${baseTools}.`, restarted);
 	} finally {
 		fixture.removeDir();
 	}

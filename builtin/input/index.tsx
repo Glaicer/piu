@@ -591,15 +591,24 @@ function Prompt(props: { context: ModuleContext }) {
 				/>
 			</box>
 			<box flexDirection="row" flexShrink={0} paddingLeft={2}>
+				<text
+					flexShrink={0}
+					wrapMode="none"
+					truncate
+					fg={props.context.theme.agentMode}
+				>
+					{props.context.pi.agentMode}
+				</text>
 				<Show when={images().length}>
 					<text
 						flexShrink={0}
+						marginLeft={1}
 						fg={props.context.theme.muted}
 					>{`${images().length} image${images().length === 1 ? "" : "s"}`}</text>
 				</Show>
 				<Show when={empty() && !images().length && !confirmExit()}>
 					<text flexShrink={0} wrapMode="none" fg={props.context.theme.faint}>
-						{"/ commands   @ files"}
+						{" · / commands   @ files"}
 					</text>
 				</Show>
 				<box

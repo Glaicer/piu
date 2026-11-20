@@ -220,7 +220,7 @@ async function raiseToast(animations: boolean) {
 
 test("a Toast is fully visible immediately and disappears at its timeout with animations on", async () => {
 	await using app = await raiseToast(true);
-	await app.piu.waitForFrame((f) => columnOf(f, "Build") >= 0);
+	await app.piu.waitForFrame((f) => columnOf(f, "Build finished") >= 0);
 	const first = columnOf(await app.frame(), "Build finished");
 	expect(first).toBe(142);
 	expect(columnOf(await app.frame(2999), "Build finished")).toBe(first);

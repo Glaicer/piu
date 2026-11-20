@@ -115,7 +115,7 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 			"context.host",
 			"input.prompt",
 		],
-		status: ["status.line"],
+		status: ["status.line", "modes.bridge"],
 		side: [],
 		bottom: ["model.current", "input.dir", "status.working"],
 	},

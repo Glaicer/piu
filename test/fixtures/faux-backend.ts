@@ -6,6 +6,7 @@ import {
 	fauxText,
 	fauxThinking,
 	fauxToolCall,
+	getCurrentSystemMessage,
 	getCurrentTools,
 	type Message,
 } from "@earendil-works/pi-ai";
@@ -75,6 +76,10 @@ export default function (pi: ExtensionAPI) {
 			.replaceAll("{reasoning}", reasoning)
 			.replaceAll("{lastUser}", lastUser(context))
 			.replaceAll("{toolResult}", lastToolResult(context))
+			.replaceAll(
+				"{modeInstructions}",
+				getCurrentSystemMessage(context.messages)?.sections?.mode ?? "",
+			)
 			.replaceAll(
 				"{tools}",
 				getCurrentTools(context.messages)

@@ -251,7 +251,8 @@ function fgAt(piu: Piu, x: number, y: number) {
 	return undefined;
 }
 
-const idleHints = (frame: string) => inputHints(frame).startsWith("/ commands");
+const idleHints = (frame: string) =>
+	inputHints(frame).startsWith("Build · / commands");
 
 test("one blank row separates the heavy line from the first input row", async () => {
 	await using piu = await startPiu({ script: { replies: [] }, width: 80 });
@@ -302,21 +303,28 @@ test("the cursor is a signal red block", async () => {
 	expect(cursor.color.equals(RGBA.fromHex(darkTheme.signal))).toBe(true);
 });
 
-test("idle hints sit under the input in faint, commands on the left and keys on the right", async () => {
+test("Build leads the idle hints in agentMode, commands faint beside it and keys on the right", async () => {
 	await using piu = await startPiu({ script: { replies: [] }, width: 80 });
 	const frame = await piu.waitForFrame(
 		(f) => f.includes("faux-1") && idleHints(f),
 	);
 	const hints = inputHints(frame);
-	expect(hints.startsWith("/ commands   @ files")).toBe(true);
+	expect(hints.startsWith("Build · / commands   @ files")).toBe(true);
 	expect(hints.endsWith("⏎ send   ⇧⏎ new line")).toBe(true);
 	const field = editor(piu);
 	const row = field.screenY + field.height;
-	const column = (frame.split("\n")[row] ?? "").indexOf("/ commands");
+	const column = (frame.split("\n")[row] ?? "").indexOf("Build");
 	expect(column).toBe(field.screenX);
-	expect(fgAt(piu, column, row)?.equals(RGBA.fromHex(darkTheme.faint))).toBe(
+	expect(
+		fgAt(piu, column, row)?.equals(RGBA.fromHex(darkTheme.agentMode)),
+	).toBe(true);
+	const commands = (frame.split("\n")[row] ?? "").indexOf("/ commands");
+	expect(fgAt(piu, commands, row)?.equals(RGBA.fromHex(darkTheme.faint))).toBe(
 		true,
 	);
+	expect(
+		fgAt(piu, commands - 2, row)?.equals(RGBA.fromHex(darkTheme.faint)),
+	).toBe(true);
 	expect(frame).not.toContain("/ commands · @ files");
 });
 
@@ -352,6 +360,9 @@ test("while the agent works the hints name stop and queue, and no Working line i
 	);
 	expect(busy).not.toContain("Working");
 	expect(inputHints(busy)).not.toContain("send");
+	expect(inputHints(busy).startsWith("Build · / commands   @ files")).toBe(
+		true,
+	);
 	await piu.waitForFrame(
 		(f) => f.includes("All done") && !working(f) && idleHints(f),
 	);
@@ -374,6 +385,6 @@ test("a narrow input cuts the key hints before the command hints", async () => {
 	await using piu = await startPiu({ script: { replies: [] }, width: 36 });
 	const frame = await piu.waitForFrame((f) => idleHints(f));
 	const hints = inputHints(frame);
-	expect(hints.startsWith("/ commands   @ files")).toBe(true);
+	expect(hints.startsWith("Build · / commands   @ files")).toBe(true);
 	expect(hints).not.toContain("new line");
 });

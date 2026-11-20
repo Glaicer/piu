@@ -25,6 +25,7 @@ export const themeTokens = [
 	"barMuted",
 	"chip",
 	"jump",
+	"agentMode",
 ] as const;
 
 export type ThemeToken = (typeof themeTokens)[number];
@@ -64,6 +65,7 @@ export const darkTheme: Theme = {
 	barMuted: "#a8a8a8",
 	chip: "#a8a8a8",
 	jump: "#555555",
+	agentMode: "#ffa04d",
 };
 
 export const lightTheme: Theme = {
@@ -89,6 +91,7 @@ export const lightTheme: Theme = {
 	barMuted: "#bdbdbd",
 	chip: "#4e4d4d",
 	jump: "#555555",
+	agentMode: "#b85400",
 };
 
 const builtIn: Readonly<Record<ThemeMode, Theme>> = {
