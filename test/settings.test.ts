@@ -206,7 +206,7 @@ const extensionOptions = {
 test("a loaded personal Extension tab opens by click and its content scrolls under the tab strip", async () => {
 	await using piu = await startPiu(extensionOptions);
 	const frame = await openSettings(piu);
-	expect(frame).toMatch(/Global +Hotkeys +Profile/);
+	expect(frame).toMatch(/Global +Extensions +Hotkeys +Profile/);
 	await clickText(piu, "Profile");
 	await piu.waitForFrame(
 		(frame) =>
@@ -219,7 +219,7 @@ test("a loaded personal Extension tab opens by click and its content scrolls und
 	await piu.waitForFrame(
 		(frame) =>
 			frame.includes("profile row 24") &&
-			/Global +Hotkeys +Profile/.test(frame) &&
+			/Global +Extensions +Hotkeys +Profile/.test(frame) &&
 			!frame.includes("profile row 01"),
 	);
 	await clickText(piu, "Global");
@@ -231,6 +231,7 @@ test("Ctrl+PageUp and Ctrl+PageDown switch tabs without stealing cursor and word
 	await openSettings(piu);
 	piu.mockInput.pressKey("\x1b[6;5~");
 	piu.mockInput.pressKey("\x1b[6;5~");
+	piu.mockInput.pressKey("\x1b[6;5~");
 	await piu.waitForFrame((frame) => frame.includes("profile input"));
 	await clickText(piu, "profile input");
 	await piu.mockInput.typeText("one ab");
@@ -240,6 +241,7 @@ test("Ctrl+PageUp and Ctrl+PageDown switch tabs without stealing cursor and word
 	piu.mockInput.pressKey("ARROW_LEFT", { meta: true });
 	await piu.mockInput.typeText("Y");
 	await piu.waitForFrame((frame) => frame.includes("one YaXb"));
+	piu.mockInput.pressKey("\x1b[5;5~");
 	piu.mockInput.pressKey("\x1b[5;5~");
 	piu.mockInput.pressKey("\x1b[5;5~");
 	await piu.waitForFrame((frame) => /Theme +auto/.test(frame));

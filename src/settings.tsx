@@ -2,6 +2,7 @@ import { type BoxRenderable, type Clock, TextAttributes } from "@opentui/core";
 import { useRenderer } from "@opentui/solid";
 import { type Accessor, createSignal, For, onMount, Show } from "solid-js";
 import { type GlobalSettingChange, saveGlobalSetting } from "./config.ts";
+import type { ExtensionInventory } from "./extension-inventory.ts";
 import { contains } from "./focus.ts";
 import { createHotkeysTab } from "./hotkeys.tsx";
 import type { Keybindings, ResolvedKeybindings } from "./keybindings.ts";
@@ -13,6 +14,7 @@ import type {
 } from "./module.ts";
 import { PickerLink } from "./picker.tsx";
 import { scrollIntoView, scrollKeys } from "./scroll.ts";
+import { createExtensionsTab } from "./settings-extensions.tsx";
 import { openSystemShortcuts } from "./system-shortcuts.tsx";
 import { Tabs } from "./tabs.tsx";
 import { type Theme, type ThemePreference, themeModes } from "./theme.ts";
@@ -30,6 +32,7 @@ export function createSettings(options: {
 	keybindings: Accessor<ResolvedKeybindings>;
 	personal: Accessor<Keybindings>;
 	applyKeybindings(next: Keybindings): void;
+	readExtensions(): ExtensionInventory;
 	notify(message: string): void;
 }) {
 	const [mode, setMode] = createSignal(options.mode);
@@ -83,7 +86,12 @@ export function createSettings(options: {
 			/>
 		),
 	};
-	const tabs = [global, hotkeys.tab, ...options.tabs];
+	const tabs = [
+		global,
+		createExtensionsTab(options.readExtensions),
+		hotkeys.tab,
+		...options.tabs,
+	];
 	const keys = tabs.map((_, index) => index);
 	const status = (active: number) => {
 		const tab = tabs[active] ?? global;

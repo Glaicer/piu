@@ -1,5 +1,8 @@
 import { accessSync, constants, realpathSync, statSync } from "node:fs";
-import { delimiter, resolve } from "node:path";
+import { homedir } from "node:os";
+import { delimiter, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { BackendConfig } from "./backend.ts";
 
 function isExecutable(path: string) {
 	try {
@@ -32,4 +35,33 @@ export function resolveCommand(
 ) {
 	const file = commandPath(command, cwd, pathVar);
 	return file && realpathSync(file);
+}
+
+// why: a Backend whose command line starts with `NAME=value` assignments (an `env` wrapper or a launcher) reads settings from a different environment than piu.
+export function backendEnvironment(
+	config: BackendConfig,
+	env: NodeJS.ProcessEnv,
+) {
+	const merged = { ...env };
+	for (const arg of config.args) {
+		const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s.exec(arg);
+		if (!match?.[1]) break;
+		merged[match[1]] = match[2] ?? "";
+	}
+	return merged;
+}
+
+// why: the agent dir Pi reads its settings from follows the Backend's own environment, so `PI_CODING_AGENT_DIR` and `HOME` come from its command line rather than from piu's.
+export function backendAgentDir(cwd: string, env: NodeJS.ProcessEnv) {
+	const home = env.HOME ?? homedir();
+	const raw = env.PI_CODING_AGENT_DIR || join(home, ".pi/agent");
+	const expanded =
+		raw === "~"
+			? home
+			: raw.startsWith("~/")
+				? join(home, raw.slice(2))
+				: raw.startsWith("file://")
+					? fileURLToPath(raw)
+					: raw;
+	return resolve(cwd, expanded);
 }

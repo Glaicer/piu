@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { join } from "node:path";
 import {
 	type ClipboardService,
@@ -14,6 +15,7 @@ import {
 import { createEffect, createSignal, onCleanup, Show } from "solid-js";
 import { createAnimate } from "./animate.ts";
 import { startBackend } from "./backend.ts";
+import { backendAgentDir, backendEnvironment } from "./backend-command.ts";
 import { prepareBackendLease } from "./backend-install.ts";
 import { createBackendUpdate } from "./backend-update.ts";
 import {
@@ -31,6 +33,11 @@ import {
 } from "./config.ts";
 import { useCopyOnSelect } from "./copy-on-select.ts";
 import { bridgeDialogs } from "./dialogs.tsx";
+import {
+	type ExtensionInventoryOptions,
+	readExtensionInventory,
+	readInterfaceInventory,
+} from "./extension-inventory.ts";
 import {
 	builtinDir,
 	findExtensions,
@@ -133,6 +140,10 @@ export async function createApp(options: {
 			keybindings={keybindings}
 			keybindingActions={placement.keybindingActions}
 			settingsTabs={settingsTabs}
+			extensionInventory={{
+				folders,
+				enabledExtensions: placement.enabledExtensions,
+			}}
 			motion={options.motion ?? true}
 			updateCheck={options.updateCheck ?? { fetch }}
 			clipboard={options.clipboard}
@@ -263,6 +274,10 @@ function App(props: {
 	keybindings: ResolvedKeybindings;
 	keybindingActions: readonly LoadedKeybindingAction[];
 	settingsTabs: readonly SettingsTab[];
+	extensionInventory: Pick<
+		ExtensionInventoryOptions,
+		"folders" | "enabledExtensions"
+	>;
 	motion: boolean;
 	updateCheck: UpdateCheckOptions;
 	clipboard: ClipboardService | undefined;
@@ -292,6 +307,26 @@ function App(props: {
 		keybindings,
 		personal,
 		applyKeybindings,
+		readExtensions: () => {
+			const inventory = props.extensionInventory;
+			const backendEnv = backendEnvironment(props.config.backend, props.env);
+			const home = backendEnv.HOME ?? homedir();
+			try {
+				return readExtensionInventory({
+					...inventory,
+					agentDir: backendAgentDir(props.cwd, backendEnv),
+					home,
+				});
+			} catch (error) {
+				const { builtin, external } = readInterfaceInventory(inventory);
+				return {
+					agentic: [],
+					agenticError: error instanceof Error ? error.message : String(error),
+					builtin,
+					external,
+				};
+			}
+		},
 		notify: (message) => toasts.show(message, "error"),
 	});
 	const theme = createTheme(renderer, overrides, settings.mode);

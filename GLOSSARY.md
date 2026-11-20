@@ -50,6 +50,14 @@ A page in Settings. Piu provides built-in tabs, and loaded Extensions can add th
 **Pi settings**:
 The Backend's own settings, separate from piu's Config.
 
+**Agentic**:
+The group of the Extensions tab that lists the Pi extensions the Backend would load: the files and packages in its agent dir's Pi settings, plus Pi's built-in extensions, each with its enabled state.
+_Avoid_: Pi extensions list, backend extensions
+
+**Interface**:
+The group of the Extensions tab that lists this project's Extensions, split into the ones shipped with piu and the personal ones from `~/.piu/extensions`.
+_Avoid_: Frontend, UI extensions
+
 **Placement**:
 The ordered list of Modules assigned to each Panel, kept apart from the Layout.
 _Avoid_: Mapping, binding

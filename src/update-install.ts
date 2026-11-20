@@ -1,11 +1,13 @@
 import { execFile } from "node:child_process";
 import { readdirSync, realpathSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import type { BackendConfig } from "./backend.ts";
-import { resolveCommand } from "./backend-command.ts";
+import {
+	backendAgentDir,
+	backendEnvironment,
+	resolveCommand,
+} from "./backend-command.ts";
 import type { BackendInstall } from "./backend-install.ts";
 import {
 	type InstallOrigin,
@@ -13,17 +15,6 @@ import {
 	readObject,
 	sameFile,
 } from "./install-origin.ts";
-
-// why: a Backend whose command line starts with `NAME=value` assignments (an `env` wrapper or a launcher) reads settings from a different environment than piu.
-function backendEnvironment(config: BackendConfig, env: NodeJS.ProcessEnv) {
-	const merged = { ...env };
-	for (const arg of config.args) {
-		const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s.exec(arg);
-		if (!match?.[1]) break;
-		merged[match[1]] = match[2] ?? "";
-	}
-	return merged;
-}
 
 function probe(
 	command: string,
@@ -102,17 +93,7 @@ export async function planBackendUpdate(
 		env,
 	});
 	if (origin.manager === "curl") {
-		const home = env.HOME ?? homedir();
-		const rawDir = env.PI_CODING_AGENT_DIR || join(home, ".pi/agent");
-		const expanded =
-			rawDir === "~"
-				? home
-				: rawDir.startsWith("~/")
-					? join(home, rawDir.slice(2))
-					: rawDir.startsWith("file://")
-						? fileURLToPath(rawDir)
-						: rawDir;
-		const agentDir = resolve(options.cwd, expanded);
+		const agentDir = backendAgentDir(options.cwd, env);
 		env.PI_CODING_AGENT_DIR = agentDir;
 		if (
 			env.PI_SELF_UPDATE_COMMAND ||

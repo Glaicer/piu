@@ -29,6 +29,7 @@ function topModalTitle(piu: Piu, frame: string) {
 async function openHotkeys(piu: Piu) {
 	await openSettings(piu);
 	piu.mockInput.pressKey("\x1b[6;5~");
+	piu.mockInput.pressKey("\x1b[6;5~");
 	return piu.waitForFrame(
 		(frame) =>
 			frame.includes("Focus the next Panel") && frame.includes("Hotkeys"),
@@ -752,6 +753,7 @@ test("recording swallows keys: no action runs, no tab switch, no input text", as
 		(frame) => frame.includes("Global") && frame.includes("Animations"),
 	);
 	piu.mockInput.pressKey("\x1b[6;5~");
+	piu.mockInput.pressKey("\x1b[6;5~");
 	await piu.waitForFrame((frame) => frame.includes("Focus the next Panel"));
 	await clickRow(piu, "Switch the model");
 	piu.mockInput.pressEnter();
@@ -797,6 +799,7 @@ test("the launcher reloads a Hotkeys assignment on Restart", async () => {
 		await piu.waitForText("faux-1");
 		piu.submit("/settings");
 		await piu.waitForText("Animations");
+		piu.type("\x1b[6;5~");
 		piu.type("\x1b[6;5~");
 		await piu.waitForText("Focus the next Panel");
 		piu.type("\x1b[B\x1b[B");
