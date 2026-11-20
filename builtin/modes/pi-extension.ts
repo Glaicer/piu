@@ -69,7 +69,7 @@ function parseMode(path: string): Mode {
 		throw new Error("tools: expected a list of tool names");
 	}
 	return {
-		name,
+		name: name === "plan" ? "Plan" : name,
 		model: fm.model as string | undefined,
 		thinking: fm.thinking as Thinking | undefined,
 		tools: fm.tools as string[] | undefined,

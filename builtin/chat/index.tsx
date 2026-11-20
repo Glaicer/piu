@@ -28,6 +28,12 @@ import {
 function Messages(props: { context: ModuleContext }) {
 	const theme = props.context.theme;
 	const pi = props.context.pi;
+	const pending = createMemo(() =>
+		pi.pending.filter(
+			(entry) =>
+				entry.mode !== "prompt" || !/^\/\S/.test(entry.text.trimStart()),
+		),
+	);
 	const syntaxStyle = createMemo(() => {
 		const style = createSyntaxStyle(theme);
 		onCleanup(() => style.destroy());
@@ -139,7 +145,7 @@ function Messages(props: { context: ModuleContext }) {
 	});
 	return (
 		<box paddingX={1} paddingBottom={2}>
-			<Show when={pi.messages.length === 0 && pi.pending.length === 0}>
+			<Show when={pi.messages.length === 0 && pending().length === 0}>
 				<box paddingX={2} paddingY={2}>
 					<text fg={theme.text}>
 						<b>What would you like to build?</b>
@@ -192,7 +198,7 @@ function Messages(props: { context: ModuleContext }) {
 				)}
 			</For>
 			<ServiceRows context={props.context} position={pi.messages.length} />
-			<For each={pi.pending}>
+			<For each={pending()}>
 				{(entry) => (
 					<text
 						fg={theme.muted}

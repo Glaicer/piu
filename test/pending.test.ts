@@ -205,6 +205,24 @@ test("a slow Backend does not delay the message in the chat", async () => {
 	expect(lines(done, messageBar("hello there"))).toHaveLength(1);
 });
 
+test("slash input never shows a sending row but still appears if Pi starts a turn", async () => {
+	await using piu = await startPiu({
+		script: { replies: ["Reply to {lastUser}"] },
+		installedPiExtensions: [slowInput],
+	});
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+	await piu.mockInput.typeText("/unregistered argument");
+	await piu.waitForFrame((f) =>
+		inputArea(f).includes("/unregistered argument"),
+	);
+	piu.mockInput.pressEnter();
+	const settled = await piu.waitForFrame((f) => {
+		expect(agentPanel(f)).not.toContain("[sending]");
+		return agentPanel(f).includes('Reply to "/unregistered argument"');
+	});
+	expect(lines(settled, messageBar("/unregistered argument"))).toHaveLength(1);
+});
+
 test("queued messages leave the chat when the Backend dies, which shows its own error", async () => {
 	using block = blocker();
 	await using piu = await startBlocked([], block, {

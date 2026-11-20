@@ -182,16 +182,19 @@ test("slash completion offers one mode command", async () => {
 test("Alt+M cycles and wraps without submitting a turn", async () => {
 	using fixture = withModes({
 		"Zulu.md": plainMode("Zulu instructions here."),
-		"Alpha.md": plainMode("Alpha instructions here."),
+		"plan.md": plainMode("Plan instructions here."),
 	});
 	await using piu = await startPiu({
 		script: { replies: ["REPLY {lastUser}", "REPLY {lastUser}"] },
 		dir: fixture.dir,
 	});
 	await piu.waitForFrame((f) => f.includes("faux-1"));
-	for (const name of ["Alpha", "Zulu", "Build"]) {
+	for (const name of ["Plan", "Zulu", "Build"]) {
 		piu.mockInput.pressKey("m", { meta: true });
-		await piu.waitForFrame((f) => inputHints(f).startsWith(`${name} ·`));
+		await piu.waitForFrame((f) => {
+			expect(f).not.toContain("[sending]");
+			return inputHints(f).startsWith(`${name} ·`);
+		});
 	}
 	await piu.waitForFrame(
 		(f) => inputHints(f).startsWith("Build ·") && !f.includes(":next"),
@@ -201,6 +204,31 @@ test("Alt+M cycles and wraps without submitting a turn", async () => {
 	const settled = await piu.waitForFrame((f) => f.includes('REPLY "ping"'));
 	expect(settled).not.toContain(":next");
 	expect(settled).not.toContain('REPLY "/mode');
+});
+
+test("clicking the current mode cycles without submitting the draft", async () => {
+	using fixture = withModes({ "Plan.md": plainMode("Plan instructions.") });
+	await using piu = await startPiu({
+		script: { replies: [] },
+		dir: fixture.dir,
+		config: { keybindings: { "modes.next": [] } },
+	});
+	await piu.waitForFrame((f) => f.includes("faux-1"));
+	await piu.mockInput.typeText("draft");
+	for (const [current, next] of [
+		["Build", "Plan"],
+		["Plan", "Build"],
+	] as const) {
+		const frame = await piu.waitForFrame(
+			(f) =>
+				inputHints(f).startsWith(current) && inputArea(f).includes("draft"),
+		);
+		const { row, column } = hintCell(frame, current);
+		await piu.mockMouse.click(column, row);
+		await piu.waitForFrame((f) => inputHints(f).startsWith(next));
+	}
+	await piu.mockInput.typeText(" kept");
+	await piu.waitForFrame((f) => inputArea(f).includes("draft kept"));
 });
 
 test("mode cycle can be rebound", async () => {

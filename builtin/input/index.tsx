@@ -3,6 +3,7 @@ import {
 	type BoxRenderable,
 	CliRenderEvents,
 	type KeyEvent,
+	MouseButton,
 	RenderableEvents,
 	ScrollBarRenderable,
 	TextAttributes,
@@ -29,6 +30,7 @@ import {
 } from "../../src/keybindings.ts";
 import type { Extension, ModuleContext } from "../../src/module.ts";
 import type { PromptImage, RestoredPrompt } from "../../src/pi-state.ts";
+import { nextMode } from "../modes/index.tsx";
 import { type Entry, findTrigger, narrow } from "./autocomplete.ts";
 import { Directory } from "./dir.tsx";
 import { createPromptEditing } from "./editing.ts";
@@ -56,6 +58,8 @@ const defaultNewline: readonly Shortcut[] = defaultNewlineChord
 function Prompt(props: { context: ModuleContext }) {
 	let field: TextareaRenderable | undefined;
 	const { actions, pi } = props.context;
+	const canCycleMode = () =>
+		props.context.keybindings().actions.some(({ id }) => id === "modes.next");
 	const [images, setImages] = createSignal<PromptImage[]>([]);
 	const edit = createPromptEditing();
 	const focusedActions = {
@@ -596,6 +600,12 @@ function Prompt(props: { context: ModuleContext }) {
 					wrapMode="none"
 					truncate
 					fg={props.context.theme.agentMode}
+					selectable={!canCycleMode()}
+					onMouseDown={(event) => {
+						if (event.button !== MouseButton.LEFT || !canCycleMode()) return;
+						event.preventDefault();
+						nextMode(props.context);
+					}}
 				>
 					{props.context.pi.agentMode}
 				</text>
