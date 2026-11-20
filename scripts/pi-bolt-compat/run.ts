@@ -1,10 +1,11 @@
-// Manual check for the Pi-Bolt risks in ADR-0001; not part of `pnpm check`.
+// Manual checks for the Pi-Bolt risks in ADR-0001 and Modes; not part of `pnpm check`.
 // Usage: bun scripts/pi-bolt-compat/run.ts
 // PIU_COMPAT_BACKEND=<binary>   test another binary (default: pi-bolt)
 // PIU_COMPAT_AGENT_DIR=<dir>    run with that Pi agent dir (default: the one Pi-Bolt picks, normally ~/.pi/agent)
 // PIU_COMPAT_ARGS="<args>"       extra backend arguments, split on spaces (e.g. "-ne")
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { BUILD_MODE, MODE_STATUS_KEY } from "../../builtin/modes/protocol.ts";
 import { attachJsonlLineReader, serializeJsonLine } from "../../src/jsonl.ts";
 import { TOOLS_PREFIX } from "./faux-tools.ts";
 
@@ -26,10 +27,14 @@ const askUserPath = join(
 	import.meta.dir,
 	"../../builtin/ask-user-question/pi-extension.ts",
 );
+const modesPath = join(import.meta.dir, "../../builtin/modes/pi-extension.ts");
 
 type Run = Awaited<ReturnType<typeof runBackend>>;
 
-async function runBackend(extensionPaths: string[]) {
+async function runBackend(
+	extensionPaths: string[],
+	scenario: "turn" | "modes" = "turn",
+) {
 	const extensionArgs = extensionPaths.flatMap((path) => ["-e", path]);
 	const child = spawn(
 		backend as string,
@@ -61,16 +66,19 @@ async function runBackend(extensionPaths: string[]) {
 	const messages: string[] = [];
 	let stderr = "";
 	let promptError: string | undefined;
+	let hasModeCommand = false;
+	let modeStatus: string | undefined;
+	const readyCommand = scenario === "modes" ? "get_commands" : "get_state";
 	let agentEnded: () => void = () => {};
 	const agentEndedPromise = new Promise<void>((resolve) => {
 		agentEnded = resolve;
 	});
-	let stateAnswered: () => void = () => {};
-	const stateAnsweredPromise = new Promise<void>((resolve) => {
-		stateAnswered = resolve;
+	let readyAnswered: () => void = () => {};
+	const readyAnsweredPromise = new Promise<void>((resolve) => {
+		readyAnswered = resolve;
 	});
 	const exited = new Promise<{ code: number | null; signal: string | null }>(
-		(resolve) => child.on("exit", (code, signal) => resolve({ code, signal })),
+		(resolve) => child.on("close", (code, signal) => resolve({ code, signal })),
 	);
 
 	child.stderr.setEncoding("utf8");
@@ -96,7 +104,28 @@ async function runBackend(extensionPaths: string[]) {
 		}
 		switch (record.type) {
 			case "response":
-				if (record.id === "state") stateAnswered();
+				if (record.id === "ready" && record.command === readyCommand) {
+					const data = record.data;
+					if (
+						readyCommand === "get_commands" &&
+						record.success === true &&
+						data &&
+						typeof data === "object" &&
+						"commands" in data &&
+						Array.isArray(data.commands)
+					) {
+						hasModeCommand = data.commands.some(
+							(command: unknown) =>
+								command !== null &&
+								typeof command === "object" &&
+								"name" in command &&
+								command.name === "mode" &&
+								"source" in command &&
+								command.source === "extension",
+						);
+					}
+					readyAnswered();
+				}
 				if (record.command === "prompt" && record.success === false) {
 					promptError = String(record.error);
 					agentEnded();
@@ -109,6 +138,15 @@ async function runBackend(extensionPaths: string[]) {
 				toolResults.push(JSON.stringify(record.result));
 				break;
 			case "extension_ui_request":
+				if (record.method === "setStatus") {
+					if (record.statusKey === MODE_STATUS_KEY) {
+						modeStatus =
+							typeof record.statusText === "string"
+								? record.statusText
+								: undefined;
+					}
+					break;
+				}
 				dialogRequests.push(
 					`${record.method}${record.title ? ` "${record.title}"` : ""}`,
 				);
@@ -129,14 +167,14 @@ async function runBackend(extensionPaths: string[]) {
 		}
 	});
 
-	child.stdin.write(serializeJsonLine({ type: "get_state", id: "state" }));
+	child.stdin.write(serializeJsonLine({ type: readyCommand, id: "ready" }));
 	const started = await Promise.race([
-		stateAnsweredPromise.then(() => true),
+		readyAnsweredPromise.then(() => true),
 		exited.then(() => false),
 		Bun.sleep(READY_TIMEOUT_MS).then(() => false),
 	]);
 	let timedOut = false;
-	if (started) {
+	if (started && scenario === "turn") {
 		child.stdin.write(
 			serializeJsonLine({ type: "prompt", id: "go", message: "ask me" }),
 		);
@@ -164,6 +202,8 @@ async function runBackend(extensionPaths: string[]) {
 		messages,
 		stderrLines: stderr.split("\n").filter((l) => l.trim()),
 		promptError,
+		hasModeCommand,
+		modeStatus,
 		timedOut,
 		exit,
 		closeMs,
@@ -276,3 +316,23 @@ for (const [name, run] of [
 			: `  ${name}: DID NOT EXIT within 10 s of stdin closing (killed)`,
 	);
 }
+
+console.log("\n(e) Modes: RPC startup without a model request");
+const modes = await runBackend([fauxPath, modesPath], "modes");
+console.log(`  get_commands responded: ${modes.started ? "yes" : "no"}`);
+console.log(`  /mode registered: ${modes.hasModeCommand ? "yes" : "no"}`);
+console.log(`  ${MODE_STATUS_KEY}: ${modes.modeStatus ?? "not published"}`);
+printLines("non-protocol stdout lines", modes.nonProtocolStdout);
+printLines("stderr lines", modes.stderrLines);
+console.log(`  exit code: ${modes.exit?.code ?? "none"}`);
+const modesPassed =
+	modes.started &&
+	modes.hasModeCommand &&
+	modes.modeStatus === BUILD_MODE &&
+	modes.nonProtocolStdout.length === 0 &&
+	modes.stderrLines.length === 0 &&
+	modes.exit?.code === 0;
+console.log(
+	modesPassed ? "  => PASS: Modes RPC startup" : "  => FAIL: Modes RPC startup",
+);
+if (!modesPassed) process.exitCode = 1;
