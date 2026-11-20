@@ -174,7 +174,8 @@ export function modalText(piu: Piu, frame: string) {
 export function messageBar(text: string, width?: number) {
 	// why: without a Panel content width, match only the padded prefix; `you` sits at the far right of the first row.
 	const prefix = `   ${text}`;
-	return width === undefined ? prefix : `${prefix.padEnd(width - 5)}you`;
+	// why: the author label is three cells; the captured Panel row includes four more cells of padding to its right.
+	return width === undefined ? prefix : `${prefix.padEnd(width - 7)}you`;
 }
 
 export type Piu = Awaited<ReturnType<typeof startPiu>>;

@@ -213,6 +213,12 @@ test("a finished code block is highlighted once while later text streams after i
 	expect(codeHighlights).toHaveLength(1);
 });
 
+const chatTail = (frame: string) =>
+	agentPanel(frame)
+		.split("\n")
+		.slice(-3)
+		.map((line) => line.trim());
+
 test("the agent Panel follows new output at the bottom and stays put when scrolled up", async () => {
 	const wheelTicks = 5;
 	const maxWheelTicks = 300;
@@ -241,10 +247,8 @@ test("the agent Panel follows new output at the bottom and stays put when scroll
 
 	const backAtBottom = async () => {
 		await piu.renderOnce();
-		const [last, blank] = agentPanel(piu.captureCharFrame())
-			.split("\n")
-			.slice(-2);
-		return last?.trim() === "Fresh reply" && blank?.trim() === "";
+		const [last, blank1, blank2] = chatTail(piu.captureCharFrame());
+		return last === "Fresh reply" && blank1 === "" && blank2 === "";
 	};
 	for (let tick = 0; tick < maxWheelTicks && !(await backAtBottom()); tick++)
 		await piu.mockMouse.scroll(10, 5, "down");
@@ -260,13 +264,11 @@ test("Ctrl+Home and Ctrl+End jump through chat and show a bottom hint when scrol
 	});
 	await piu.mockInput.typeText("Lines");
 	piu.mockInput.pressEnter();
-	const bottom = await piu.waitForFrame((frame) =>
-		agentPanel(frame).includes("Line 119"),
+	const bottom = await piu.waitForFrame(
+		(frame) => agentPanel(frame).includes("Line 119") && !working(frame),
 	);
 	expect(agentPanel(bottom)).not.toContain("CTRL+End: jump to bottom");
-	const tail = agentPanel(bottom).split("\n").slice(-2);
-	expect(tail[0]?.trim()).toBe("Line 119");
-	expect(tail[1]?.trim()).toBe("");
+	expect(chatTail(bottom)).toEqual(["Line 119", "", ""]);
 
 	piu.mockInput.pressKey("HOME", { ctrl: true });
 	const top = await piu.waitForFrame(

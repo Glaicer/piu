@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
-import { inputArea, messageBar, panelText, startPiu } from "./harness.ts";
+import {
+	inputArea,
+	messageBar,
+	modalBounds,
+	panelText,
+	startPiu,
+} from "./harness.ts";
 
 type Piu = Awaited<ReturnType<typeof startPiu>>;
 
@@ -155,10 +161,19 @@ function locate(frame: string, text: string) {
 	return { x: (rows[row] ?? "").indexOf(text) + 1, y: row };
 }
 
-const treeRows = (frame: string) =>
-	panelText(frame, 80, 14)
+function treeRows(piu: Piu, frame: string) {
+	const bounds = modalBounds(piu);
+	if (!bounds) return [];
+	return frame
 		.split("\n")
-		.filter((line) => /^ +(Trunk|Left|Right) prompt/.test(line));
+		.slice(bounds.top, bounds.top + bounds.height)
+		.map((line, index) => ({
+			text: line.slice(bounds.left, bounds.left + bounds.width),
+			x: bounds.left + Math.floor(bounds.width / 2),
+			y: bounds.top + index,
+		}))
+		.filter(({ text }) => /^ +(Trunk|Left|Right) prompt/.test(text));
+}
 
 test("/resume lists the saved sessions, and picking one shows its conversation", async () => {
 	await using piu = await startPiu({
@@ -281,16 +296,18 @@ test("/tree shows a branched session, and picking an earlier prompt forks from i
 	await piu.waitForFrame((f) => agentPanel(f).includes("Right reply"));
 
 	await send(piu, "/tree");
-	const open = await piu.waitForFrame((f) => treeRows(f).length === 3);
-	const [trunk, left, right] = treeRows(open);
-	expect(trunk).toContain("Trunk prompt");
-	expect(left).toContain("Left prompt");
-	expect(right).toContain("Right prompt");
-	expect(left?.indexOf("Left")).toBeGreaterThan(trunk?.indexOf("Trunk") ?? 0);
-	expect(right?.indexOf("Right")).toBe(left?.indexOf("Left"));
+	const open = await piu.waitForFrame((f) => treeRows(piu, f).length === 3);
+	const [trunk, left, right] = treeRows(piu, open);
+	if (!trunk || !left || !right) throw new Error(`Missing tree rows:\n${open}`);
+	expect(trunk.text).toContain("Trunk prompt");
+	expect(left.text).toContain("Left prompt");
+	expect(right.text).toContain("Right prompt");
+	expect(left.text.indexOf("Left")).toBeGreaterThan(
+		trunk.text.indexOf("Trunk"),
+	);
+	expect(right.text.indexOf("Right")).toBe(left.text.indexOf("Left"));
 
-	const { x, y } = locate(open, "Right prompt");
-	await piu.mockMouse.click(x + 20, y);
+	await piu.mockMouse.click(right.x, right.y);
 	const forked = await piu.waitForFrame(
 		(f) =>
 			!agentPanel(f).includes("Right") &&
@@ -317,7 +334,7 @@ test("/tree opens on the prompt of the current position, so Enter forks from it"
 	await piu.waitForFrame((f) => agentPanel(f).includes("Right reply"));
 
 	await send(piu, "/tree");
-	await piu.waitForFrame((f) => treeRows(f).length === 3);
+	await piu.waitForFrame((f) => treeRows(piu, f).length === 3);
 	piu.mockInput.pressEnter();
 
 	await piu.waitForFrame(
