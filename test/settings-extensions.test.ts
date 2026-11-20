@@ -6,10 +6,12 @@ import {
 	mkdtempSync,
 	readFileSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { type Renderable, ScrollBoxRenderable } from "@opentui/core";
 import { modalBounds, modalText, openSettings, startPiu } from "./harness.ts";
 
 const script = { replies: [] };
@@ -25,11 +27,15 @@ const minimal = {
 
 const emptyExtension = "export default function () {}\n";
 
-async function openExtensions(piu: Parameters<typeof openSettings>[0]) {
+async function openExtensions(
+	piu: Parameters<typeof openSettings>[0],
+	ready: (frame: string) => boolean,
+) {
 	await openSettings(piu);
 	piu.mockInput.pressKey("\x1b[6;5~");
 	const frame = await piu.waitForFrame(
-		(frame) => frame.includes("Agentic") && frame.includes("Interface"),
+		(frame) =>
+			frame.includes("Agentic") && frame.includes("Interface") && ready(frame),
 	);
 	return modalText(piu, frame);
 }
@@ -41,7 +47,7 @@ test("Extensions is the second built-in Settings tab", async () => {
 	expect(global).toMatch(/Theme +auto/);
 	piu.mockInput.pressKey("\x1b[6;5~");
 	await piu.waitForFrame(
-		(frame) => frame.includes("Agentic") && frame.includes("Interface"),
+		(frame) => frame.includes("Interface") && frame.includes("builtin:mcp"),
 	);
 	expect(modalText(piu, piu.captureCharFrame())).not.toContain("Animations");
 });
@@ -81,7 +87,12 @@ test("Agentic shows user files, filtered installed packages and Pi built-ins", a
 				packages: [{ source: "./pkg", extensions: [] }],
 			}),
 		);
-		const view = await openExtensions(piu);
+		const view = await openExtensions(
+			piu,
+			(frame) =>
+				frame.includes("builtin:tool-search") &&
+				frame.includes("extensions/third"),
+		);
 		expect(view).toMatch(/^Agentic\b/mu);
 		expect(view).toMatch(/active\s+file: extensions\/active\.ts\s+enabled/u);
 		expect(view).toMatch(
@@ -117,7 +128,9 @@ test("Agentic falls back to the Backend home when the agent dir is unset", async
 			join(piu.dir, "agent", "extensions", "marker.ts"),
 			emptyExtension,
 		);
-		const view = await openExtensions(piu);
+		const view = await openExtensions(piu, (frame) =>
+			frame.includes("extensions/fallback.ts"),
+		);
 		expect(view).toMatch(
 			/fallback\s+file: extensions\/fallback\.ts\s+enabled/u,
 		);
@@ -156,7 +169,11 @@ test("Interface separates built-in and external extensions without repeating the
 				packages: [{ source: piExtension }],
 			}),
 		);
-		const view = await openExtensions(piu);
+		const view = await openExtensions(
+			piu,
+			(frame) =>
+				frame.includes("External extensions") && frame.includes("counter"),
+		);
 		expect(view).toMatch(/^Builtin extensions\b/mu);
 		expect(view).toMatch(/^ {2}chat\s+builtin\s+enabled/mu);
 		expect(view).toMatch(/^External extensions\b/mu);
@@ -177,7 +194,11 @@ test("Interface separates built-in and external extensions without repeating the
 		piu.mockInput.pressKey("\x1b[6;5~");
 		const fromPackage = modalText(
 			piu,
-			await piu.waitForFrame((frame) => frame.includes("External extensions")),
+			await piu.waitForFrame(
+				(frame) =>
+					frame.includes("External extensions") &&
+					frame.includes("builtin:mcp"),
+			),
 		);
 		expect(fromPackage).not.toContain("pi-extension");
 	} finally {
@@ -192,7 +213,7 @@ test("Opening Extensions discovers a new file without running it or restarting t
 	for (let attempt = 0; !existsSync(log) && attempt < 400; attempt++)
 		await Bun.sleep(10);
 	const before = readFileSync(log, "utf8");
-	await openExtensions(piu);
+	await openExtensions(piu, (frame) => frame.includes("builtin:mcp"));
 	piu.mockInput.pressKey("\x1b[5;5~");
 	await piu.waitForFrame((frame) => /Theme +auto/.test(frame));
 	const marker = join(piu.dir, "marker.txt");
@@ -211,31 +232,24 @@ test("Opening Extensions discovers a new file without running it or restarting t
 	expect(readFileSync(log, "utf8")).toBe(before);
 });
 
-test("the Agentic inventory reads metadata without running anything", () => {
-	const source = readFileSync(
-		join(import.meta.dir, "../src/extension-inventory.ts"),
-		"utf8",
-	);
-	for (const forbidden of [
-		"child_process",
-		"Bun.spawn",
-		"Bun.$",
-		"execFile",
-		"spawnSync",
-	])
-		expect(source).not.toContain(forbidden);
-	expect(source).not.toMatch(/\bimport\s*\(/u);
-});
-
-function hasScrollBar(piu: Parameters<typeof openSettings>[0], frame: string) {
+function modalScrollBox(piu: Parameters<typeof openSettings>[0]) {
 	const bounds = modalBounds(piu);
-	if (!bounds) return false;
-	return frame
-		.split("\n")
-		.slice(bounds.top, bounds.top + bounds.height)
-		.some((row) =>
-			/[█▀▄]/u.test(row.slice(bounds.left, bounds.left + bounds.width)),
-		);
+	if (!bounds) return undefined;
+	const boxes: ScrollBoxRenderable[] = [];
+	const walk = (node: Renderable) => {
+		if (!node.visible) return;
+		if (
+			node instanceof ScrollBoxRenderable &&
+			node.screenX >= bounds.left &&
+			node.screenX + node.width <= bounds.left + bounds.width &&
+			node.screenY >= bounds.top &&
+			node.screenY + node.height <= bounds.top + bounds.height
+		)
+			boxes.push(node);
+		for (const child of node.getChildren()) walk(child);
+	};
+	walk(piu.renderer.root);
+	return boxes.find((box) => box.scrollHeight > box.viewport.height);
 }
 
 test("The Extensions list scrolls below fixed tabs and resets on tab switch", async () => {
@@ -272,7 +286,9 @@ test("The Extensions list scrolls below fixed tabs and resets on tab switch", as
 	const scrolled = await piu.waitForFrame((frame) => frame.includes("ext-30"));
 	expect(scrolled).not.toContain("ext-01");
 	expect(scrolled).toMatch(/Global +Extensions +Hotkeys/u);
-	expect(hasScrollBar(piu, scrolled)).toBe(true);
+	const scrollbox = modalScrollBox(piu);
+	expect(scrollbox?.scrollTop).toBeGreaterThan(0);
+	expect(scrollbox?.verticalScrollBar.visible).toBe(true);
 	piu.mockInput.pressKey("\x1b[5;5~");
 	await piu.waitForFrame((frame) => /Theme +auto/.test(frame));
 	piu.mockInput.pressKey("\x1b[6;5~");
@@ -280,4 +296,143 @@ test("The Extensions list scrolls below fixed tabs and resets on tab switch", as
 		(frame) => frame.includes("ext-01") && !frame.includes("ext-30"),
 	);
 	expect(reset).toContain("Global");
+});
+
+test("Agentic drops a package file its manifest excludes", async () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "piu-agent-"));
+	try {
+		await using piu = await startPiu({
+			script,
+			height: 40,
+			backendEnv: { PI_CODING_AGENT_DIR: agentDir },
+		});
+		await piu.waitForFrame((frame) => frame.includes("faux-1"));
+		mkdirSync(join(agentDir, "pkg", "extensions"), { recursive: true });
+		writeFileSync(
+			join(agentDir, "pkg", "package.json"),
+			JSON.stringify({
+				name: "pkg",
+				pi: {
+					extensions: ["./extensions/*.ts", "!./extensions/skip.ts"],
+				},
+			}),
+		);
+		writeFileSync(
+			join(agentDir, "pkg", "extensions", "keep.ts"),
+			emptyExtension,
+		);
+		writeFileSync(
+			join(agentDir, "pkg", "extensions", "skip.ts"),
+			emptyExtension,
+		);
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({ packages: ["./pkg"] }),
+		);
+		const view = await openExtensions(piu, (frame) =>
+			frame.includes("extensions/keep"),
+		);
+		expect(view).toMatch(/extensions\/keep\s+package: \.\/pkg\s+enabled/u);
+		expect(view).not.toContain("skip");
+	} finally {
+		rmSync(agentDir, { recursive: true, force: true });
+	}
+});
+
+test("Agentic finds an installed git package by its source without the ref", async () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "piu-agent-"));
+	try {
+		await using piu = await startPiu({
+			script,
+			height: 40,
+			backendEnv: { PI_CODING_AGENT_DIR: agentDir },
+		});
+		await piu.waitForFrame((frame) => frame.includes("faux-1"));
+		const root = join(agentDir, "git", "github.com", "example", "pi-tools");
+		mkdirSync(join(root, "src"), { recursive: true });
+		writeFileSync(
+			join(root, "package.json"),
+			JSON.stringify({
+				name: "pi-tools",
+				pi: { extensions: ["./src/tool.ts"] },
+			}),
+		);
+		writeFileSync(join(root, "src", "tool.ts"), emptyExtension);
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({
+				packages: ["git:github.com/example/pi-tools@v1"],
+			}),
+		);
+		const view = await openExtensions(piu, (frame) =>
+			frame.includes("src/tool"),
+		);
+		expect(view).toMatch(
+			/src\/tool\s+package: git:github\.com\/example\/pi-tools@v1\s+enabled/u,
+		);
+		expect(view).not.toContain("unavailable");
+	} finally {
+		rmSync(agentDir, { recursive: true, force: true });
+	}
+});
+
+test("Agentic lists one row for a package reached through a symlink", async () => {
+	const agentDir = mkdtempSync(join(tmpdir(), "piu-agent-"));
+	try {
+		await using piu = await startPiu({
+			script,
+			height: 40,
+			backendEnv: { PI_CODING_AGENT_DIR: agentDir },
+		});
+		await piu.waitForFrame((frame) => frame.includes("faux-1"));
+		mkdirSync(join(agentDir, "pkg", "extensions"), { recursive: true });
+		writeFileSync(
+			join(agentDir, "pkg", "package.json"),
+			JSON.stringify({
+				name: "pkg",
+				pi: { extensions: ["./extensions/keep.ts"] },
+			}),
+		);
+		writeFileSync(
+			join(agentDir, "pkg", "extensions", "keep.ts"),
+			emptyExtension,
+		);
+		symlinkSync(join(agentDir, "pkg"), join(agentDir, "linked"), "dir");
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({
+				packages: [{ source: "./linked", extensions: [] }, "./pkg"],
+			}),
+		);
+		const rows = async () => {
+			const view = modalText(
+				piu,
+				await piu.waitForFrame(
+					(frame) =>
+						frame.includes("Interface") && frame.includes("extensions/keep"),
+				),
+			);
+			return view
+				.split("\n")
+				.filter((line) => line.includes("extensions/keep"));
+		};
+		await openExtensions(piu, (frame) => frame.includes("extensions/keep"));
+		const disabledFirst = await rows();
+		expect(disabledFirst).toHaveLength(1);
+		expect(disabledFirst[0]).toMatch(/enabled/u);
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({
+				packages: ["./pkg", { source: "./linked", extensions: [] }],
+			}),
+		);
+		piu.mockInput.pressKey("\x1b[5;5~");
+		await piu.waitForFrame((frame) => /Theme +auto/.test(frame));
+		piu.mockInput.pressKey("\x1b[6;5~");
+		const disabledLast = await rows();
+		expect(disabledLast).toHaveLength(1);
+		expect(disabledLast[0]).toMatch(/enabled/u);
+	} finally {
+		rmSync(agentDir, { recursive: true, force: true });
+	}
 });

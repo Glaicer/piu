@@ -6,6 +6,7 @@ import {
 	realpathSync,
 	statSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import {
 	basename,
 	dirname,
@@ -15,13 +16,19 @@ import {
 	resolve,
 	sep,
 } from "node:path";
-import { fileURLToPath } from "node:url";
+import type { BackendConfig } from "./backend.ts";
+import {
+	backendAgentDir,
+	backendEnvironment,
+	expandPath,
+} from "./backend-command.ts";
 import { builtinDir, type ExtensionFolders } from "./extensions.ts";
 import { isRecord } from "./json.ts";
 
 export type ExtensionInventoryOptions = {
-	agentDir: string;
-	home: string;
+	cwd: string;
+	backend: BackendConfig;
+	env: NodeJS.ProcessEnv;
 	folders: ExtensionFolders;
 	enabledExtensions: ReadonlySet<string>;
 };
@@ -41,12 +48,6 @@ export type InterfaceRow = {
 	hasPiExtension: boolean;
 };
 
-export type InterfaceInventory = {
-	builtin: readonly InterfaceRow[];
-	external: readonly InterfaceRow[];
-	piFiles: readonly string[];
-};
-
 export type ExtensionInventory = {
 	agentic: readonly AgenticRow[];
 	agenticError?: string;
@@ -63,52 +64,88 @@ const kindOrder = { file: 0, package: 1, builtin: 2 } as const;
 export function readExtensionInventory(
 	options: ExtensionInventoryOptions,
 ): ExtensionInventory {
-	const { agentDir, home } = options;
-	const interfaceInventory = readInterfaceInventory(options);
-	const settings = readSettings(join(agentDir, "settings.json"));
-	const filters = splitFilters(strings(settings.value.extensions));
-	const files = collectFiles(agentDir, home, filters);
-	const piFiles = new Set(interfaceInventory.piFiles);
-	const rows = fileRows(agentDir, files, piFiles);
-	// why: the same file can reach Pi through `extensions` and through a package, and the explicit and discovered rows are the ones a user recognizes; an Extension's own Pi file belongs to Interface, not here.
-	const listed = new Set(files.map((file) => canonical(file.path)));
-	const packages = collectPackages(
-		settings.value.packages,
-		agentDir,
-		home,
-	).filter((entry) => {
-		if (entry.path === undefined) return true;
-		const path = canonical(entry.path);
-		return !listed.has(path) && !piFiles.has(path);
-	});
-	const agentic = [
-		...rows,
-		...packages.map((entry) => entry.row),
-		...builtinRows(filters),
-	].sort(compareRows);
+	const env = backendEnvironment(options.backend, options.env);
+	const home = env.HOME ?? homedir();
+	const groups = collectInterface(options.folders, options.enabledExtensions);
+	const { rows, error } = agenticRows(options.cwd, home, env, groups.piFiles);
 	return {
-		agentic,
-		...(settings.error === undefined ? {} : { agenticError: settings.error }),
-		builtin: interfaceInventory.builtin,
-		external: interfaceInventory.external,
+		agentic: rows,
+		...(error === undefined ? {} : { agenticError: error }),
+		builtin: groups.builtin,
+		external: groups.external,
 	};
 }
 
-export function readInterfaceInventory(
-	options: Pick<ExtensionInventoryOptions, "folders" | "enabledExtensions">,
-): InterfaceInventory {
+function agenticRows(
+	cwd: string,
+	home: string,
+	env: NodeJS.ProcessEnv,
+	piFiles: ReadonlySet<string>,
+): { rows: AgenticRow[]; error?: string } {
+	let agentDir: string;
+	try {
+		agentDir = backendAgentDir(cwd, env);
+	} catch (failure) {
+		// why: an unresolvable agent dir hides the files but not the built-in Pi extensions, which do not live there.
+		return {
+			rows: builtinRows(splitFilters([])),
+			error: message(failure),
+		};
+	}
+	const settings = readSettings(join(agentDir, "settings.json"));
+	const filters = splitFilters(strings(settings.value.extensions));
+	const files = collectFiles(agentDir, home, filters);
+	// why: the same file can reach Pi through `extensions` and through a package, and the explicit and discovered rows are the ones a user recognizes; an Extension's own Pi file belongs to Interface, not here.
+	const listed = new Set(files.map((file) => canonical(file.path)));
+	const packages = uniquePackages(
+		collectPackages(settings.value.packages, agentDir, home),
+		(path) => listed.has(path) || piFiles.has(path),
+	);
+	const rows = [
+		...fileRows(agentDir, files, piFiles),
+		...packages,
+		...builtinRows(filters),
+	].sort(compareRows);
+	return {
+		rows,
+		...(settings.error === undefined ? {} : { error: settings.error }),
+	};
+}
+
+// why: two declarations can reach one file through a symlink, and Pi loads it if either of them enables it, so the enabled row is the one worth showing.
+function uniquePackages(
+	entries: readonly { path?: string; row: AgenticRow }[],
+	skip: (path: string) => boolean,
+) {
+	const kept = new Map<string, AgenticRow>();
+	const rest: AgenticRow[] = [];
+	for (const entry of entries) {
+		if (entry.path === undefined) {
+			rest.push(entry.row);
+			continue;
+		}
+		const path = canonical(entry.path);
+		if (skip(path)) continue;
+		const found = kept.get(path);
+		if (!found) kept.set(path, entry.row);
+		else if (found.state !== "enabled" && entry.row.state === "enabled")
+			kept.set(path, entry.row);
+	}
+	return [...rest, ...kept.values()];
+}
+
+function collectInterface(
+	folders: ExtensionFolders,
+	enabledExtensions: ReadonlySet<string>,
+) {
 	const builtin: InterfaceRow[] = [];
 	const external: InterfaceRow[] = [];
-	const piFiles: string[] = [];
-	for (const [name, dir] of options.folders) {
+	const piFiles = new Set<string>();
+	for (const [name, dir] of folders) {
 		const piExtension = join(dir, "pi-extension.ts");
 		const hasPiExtension = existsSync(piExtension);
-		if (hasPiExtension) piFiles.push(canonical(piExtension));
-		const row = {
-			name,
-			enabled: options.enabledExtensions.has(name),
-			hasPiExtension,
-		};
+		if (hasPiExtension) piFiles.add(canonical(piExtension));
+		const row = { name, enabled: enabledExtensions.has(name), hasPiExtension };
 		if (dirname(dir) === builtinDir) builtin.push(row);
 		else external.push(row);
 	}
@@ -253,12 +290,21 @@ function splitFilters(entries: readonly string[]): Filters {
 	return filters;
 }
 
-function enabledByFilters(path: string, baseDir: string, filters: Filters) {
+// why: Pi applies every `!` exclusion first, then an exact `+` inclusion, then an exact `-` exclusion, so a `+` entry re-enables what a `!` dropped and `-` beats both.
+function byOverrides(excluded: boolean, included: boolean, removed: boolean) {
 	let enabled = true;
-	if (matchesAny(path, baseDir, filters.excludes)) enabled = false;
-	if (matchesExact(path, baseDir, filters.includes)) enabled = true;
-	if (matchesExact(path, baseDir, filters.removes)) enabled = false;
+	if (excluded) enabled = false;
+	if (included) enabled = true;
+	if (removed) enabled = false;
 	return enabled;
+}
+
+function enabledByFilters(path: string, baseDir: string, filters: Filters) {
+	return byOverrides(
+		matchesAny(path, baseDir, filters.excludes),
+		matchesExact(path, baseDir, filters.includes),
+		matchesExact(path, baseDir, filters.removes),
+	);
 }
 
 type FileEntry = {
@@ -280,7 +326,8 @@ function collectFiles(
 		});
 	};
 	for (const entry of filters.adds)
-		for (const path of discover(expandPath(entry, agentDir, home))) add(path);
+		for (const path of discover(resolve(agentDir, expandPath(entry, home))))
+			add(path);
 	for (const path of discover(join(agentDir, "extensions"))) add(path);
 	return [...entries.values()];
 }
@@ -469,11 +516,17 @@ function packagePath(root: string, path: string) {
 function packageEntries(root: string): string[] {
 	const declared = strings(piManifest(root)?.extensions);
 	if (declared.length === 0) return discover(join(root, "extensions"));
-	// why: a manifest that lists extensions narrows the package to exactly those files; Pi does not fall back to `index.ts` for it.
+	// why: a manifest that lists extensions narrows the package to exactly those files, its own `!`, `+` and `-` entries included, and Pi does not fall back to `index.ts` for it.
 	const seen = new Set([canonical(root)]);
-	return declared
-		.flatMap((entry) => expandManifestEntry(entry, root, seen))
-		.sort(compareText);
+	const allowed = declared.flatMap((entry) =>
+		expandManifestEntry(entry, root, seen),
+	);
+	const overrides = declared.filter((entry) => /^[!+-]/.test(entry));
+	const enabled =
+		overrides.length === 0
+			? new Set(allowed)
+			: filtered(allowed, overrides, root);
+	return allowed.filter((path) => enabled.has(path)).sort(compareText);
 }
 
 function filtered(
@@ -530,13 +583,11 @@ function deltaFiltered(
 function builtinRows(filters: Filters): AgenticRow[] {
 	return builtinExtensions.map((name) => {
 		const id = `builtin:${name}`;
-		let enabled = true;
-		if (filters.excludes.some((pattern) => matchesGlob(id, pattern)))
-			enabled = false;
-		if (filters.includes.some((pattern) => normalizeExact(pattern) === id))
-			enabled = true;
-		if (filters.removes.some((pattern) => normalizeExact(pattern) === id))
-			enabled = false;
+		const enabled = byOverrides(
+			filters.excludes.some((pattern) => matchesGlob(id, pattern)),
+			filters.includes.some((pattern) => normalizeExact(pattern) === id),
+			filters.removes.some((pattern) => normalizeExact(pattern) === id),
+		);
 		return {
 			kind: "builtin" as const,
 			name: id,
@@ -548,9 +599,9 @@ function builtinRows(filters: Filters): AgenticRow[] {
 function packageRoot(source: string, agentDir: string, home: string) {
 	if (source.startsWith("npm:"))
 		return npmRoot(source.slice(4).trim(), agentDir);
-	if (isLocalSource(source)) return expandPath(source, agentDir, home);
+	if (isLocalSource(source)) return resolve(agentDir, expandPath(source, home));
 	const git = parseGitSource(source);
-	if (!git) return expandPath(source, agentDir, home);
+	if (!git) return resolve(agentDir, expandPath(source, home));
 	const root = join(agentDir, "git");
 	const path = resolve(root, git.host, git.path);
 	return isInside(root, path) ? path : undefined;
@@ -589,24 +640,12 @@ function parseGitSource(source: string) {
 		.replace(/\/+$/, "");
 	const [host, ...rest] = bare.split("/");
 	if (!host || rest.length === 0) return undefined;
-	return { host, path: rest.join("/") };
+	return { host, path: rest.join("/").split("@")[0] ?? "" };
 }
 
 function isInside(root: string, path: string) {
 	const rel = relative(root, path);
 	return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-}
-
-function expandPath(value: string, baseDir: string, home: string) {
-	const trimmed = value.trim();
-	const expanded = trimmed.startsWith("file://")
-		? fileURLToPath(trimmed)
-		: trimmed === "~"
-			? home
-			: trimmed.startsWith("~/")
-				? join(home, trimmed.slice(2))
-				: trimmed;
-	return resolve(baseDir, expanded);
 }
 
 function compareText(left: string, right: string) {
