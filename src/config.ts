@@ -30,6 +30,7 @@ export type Config = {
 	layout: Slot;
 	placement: Placement;
 	modules: Readonly<Record<string, ModuleSettings>>;
+	extensions: Readonly<Record<string, { enabled?: boolean }>>;
 	keybindings: Keybindings;
 	theme: ThemeConfig;
 	animations: boolean;
@@ -120,6 +121,7 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 		bottom: ["model.current", "input.dir", "status.working"],
 	},
 	modules: {},
+	extensions: {},
 	theme: { mode: "auto" },
 	animations: true,
 	keybindings: {
@@ -150,6 +152,7 @@ const topLevelKeys = [
 	"layout",
 	"placement",
 	"modules",
+	"extensions",
 	"keybindings",
 	"theme",
 	"animations",
@@ -185,6 +188,9 @@ export function loadConfig(path: string): Config {
 			panelIds,
 		),
 		modules: parseModules(mergeObjects(defaultConfig.modules, user.modules)),
+		extensions: parseExtensions(
+			mergeObjects(defaultConfig.extensions, user.extensions),
+		),
 		keybindings:
 			user.keybindings === undefined ? {} : parseKeybindings(user.keybindings),
 		theme: parseTheme(mergeObjects(defaultConfig.theme, user.theme)),
@@ -195,14 +201,98 @@ export function loadConfig(path: string): Config {
 	};
 }
 
+export function requiredExtension(name: string) {
+	return name === "chat" || name === "input";
+}
+
+function parseExtensions(value: unknown): Config["extensions"] {
+	return Object.fromEntries(
+		Object.entries(object(value, "extensions")).map(([name, entry]) => {
+			const path = `extensions.${name}`;
+			const fields = object(entry, path);
+			onlyKeys(fields, ["enabled"], path);
+			if (!("enabled" in fields)) return [name, {}];
+			const enabled = boolean(fields.enabled, `${path}.enabled`);
+			if (!enabled && requiredExtension(name))
+				throw fieldError(`${path}.enabled`, "this Extension is required");
+			return [name, { enabled }];
+		}),
+	);
+}
+
 export type GlobalSettingChange =
 	| { key: "theme.mode"; value: ThemePreference }
 	| { key: "animations"; value: boolean };
 
-export function saveGlobalSetting(path: string, change: GlobalSettingChange) {
+function readPersonalConfig(path: string) {
 	const { value, error } = readJson(path);
 	if (error) throw new Error(error);
-	const config = value === undefined ? {} : object(value, "config");
+	return value === undefined ? {} : object(value, "config");
+}
+
+export function saveExtensionSettings(
+	path: string,
+	edits: readonly (
+		| { name: string; enabled: boolean }
+		| { name: string; removeActions: ReadonlySet<string> }
+	)[],
+) {
+	const config = readPersonalConfig(path);
+	const extensions = Object.assign(
+		Object.create(null) as Fields,
+		object(config.extensions ?? {}, "extensions"),
+	);
+	for (const edit of edits) {
+		const { name } = edit;
+		if (requiredExtension(name))
+			throw fieldError(`extensions.${name}`, "this Extension is required");
+		if ("enabled" in edit && !edit.enabled) {
+			extensions[name] = {
+				...object(
+					Object.hasOwn(extensions, name) ? extensions[name] : {},
+					`extensions.${name}`,
+				),
+				enabled: false,
+			};
+			continue;
+		}
+		delete extensions[name];
+		if ("enabled" in edit) continue;
+		const prefix = `${name}.`;
+		if (config.placement !== undefined) {
+			config.placement = Object.fromEntries(
+				Object.entries(object(config.placement, "placement")).map(
+					([panel, ids]) => [
+						panel,
+						stringArray(ids, `placement.${panel}`).filter(
+							(id) => !id.startsWith(prefix),
+						),
+					],
+				),
+			);
+		}
+		if (config.modules !== undefined) {
+			config.modules = Object.fromEntries(
+				Object.entries(object(config.modules, "modules")).filter(
+					([id]) => !id.startsWith(prefix),
+				),
+			);
+		}
+		if (config.keybindings !== undefined) {
+			config.keybindings = Object.fromEntries(
+				Object.entries(object(config.keybindings, "keybindings")).filter(
+					([id]) => !id.startsWith(prefix) && !edit.removeActions.has(id),
+				),
+			);
+		}
+	}
+	if (Object.keys(extensions).length > 0) config.extensions = extensions;
+	else delete config.extensions;
+	writeJson(path, config, 2);
+}
+
+export function saveGlobalSetting(path: string, change: GlobalSettingChange) {
+	const config = readPersonalConfig(path);
 	if (change.key === "theme.mode") {
 		const theme = "theme" in config ? object(config.theme, "theme") : {};
 		writeJson(path, { ...config, theme: { ...theme, mode: change.value } }, 2);
@@ -212,9 +302,7 @@ export function saveGlobalSetting(path: string, change: GlobalSettingChange) {
 }
 
 function readKeybindingConfig(path: string) {
-	const { value, error } = readJson(path);
-	if (error) throw new Error(error);
-	const config = value === undefined ? {} : object(value, "config");
+	const config = readPersonalConfig(path);
 	const bindings =
 		"keybindings" in config ? object(config.keybindings, "keybindings") : {};
 	return { config, bindings };
@@ -283,12 +371,15 @@ function readUserConfig(path: string): Fields {
 function mergeObjects(base: Fields, over: unknown): unknown {
 	if (over === undefined) return base;
 	if (!isObject(over)) return over;
-	const merged: Fields = { ...base };
-	for (const [key, value] of Object.entries(over)) {
-		const current = base[key];
-		merged[key] = isObject(current) ? mergeObjects(current, value) : value;
-	}
-	return merged;
+	return {
+		...base,
+		...Object.fromEntries(
+			Object.entries(over).map(([key, value]) => {
+				const current = Object.hasOwn(base, key) ? base[key] : undefined;
+				return [key, isObject(current) ? mergeObjects(current, value) : value];
+			}),
+		),
+	};
 }
 
 function parseBackend(value: unknown): BackendConfig {

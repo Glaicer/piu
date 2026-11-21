@@ -176,7 +176,7 @@ test("Interface separates built-in and external extensions without repeating the
 		expect(view).toMatch(/^ {2}chat\s+builtin\s+enabled/mu);
 		expect(view).toMatch(/^External extensions\b/mu);
 		expect(view).toMatch(
-			/^ {2}counter\s+personal\s+disabled\s+\+ Pi extension/mu,
+			/^ {2}counter\s+personal\s+enabled\s+\+ Pi extension\s+not placed/mu,
 		);
 		expect(view).not.toContain("pi-extension");
 		writeFileSync(

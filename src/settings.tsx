@@ -14,7 +14,7 @@ import type {
 } from "./module.ts";
 import { PickerLink } from "./picker.tsx";
 import { scrollIntoView, scrollKeys } from "./scroll.ts";
-import { createExtensionsTab } from "./settings-extensions.tsx";
+import { createExtensionsDraft } from "./settings-extensions.tsx";
 import { openSystemShortcuts } from "./system-shortcuts.tsx";
 import { Tabs } from "./tabs.tsx";
 import { type Theme, type ThemePreference, themeModes } from "./theme.ts";
@@ -33,6 +33,7 @@ export function createSettings(options: {
 	personal: Accessor<Keybindings>;
 	applyKeybindings(next: Keybindings): void;
 	readExtensions(): ExtensionInventory;
+	saveExtensions: Parameters<typeof createExtensionsDraft>[1]["save"];
 	notify(message: string): void;
 }) {
 	const [mode, setMode] = createSignal(options.mode);
@@ -86,24 +87,16 @@ export function createSettings(options: {
 			/>
 		),
 	};
-	const tabs = [
-		global,
-		createExtensionsTab(options.readExtensions),
-		hotkeys.tab,
-		...options.tabs,
-	];
-	const keys = tabs.map((_, index) => index);
-	const status = (active: number) => {
-		const tab = tabs[active] ?? global;
+	const status = (tab: SettingsTab) => {
 		return tab === hotkeys.tab ? hotkeys.status() : undefined;
 	};
-	const footer = (active: number) => {
-		const tab = tabs[active] ?? global;
+	const footer = (tab: SettingsTab, isExtensions: boolean) => {
 		if (tab === hotkeys.tab && hotkeys.busy()) return ` ${hotkeys.hint()}`;
 		const parts: string[] = [];
 		if (tab === global) parts.push("↑/↓ select   ⏎ change");
 		else if (tab === hotkeys.tab) parts.push(hotkeys.hint());
-		if (tabs.length > 1) parts.push("ctrl+PgUp/PgDn tabs");
+		else if (isExtensions) parts.push("↑/↓ select   ⏎ toggle   Del mark");
+		parts.push("ctrl+PgUp/PgDn tabs");
 		parts.push("esc close");
 		return ` ${parts.join("   ")}`;
 	};
@@ -111,6 +104,12 @@ export function createSettings(options: {
 		mode,
 		animations,
 		open(context: CommandContext, tab: BuiltinSettingsTab = "global") {
+			const extensions = createExtensionsDraft(context, {
+				read: options.readExtensions,
+				save: options.saveExtensions,
+			});
+			const tabs = [global, extensions.tab, hotkeys.tab, ...options.tabs];
+			const keys = tabs.map((_, index) => index);
 			const [active, setActive] = createSignal(
 				tabs.indexOf(tab === "hotkeys" ? hotkeys.tab : global),
 			);
@@ -123,7 +122,7 @@ export function createSettings(options: {
 				resetScroll?.();
 				setActive(key);
 			};
-			context.actions.openModal({
+			const close = context.actions.openModal({
 				...moduleModal(
 					{
 						id: "settings-tabs",
@@ -168,13 +167,16 @@ export function createSettings(options: {
 						footer: true,
 						render: () => (
 							<box flexDirection="column" flexShrink={0} paddingTop={1}>
-								<Show when={status(active())}>
+								<Show when={current() === extensions.tab}>
+									<box alignSelf="flex-start">{extensions.footer()}</box>
+								</Show>
+								<Show when={status(current())}>
 									<text fg={context.theme.error} wrapMode="word">
-										{` ${status(active()) ?? ""}`}
+										{` ${status(current()) ?? ""}`}
 									</text>
 								</Show>
 								<text fg={context.theme.faint} wrapMode="none" truncate>
-									{footer(active())}
+									{footer(current(), current() === extensions.tab)}
 								</text>
 							</box>
 						),
@@ -182,9 +184,21 @@ export function createSettings(options: {
 				),
 				onDismiss(reason) {
 					if (reason === "escape" && hotkeys.cancel()) return false;
+					return extensions.dismiss(close);
 				},
 				onKey(event) {
 					if (hotkeys.busy()) return;
+					if (
+						current() === extensions.tab &&
+						event.ctrl &&
+						!event.meta &&
+						!event.shift &&
+						event.name === "s"
+					) {
+						event.preventDefault();
+						extensions.save();
+						return;
+					}
 					if (
 						current() === hotkeys.tab &&
 						event.sequence === "?" &&

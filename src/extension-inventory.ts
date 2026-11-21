@@ -30,21 +30,24 @@ export type ExtensionInventoryOptions = {
 	backend: BackendConfig;
 	env: NodeJS.ProcessEnv;
 	folders: ExtensionFolders;
-	enabledExtensions: ReadonlySet<string>;
+	placedExtensions: ReadonlySet<string>;
+	disabledExtensions: ReadonlySet<string>;
 };
 
 export type AgenticRow = {
 	name: string;
 	state: "enabled" | "disabled" | "unavailable";
 } & (
-	| { kind: "file"; path: string }
-	| { kind: "package"; source: string }
+	| { kind: "file"; path: string; removable: boolean }
+	| { kind: "package"; source: string; singleFile?: true }
 	| { kind: "builtin" }
 );
 
 export type InterfaceRow = {
 	name: string;
 	enabled: boolean;
+	placed: boolean;
+	removable: boolean;
 	hasPiExtension: boolean;
 };
 
@@ -66,7 +69,7 @@ export function readExtensionInventory(
 ): ExtensionInventory {
 	const env = backendEnvironment(options.backend, options.env);
 	const home = env.HOME ?? homedir();
-	const groups = collectInterface(options.folders, options.enabledExtensions);
+	const groups = collectInterface(options);
 	const { rows, error } = agenticRows(options.cwd, home, env, groups.piFiles);
 	return {
 		agentic: rows,
@@ -131,10 +134,11 @@ function uniquePackages(
 	return [...rest, ...kept.values()];
 }
 
-function collectInterface(
-	folders: ExtensionFolders,
-	enabledExtensions: ReadonlySet<string>,
-) {
+function collectInterface({
+	folders,
+	placedExtensions,
+	disabledExtensions,
+}: ExtensionInventoryOptions) {
 	const builtin: InterfaceRow[] = [];
 	const external: InterfaceRow[] = [];
 	const piFiles = new Set<string>();
@@ -142,7 +146,13 @@ function collectInterface(
 		const piExtension = join(dir, "pi-extension.ts");
 		const hasPiExtension = existsSync(piExtension);
 		if (hasPiExtension) piFiles.add(canonical(piExtension));
-		const row = { name, enabled: enabledExtensions.has(name), hasPiExtension };
+		const row = {
+			name,
+			enabled: !disabledExtensions.has(name),
+			placed: placedExtensions.has(name),
+			removable: dirname(dir) !== builtinDir,
+			hasPiExtension,
+		};
 		if (dirname(dir) === builtinDir) builtin.push(row);
 		else external.push(row);
 	}
@@ -160,7 +170,7 @@ type SettingsRead = {
 	error?: string;
 };
 
-function readSettings(file: string): SettingsRead {
+export function readSettings(file: string): SettingsRead {
 	let text: string;
 	try {
 		text = readFileSync(file, "utf8");
@@ -208,7 +218,7 @@ function piManifest(root: string): Record<string, unknown> | undefined {
 	return isRecord(pi) ? pi : undefined;
 }
 
-function canonical(path: string) {
+export function canonical(path: string) {
 	try {
 		return realpathSync(path);
 	} catch {
@@ -433,6 +443,7 @@ function fileRows(
 			kind: "file" as const,
 			name: stripExtension(basename(file.path)),
 			path: displayPath(agentDir, file.path),
+			removable: isInside(canonical(agentDir), canonical(file.path)),
 			state: file.enabled ? ("enabled" as const) : ("disabled" as const),
 		}));
 }
@@ -464,21 +475,26 @@ function collectPackages(
 	});
 }
 
+export function packageSource(entry: unknown) {
+	return typeof entry === "string"
+		? entry
+		: isRecord(entry) && typeof entry.source === "string"
+			? entry.source
+			: undefined;
+}
+
 function packageRows(
 	entry: unknown,
 	agentDir: string,
 	home: string,
 ): { path?: string; row: AgenticRow }[] {
-	const source =
-		typeof entry === "string"
-			? entry
-			: isRecord(entry) && typeof entry.source === "string"
-				? entry.source
-				: undefined;
+	const source = packageSource(entry);
 	if (!source) return [];
 	const filter = isRecord(entry) ? entry : undefined;
-	const extensions = filter ? strings(filter.extensions) : undefined;
-	const empty = Array.isArray(filter?.extensions) && extensions?.length === 0;
+	const extensions = Array.isArray(filter?.extensions)
+		? strings(filter.extensions)
+		: undefined;
+	const empty = extensions?.length === 0;
 	const missing = (): { row: AgenticRow }[] => [
 		{
 			row: {
@@ -500,6 +516,7 @@ function packageRows(
 				row: {
 					kind: "package",
 					source,
+					singleFile: true,
 					name: stripExtension(basename(root)),
 					state: "enabled",
 				},
@@ -660,9 +677,14 @@ function parseGitSource(source: string) {
 	return { host, path };
 }
 
-function isInside(root: string, path: string) {
+export function isInside(root: string, path: string) {
 	const rel = relative(root, path);
-	return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+	return (
+		rel !== "" &&
+		rel !== ".." &&
+		!rel.startsWith(`..${sep}`) &&
+		!isAbsolute(rel)
+	);
 }
 
 function compareText(left: string, right: string) {

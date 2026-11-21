@@ -35,10 +35,13 @@ import {
 	type ExtensionInventoryOptions,
 	readExtensionInventory,
 } from "./extension-inventory.ts";
+import { saveExtensions } from "./extension-settings.ts";
 import {
 	builtinDir,
+	extensionActions,
 	findExtensions,
 	type LoadedKeybindingAction,
+	moduleOwner,
 	type ResolvedPlacement,
 	resolvePlacement,
 } from "./extensions.ts";
@@ -110,7 +113,7 @@ export async function createApp(options: {
 			);
 		}
 	}
-	const keybindings = prepareKeybindings(config, placement, folders);
+	const keybindings = await prepareKeybindings(config, placement, folders);
 	let startupLease: InstallLease | undefined;
 	try {
 		startupLease = await prepareBackendLease(config.backend, {
@@ -138,8 +141,11 @@ export async function createApp(options: {
 			keybindingActions={placement.keybindingActions}
 			settingsTabs={settingsTabs}
 			extensionInventory={{
-				folders,
-				enabledExtensions: placement.enabledExtensions,
+				placedExtensions: new Set(
+					Object.values(config.placement).flatMap((ids) =>
+						ids.map(moduleOwner),
+					),
+				),
 			}}
 			motion={options.motion ?? true}
 			updateCheck={options.updateCheck ?? { fetch }}
@@ -168,11 +174,11 @@ const piuKeybindingDescriptions: Readonly<Record<string, string>> = {
 	"chat.copy": "Copy the selection or last assistant message",
 };
 
-export function prepareKeybindings(
-	config: Pick<Config, "keybindings">,
+async function prepareKeybindings(
+	config: Pick<Config, "keybindings" | "extensions">,
 	placement: ResolvedPlacement,
 	folders: ReadonlyMap<string, string>,
-): ResolvedKeybindings {
+): Promise<ResolvedKeybindings> {
 	const definitions = new Map<string, KeybindingAction>();
 	const define = (action: KeybindingAction) => {
 		if (definitions.has(action.id)) {
@@ -235,6 +241,7 @@ export function prepareKeybindings(
 		...definitions.keys(),
 		...Object.keys(defaultConfig.keybindings),
 	]);
+	let disabledCommands: Set<string> | undefined;
 	for (const id of Object.keys(config.keybindings)) {
 		if (known.has(canonicalAction(id))) continue;
 		const dot = id.indexOf(".");
@@ -250,6 +257,17 @@ export function prepareKeybindings(
 				);
 			}
 			if (validName && !placement.enabledExtensions.has(extension)) continue;
+		}
+		if (extension === "command" && validName) {
+			if (!disabledCommands) {
+				disabledCommands = new Set();
+				// why: command IDs do not name their owner. Read disabled declarations only when an otherwise unknown binding needs them.
+				for (const [name, dir] of folders)
+					if (config.extensions[name]?.enabled === false)
+						for (const action of await extensionActions(name, dir))
+							disabledCommands.add(action);
+			}
+			if (disabledCommands.has(id)) continue;
 		}
 		throw fieldError(
 			`keybindings.${id}`,
@@ -271,10 +289,7 @@ function App(props: {
 	keybindings: ResolvedKeybindings;
 	keybindingActions: readonly LoadedKeybindingAction[];
 	settingsTabs: readonly SettingsTab[];
-	extensionInventory: Pick<
-		ExtensionInventoryOptions,
-		"folders" | "enabledExtensions"
-	>;
+	extensionInventory: Pick<ExtensionInventoryOptions, "placedExtensions">;
 	motion: boolean;
 	updateCheck: UpdateCheckOptions;
 	clipboard: ClipboardService | undefined;
@@ -295,8 +310,16 @@ function App(props: {
 		setPersonal(next);
 		setKeybindings(resolveKeybindings(catalog, next));
 	};
+	const path = join(props.home, "config.json");
+	const extensionLocation = {
+		path,
+		cwd: props.cwd,
+		backend: props.config.backend,
+		env: props.env,
+		folders: () => findExtensions([builtinDir, join(props.home, "extensions")]),
+	};
 	const settings = createSettings({
-		path: join(props.home, "config.json"),
+		path,
 		clock: renderer.clock,
 		mode,
 		animations: props.config.animations,
@@ -304,13 +327,21 @@ function App(props: {
 		keybindings,
 		personal,
 		applyKeybindings,
-		readExtensions: () =>
-			readExtensionInventory({
-				cwd: props.cwd,
-				backend: props.config.backend,
-				env: props.env,
-				...props.extensionInventory,
-			}),
+		readExtensions: () => {
+			const personalConfig = loadConfig(path);
+			return readExtensionInventory({
+				...extensionLocation,
+				folders: extensionLocation.folders(),
+				placedExtensions: props.extensionInventory.placedExtensions,
+				disabledExtensions: new Set(
+					Object.entries(personalConfig.extensions)
+						.filter(([, value]) => value.enabled === false)
+						.map(([name]) => name),
+				),
+			});
+		},
+		saveExtensions: (edits, committed) =>
+			saveExtensions(extensionLocation, edits, committed),
 		notify: (message) => toasts.show(message, "error"),
 	});
 	const theme = createTheme(renderer, overrides, settings.mode);

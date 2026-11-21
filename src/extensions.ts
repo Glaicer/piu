@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support";
 import { channelTitle } from "./channel.ts";
 import { type Config, fieldError, parseBindingValue } from "./config.ts";
-import type { KeybindingAction } from "./keybindings.ts";
+import { commandAction, type KeybindingAction } from "./keybindings.ts";
 import type {
 	Command,
 	CommandContext,
@@ -73,9 +73,15 @@ function extensionNames(root: string) {
 }
 
 export async function resolvePlacement(
-	config: Pick<Config, "placement" | "modules">,
+	config: Pick<Config, "placement" | "modules" | "extensions">,
 	folders: ExtensionFolders,
 ): Promise<ResolvedPlacement> {
+	const disabled = new Set<string>();
+	for (const [name, entry] of Object.entries(config.extensions)) {
+		if (!folders.has(name))
+			throw fieldError(`extensions.${name}`, "unknown Extension");
+		if (entry.enabled === false) disabled.add(name);
+	}
 	const extensions = new Map<string, Extension>();
 	const placedIds = new Set<string>();
 	const panels = new Map<string, PlacedModule[]>();
@@ -115,6 +121,7 @@ export async function resolvePlacement(
 	for (const [panelId, moduleIds] of Object.entries(config.placement)) {
 		const placed: PlacedModule[] = [];
 		for (const [index, id] of moduleIds.entries()) {
+			if (disabled.has(moduleOwner(id))) continue;
 			const module = await findModule(id, `placement.${panelId}[${index}]`);
 			placedIds.add(id);
 			placed.push({ id, module, settings: config.modules[id] ?? {} });
@@ -123,7 +130,7 @@ export async function resolvePlacement(
 	}
 
 	for (const id of Object.keys(config.modules)) {
-		if (!placedIds.has(id)) {
+		if (!placedIds.has(id) && !disabled.has(moduleOwner(id))) {
 			throw fieldError(
 				`modules[${JSON.stringify(id)}]`,
 				"this Module is not in the Placement",
@@ -247,6 +254,21 @@ function collectKeybindingActions(
 
 function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function moduleOwner(id: string) {
+	const dot = id.indexOf(".");
+	return dot < 0 ? "" : id.slice(0, dot);
+}
+
+export async function extensionActions(name: string, dir: string) {
+	const extension = await loadExtension(name, dir);
+	return new Set([
+		...(extension.commands ?? []).map((command) => commandAction(command.name)),
+		...(extension.keybindingActions ?? []).map(
+			(action) => `${name}.${action.name}`,
+		),
+	]);
 }
 
 async function loadExtension(name: string, dir: string): Promise<Extension> {
