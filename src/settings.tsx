@@ -34,6 +34,7 @@ export function createSettings(options: {
 	applyKeybindings(next: Keybindings): void;
 	readExtensions(): ExtensionInventory;
 	saveExtensions: Parameters<typeof createExtensionsDraft>[1]["save"];
+	compileExtensions: Parameters<typeof createExtensionsDraft>[1]["compile"];
 	notify(message: string): void;
 }) {
 	const [mode, setMode] = createSignal(options.mode);
@@ -107,6 +108,7 @@ export function createSettings(options: {
 			const extensions = createExtensionsDraft(context, {
 				read: options.readExtensions,
 				save: options.saveExtensions,
+				compile: options.compileExtensions,
 			});
 			const tabs = [global, extensions.tab, hotkeys.tab, ...options.tabs];
 			const keys = tabs.map((_, index) => index);

@@ -100,6 +100,32 @@ test("a terminal that changes its background mid-session switches the tokens", a
 	);
 });
 
+for (const [from, to, code] of [
+	["light", "dark", 1],
+	["dark", "light", 2],
+] as const) {
+	test(`a terminal that announces a ${to} scheme switches the tokens without an OSC 11 reply`, async () => {
+		await using piu = await startPiu({
+			script: { replies: ["ok"] },
+			terminalBackground: from,
+		});
+		await userEcho(piu);
+		const target = to === "dark" ? darkTheme : lightTheme;
+
+		piu.renderer.stdin.emit("data", Buffer.from(`\x1b[?997;${code}n`));
+		await piu.waitForFrame(() =>
+			piu
+				.captureSpans()
+				.lines.flatMap((line) => line.spans)
+				.some(
+					(span) =>
+						span.text.trim() === "Hi" &&
+						span.fg.equals(RGBA.fromHex(target.text)),
+				),
+		);
+	});
+}
+
 test("a terminal that reports nothing gets the dark tokens", async () => {
 	await using piu = await startPiu({ script: { replies: ["ok"] } });
 

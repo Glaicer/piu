@@ -1,6 +1,7 @@
 import {
 	copyFileSync,
 	cpSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	rmSync,
@@ -372,13 +373,15 @@ export function prepareFixture(options: FixtureOptions) {
 	writeFileSync(scriptPath, JSON.stringify(options.script));
 	// why: Pi waits retry.baseDelayMs before an automatic retry and refuses to compact a session shorter than keepRecentTokens, so tests shrink both; reserveTokens 0 lets a script's small contextWindow trigger an automatic compaction.
 	mkdirSync(join(dir, "agent"), { recursive: true });
-	writeFileSync(
-		join(dir, "agent", "settings.json"),
-		JSON.stringify({
-			retry: { baseDelayMs: 20 },
-			compaction: { keepRecentTokens: 1, reserveTokens: 0 },
-		}),
-	);
+	// why: a test that reuses `dir` across a Restart keeps the Pi settings the previous launch wrote.
+	if (!existsSync(join(dir, "agent", "settings.json")))
+		writeFileSync(
+			join(dir, "agent", "settings.json"),
+			JSON.stringify({
+				retry: { baseDelayMs: 20 },
+				compaction: { keepRecentTokens: 1, reserveTokens: 0 },
+			}),
+		);
 
 	if (options.installedPiExtensions) {
 		mkdirSync(join(dir, "agent", "extensions"), { recursive: true });

@@ -4,11 +4,14 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { acquireInstallLock } from "../src/install-lock.ts";
+import { blocker } from "./blocker.ts";
 import {
 	bottomLine,
 	openSettings,
@@ -16,6 +19,7 @@ import {
 	panelText,
 	startPiu,
 } from "./harness.ts";
+import { eventually } from "./process.ts";
 
 const script = { replies: [] };
 
@@ -63,6 +67,46 @@ function click(piu: Piu, frame: string, row: string, action: string) {
 }
 
 const save = (piu: Piu) => piu.mockInput.pressKey("s", { ctrl: true });
+
+async function restarted(piu: Piu) {
+	await eventually(() => piu.exits.length > 0, "the Restart");
+	expect(piu.exits[0]?.restartArgs).toBeDefined();
+}
+
+async function applied(piu: Piu) {
+	save(piu);
+	await restarted(piu);
+}
+
+const boltVersion = "1.5.2 (Pi-Bolt 1.2.1, linux-x64, JIT off)";
+
+function fakeBackend(dir: string, version: string, compile = "exit 0") {
+	const command = join(dir, "backend");
+	writeFileSync(
+		command,
+		`#!/bin/sh
+for arg; do last=$arg; done
+if [ "$last" = --version ]; then echo '${version}'; exit 0; fi
+if [ "$1" = compile ]; then
+  echo compile >> "$PI_CODING_AGENT_DIR/compile-calls"
+  ${compile}
+fi
+if [ "$1" = remove ]; then
+  printf '%s\\n' "$@" > "$PI_CODING_AGENT_DIR/remove-args"
+  exit 0
+fi
+exec env "$@"
+`,
+		{ mode: 0o700 },
+	);
+	return command;
+}
+
+function looseFile(dir: string) {
+	const extensions = join(dir, "agent", "extensions");
+	mkdirSync(extensions, { recursive: true });
+	writeFileSync(join(extensions, "loose.ts"), "export default () => {};");
+}
 const read = (path: string) => readFileSync(path, "utf8");
 
 function personal() {
@@ -70,9 +114,12 @@ function personal() {
 	const path = join(dir, "config.json");
 	const folder = join(dir, "extensions", "editable");
 	mkdirSync(folder, { recursive: true });
+	const imported = join(dir, "index.log");
 	writeFileSync(
 		join(folder, "index.tsx"),
-		`export default {
+		`import { appendFileSync } from "node:fs";
+		appendFileSync(${JSON.stringify(imported)}, "imported\\n");
+		export default {
 		modules: [{ id: "view", render: () => <text>Editable Module</text> }],
 		commands: [{ name: "editable-command", run() {} }],
 		channels: ["edit"],
@@ -89,6 +136,7 @@ function personal() {
 		path,
 		folder,
 		marker,
+		imported,
 		[Symbol.dispose]: () => rmSync(dir, { recursive: true, force: true }),
 	};
 }
@@ -101,6 +149,26 @@ const personalConfig = {
 	},
 	extensions: { background: { enabled: false } },
 };
+
+test("Bindings to unknown commands are ignored, and a disabled Extension is not imported for them", async () => {
+	using fixture = personal();
+	const { dir, imported } = fixture;
+	await using piu = await startPiu({
+		dir,
+		script,
+		config: {
+			...personalConfig,
+			keybindings: {
+				...personalConfig.keybindings,
+				"command.no-such-command": "alt+q",
+			},
+			extensions: { editable: { enabled: false } },
+		},
+	});
+	const frame = await piu.waitForFrame((frame) => frame.includes("/ commands"));
+	expect(frame).not.toContain("Editable Module");
+	expect(existsSync(imported)).toBe(false);
+});
 
 test("Interface toggles in a draft, persists on Save, and restores placement after the next launch", async () => {
 	using fixture = personal();
@@ -123,10 +191,7 @@ test("Interface toggles in a draft, persists on Save, and restores placement aft
 			/editable +personal +disabled.*changed/.test(frame),
 		);
 		expect(read(path)).toBe(before);
-		save(piu);
-		await piu.waitForFrame((frame) =>
-			frame.includes("Changes take effect after Restart"),
-		);
+		await applied(piu);
 		expect(JSON.parse(read(path))).toMatchObject({
 			...personalConfig,
 			extensions: {
@@ -155,10 +220,7 @@ test("Interface toggles in a draft, persists on Save, and restores placement aft
 		piu.mockInput.pressKey("u", { ctrl: true });
 		const frame = await extensions(piu, "editable  personal");
 		await click(piu, frame, "editable  personal", "[ ]");
-		save(piu);
-		await piu.waitForFrame((frame) =>
-			frame.includes("Changes take effect after Restart"),
-		);
+		await applied(piu);
 		expect(JSON.parse(read(path)).extensions).toEqual(
 			personalConfig.extensions,
 		);
@@ -234,13 +296,12 @@ test("Deleting shows both targets, cancel leaves them intact, and accepting clea
 		expect(existsSync(folder)).toBe(true);
 		expect(read(path)).toBe(before);
 		expect(read(settings)).toBe(JSON.stringify(original));
+		expect(piu.exits).toEqual([]);
 		save(piu);
 		await piu.waitForFrame(confirmation);
 		piu.mockInput.pressArrow("down");
 		piu.mockInput.pressEnter();
-		await piu.waitForFrame((frame) =>
-			frame.includes("Changes take effect after Restart"),
-		);
+		await restarted(piu);
 		expect(existsSync(file)).toBe(false);
 		expect(existsSync(folder)).toBe(false);
 		expect(JSON.parse(read(settings))).toEqual({ ...original, extensions: [] });
@@ -258,71 +319,49 @@ test("Deleting shows both targets, cancel leaves them intact, and accepting clea
 });
 
 test("A Pi extension file is disabled and enabled without overwriting other settings or Pi's lock", async () => {
-	await using piu = await startPiu({ script, height: 40 });
-	await piu.waitForFrame((frame) => frame.includes("faux-1"));
-	const dir = join(piu.dir, "agent");
-	const path = join(dir, "settings.json");
-	mkdirSync(join(dir, "extensions"));
-	writeFileSync(
-		join(dir, "extensions", "loose.ts"),
-		"export default () => {};",
-	);
-	const before = { ...JSON.parse(read(path)), lastChangelogVersion: "kept" };
-	writeFileSync(path, JSON.stringify(before));
-	await extensions(piu, "loose  file:");
-	piu.mockInput.pressEnter();
-	await piu.waitForFrame((frame) =>
-		/loose +file:.*disabled.*changed/.test(frame),
-	);
-	mkdirSync(`${path}.lock`);
-	save(piu);
-	await piu.waitForFrame((frame) =>
-		frame.includes("Could not save Extensions"),
-	);
-	expect(read(path)).toBe(JSON.stringify(before));
-	expect(existsSync(`${path}.lock`)).toBe(true);
-	rmSync(`${path}.lock`, { recursive: true });
-	save(piu);
-	const disabled = await piu.waitForFrame(
-		(frame) =>
-			frame.includes("Changes take effect after Restart") &&
-			/loose +file:.*disabled/.test(frame),
-	);
-	expect(JSON.parse(read(path))).toEqual({
-		...before,
-		extensions: ["-extensions/loose.ts"],
-	});
+	using fixture = personal();
+	const { dir } = fixture;
+	const path = join(dir, "agent", "settings.json");
+	const launch = () => startPiu({ dir, script, height: 40 });
+	let before: Record<string, unknown>;
+	{
+		await using piu = await launch();
+		await piu.waitForFrame((frame) => frame.includes("faux-1"));
+		looseFile(dir);
+		before = { ...JSON.parse(read(path)), lastChangelogVersion: "kept" };
+		writeFileSync(path, JSON.stringify(before));
+		await extensions(piu, "loose  file:");
+		piu.mockInput.pressEnter();
+		await piu.waitForFrame((frame) =>
+			/loose +file:.*disabled.*changed/.test(frame),
+		);
+		mkdirSync(`${path}.lock`);
+		save(piu);
+		await piu.waitForFrame((frame) =>
+			frame.includes("Could not save Extensions"),
+		);
+		expect(read(path)).toBe(JSON.stringify(before));
+		expect(existsSync(`${path}.lock`)).toBe(true);
+		expect(piu.exits).toEqual([]);
+		rmSync(`${path}.lock`, { recursive: true });
+		await applied(piu);
+		expect(JSON.parse(read(path))).toEqual({
+			...before,
+			extensions: ["-extensions/loose.ts"],
+		});
+	}
+	await using piu = await launch();
+	const disabled = await extensions(piu, "loose  file:");
 	await click(piu, disabled, "loose  file:", "[ ]");
-	save(piu);
-	await piu.waitForFrame(
-		(frame) =>
-			/loose +file:.*enabled/.test(frame) && !frame.includes("Save [ctrl+s] *"),
-	);
+	await applied(piu);
 	expect(JSON.parse(read(path))).toEqual({ ...before, extensions: [] });
 });
 
 test("Package Save patches only the extension filter and confirmed deletion calls the configured Backend", async () => {
 	using fixture = personal();
 	const { dir } = fixture;
-	const command = join(dir, "backend");
-	writeFileSync(
-		command,
-		`#!/bin/sh
-if [ "$1" = remove ]; then
-  printf '%s\\n' "$@" > "$PI_CODING_AGENT_DIR/remove-args"
-else
-  exec env "$@"
-fi
-`,
-		{ mode: 0o700 },
-	);
-	await using piu = await startPiu({
-		dir,
-		script,
-		backendCommand: command,
-		height: 65,
-	});
-	await piu.waitForFrame((frame) => frame.includes("faux-1"));
+	const backendCommand = fakeBackend(dir, "1.5.0");
+	const launch = () => startPiu({ dir, script, backendCommand, height: 65 });
 	const agent = join(dir, "agent");
 	const folder = join(agent, "npm", "node_modules", "fixture", "extensions");
 	mkdirSync(folder, { recursive: true });
@@ -330,40 +369,200 @@ fi
 	const source = "npm:fixture";
 	const path = join(agent, "settings.json");
 	const log = join(agent, "remove-args");
-	const pkg = { source, skills: [] };
-	const original = { ...JSON.parse(read(path)), packages: [pkg] };
-	writeFileSync(path, JSON.stringify(original));
+	const pkg = { source, skills: [], extensions: ["extensions/*.ts"] };
 	const row = "extensions/tool  package:";
-	const enabled = await extensions(piu, row);
-	await click(piu, enabled, row, "[x]");
-	save(piu);
-	const disabled = await piu.waitForFrame(
-		(frame) =>
-			/extensions\/tool +package: npm:fixture +disabled/.test(frame) &&
-			!frame.includes("* changed"),
-	);
+	const toggle = async (from: "[x]" | "[ ]") => {
+		await using piu = await launch();
+		const frame = await extensions(piu, row);
+		await click(piu, frame, row, from);
+		await applied(piu);
+	};
+	let original: Record<string, unknown>;
+	{
+		await using piu = await launch();
+		await piu.waitForFrame((frame) => frame.includes("faux-1"));
+		original = { ...JSON.parse(read(path)), packages: [pkg] };
+		writeFileSync(path, JSON.stringify(original));
+	}
+	await toggle("[x]");
 	expect(JSON.parse(read(path))).toEqual({
 		...original,
 		packages: [{ ...pkg, extensions: [] }],
 	});
-	await click(piu, disabled, row, "[ ]");
-	save(piu);
-	const restored = await piu.waitForFrame(
-		(frame) =>
-			/extensions\/tool +package: npm:fixture +enabled/.test(frame) &&
-			!frame.includes("* changed"),
-	);
+	await toggle("[ ]");
 	expect(JSON.parse(read(path))).toEqual(original);
-	await click(piu, restored, row, "Delete");
+	await toggle("[x]");
+	const edited = { ...pkg, extensions: [], prompts: [] };
+	writeFileSync(path, JSON.stringify({ ...original, packages: [edited] }));
+	await toggle("[ ]");
+	expect(JSON.parse(read(path))).toEqual({
+		...original,
+		packages: [{ source, skills: [], prompts: [] }],
+	});
+	await using piu = await launch();
+	const frame = await extensions(piu, row);
+	await click(piu, frame, row, "Delete");
 	save(piu);
 	await piu.waitForFrame((frame) => frame.includes("Package: npm:fixture"));
 	expect(existsSync(log)).toBe(false);
 	piu.mockInput.pressArrow("down");
 	piu.mockInput.pressEnter();
+	await restarted(piu);
+	expect(read(log)).toBe("remove\nnpm:fixture\n");
+});
+
+test("A single-file package is disabled by removing its entry and enabled back in place", async () => {
+	using fixture = personal();
+	const { dir } = fixture;
+	const path = join(dir, "agent", "settings.json");
+	const row = "single  package: ./single.ts";
+	let before: Record<string, unknown>;
+	{
+		await using piu = await startPiu({ dir, script, height: 40 });
+		await piu.waitForFrame((frame) => frame.includes("faux-1"));
+		writeFileSync(join(dir, "agent", "single.ts"), "export default () => {};");
+		before = {
+			...JSON.parse(read(path)),
+			packages: [{ source: "./single.ts", skills: [] }, "npm:other"],
+			lastChangelogVersion: "kept",
+		};
+		writeFileSync(path, JSON.stringify(before));
+		const enabled = await extensions(piu, row);
+		await click(piu, enabled, row, "[x]");
+		await applied(piu);
+		expect(JSON.parse(read(path))).toEqual({
+			...before,
+			packages: ["npm:other"],
+		});
+	}
+	await using piu = await startPiu({ dir, script, height: 40 });
+	const disabled = await extensions(piu, row);
+	expect(disabled).toMatch(/single +package: \.\/single\.ts +disabled/);
+	await click(piu, disabled, row, "[ ]");
+	await applied(piu);
+	expect(JSON.parse(read(path))).toEqual(before);
+});
+
+test("An Interface-only change restarts without compiling, even on Pi-Bolt", async () => {
+	using fixture = personal();
+	const { dir } = fixture;
+	const backendCommand = fakeBackend(dir, boltVersion);
+	await using piu = await startPiu({ dir, script, backendCommand, height: 40 });
+	const frame = await extensions(piu, "model  builtin");
+	await click(piu, frame, "model  builtin", "[x]");
+	await applied(piu);
+	expect(existsSync(join(dir, "agent", "compile-calls"))).toBe(false);
+});
+
+test("An Agentic change on Pi restarts without compiling", async () => {
+	using fixture = personal();
+	const { dir } = fixture;
+	const backendCommand = fakeBackend(dir, "1.5.0");
+	looseFile(dir);
+	await using piu = await startPiu({ dir, script, backendCommand, height: 40 });
+	const frame = await extensions(piu, "loose  file:");
+	await click(piu, frame, "loose  file:", "[x]");
+	await applied(piu);
+	expect(existsSync(join(dir, "agent", "compile-calls"))).toBe(false);
+});
+
+test("An Agentic change on Pi-Bolt compiles once, shows it, then restarts", async () => {
+	using fixture = personal();
+	const { dir } = fixture;
+	const agent = join(dir, "agent");
+	const backendCommand = fakeBackend(
+		dir,
+		boltVersion,
+		`while [ -d "$PI_CODING_AGENT_DIR" ] && [ ! -e "$PI_CODING_AGENT_DIR/release" ]; do sleep 0.05; done; exit 0`,
+	);
+	looseFile(dir);
+	await using piu = await startPiu({ dir, script, backendCommand, height: 40 });
+	const frame = await extensions(piu, "loose  file:");
+	await click(piu, frame, "loose  file:", "[x]");
+	save(piu);
+	await piu.waitForFrame((frame) =>
+		frame.includes("Compiling Pi-Bolt extensions"),
+	);
+	expect(piu.exits).toEqual([]);
+	writeFileSync(join(agent, "release"), "");
+	await restarted(piu);
+	expect(read(join(agent, "compile-calls"))).toBe("compile\n");
+});
+
+test("A failed compile warns with the log path and still restarts", async () => {
+	using fixture = personal();
+	const { dir } = fixture;
+	const backendCommand = fakeBackend(
+		dir,
+		boltVersion,
+		"echo boom from the compiler; exit 1",
+	);
+	looseFile(dir);
+	await using piu = await startPiu({ dir, script, backendCommand, height: 40 });
+	const frame = await extensions(piu, "loose  file:");
+	await click(piu, frame, "loose  file:", "[x]");
+	save(piu);
 	await piu.waitForFrame(
 		(frame) =>
-			!frame.includes("Delete extensions?") &&
-			!frame.includes("* pending deletion"),
+			frame.includes("Pi-Bolt compile failed") &&
+			frame.includes("pi-bolt-compile.log"),
 	);
-	expect(read(log)).toBe("remove\nnpm:fixture\n");
+	expect(piu.exits).toEqual([]);
+	piu.mockInput.pressEnter();
+	await restarted(piu);
+	expect(read(join(dir, "pi-bolt-compile.log"))).toContain(
+		"boom from the compiler",
+	);
+});
+
+test("Compiling waits while the Backend update lock is held", async () => {
+	using fixture = personal();
+	const { dir } = fixture;
+	const backendCommand = fakeBackend(dir, boltVersion);
+	looseFile(dir);
+	await using piu = await startPiu({ dir, script, backendCommand, height: 40 });
+	const frame = await extensions(piu, "loose  file:");
+	const lease = acquireInstallLock(realpathSync(backendCommand));
+	try {
+		await click(piu, frame, "loose  file:", "[x]");
+		save(piu);
+		await piu.waitForFrame((frame) =>
+			frame.includes("Waiting for the Backend update to finish"),
+		);
+		expect(existsSync(join(dir, "agent", "compile-calls"))).toBe(false);
+	} finally {
+		lease.close();
+	}
+	await restarted(piu);
+	expect(read(join(dir, "agent", "compile-calls"))).toBe("compile\n");
+});
+
+test("While a turn runs, Restart waits for confirmation and declining keeps the saved change", async () => {
+	using block = blocker();
+	await using piu = await startPiu({
+		script: { replies: [block.step, "Finished"] },
+		height: 40,
+	});
+	await piu.waitForFrame((frame) => frame.includes("faux-1"));
+	await piu.mockInput.typeText("work");
+	piu.mockInput.pressEnter();
+	await piu.waitForFrame((frame) => frame.includes("running"));
+	const frame = await extensions(piu, "model  builtin");
+	await click(piu, frame, "model  builtin", "[x]");
+	save(piu);
+	await piu.waitForFrame((frame) => frame.includes("A turn is running"));
+	piu.mockInput.pressEnter();
+	const declined = await piu.waitForFrame(
+		(frame) =>
+			frame.includes("Changes take effect after Restart") &&
+			/model +builtin +disabled/.test(frame),
+	);
+	expect(piu.exits).toEqual([]);
+	await click(piu, declined, "model  builtin", "[ ]");
+	save(piu);
+	await piu.waitForFrame((frame) => frame.includes("A turn is running"));
+	piu.mockInput.pressArrow("down");
+	piu.mockInput.pressEnter();
+	await restarted(piu);
+	block.release();
 });

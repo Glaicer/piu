@@ -1,9 +1,7 @@
-import { spawn } from "node:child_process";
 import { join } from "node:path";
 import type { BackendConfig } from "./backend.ts";
 import { detectInstall } from "./backend-install.ts";
 import { createVersionStore } from "./backend-versions.ts";
-import { attachJsonlLineReader } from "./jsonl.ts";
 import { compareVersions, releaseSource } from "./releases.ts";
 import {
 	parseWorkerRecord,
@@ -11,6 +9,7 @@ import {
 	type UpdateResult,
 } from "./update-protocol.ts";
 import { saveUpdateReceipt } from "./update-receipt.ts";
+import { runWorker } from "./worker.ts";
 
 type Hooks = {
 	progress(message: string | undefined): void;
@@ -50,52 +49,25 @@ export function createBackendUpdate(
 				hooks.notify(`${title} is already up to date`);
 				return;
 			}
-			const result = await new Promise<UpdateResult>((done, reject) => {
-				const worker = spawn(
-					process.execPath,
-					[join(import.meta.dir, "update-worker.ts")],
-					{
-						cwd: options.cwd,
-						env: options.env,
-						detached: true,
-						stdio: ["pipe", "pipe", "pipe"],
-					},
-				);
-				const request: UpdateRequest = {
+			const result = await runWorker<UpdateResult>(
+				join(import.meta.dir, "update-worker.ts"),
+				{
 					config: options.config,
 					install,
 					version: latest,
 					cwd: options.cwd,
-				};
-				let result: UpdateResult | undefined;
-				let error = "";
-				let invalid = false;
-				worker.stdin.on("error", reject);
-				worker.stdin.end(JSON.stringify(request));
-				worker.stderr.on("data", (chunk: Buffer) => {
-					error = (error + chunk.toString()).slice(-4096);
-				});
-				attachJsonlLineReader(worker.stdout, (line) => {
-					try {
-						const record = parseWorkerRecord(line);
-						if ("progress" in record && !disposed)
-							hooks.progress(
-								`Updating ${title} → ${latest}\n${record.progress}`,
-							);
-						if ("error" in record) error = record.error;
-						if ("result" in record) result = record.result;
-					} catch {
-						invalid = true;
-						error = "Invalid response from the update worker";
-					}
-				});
-				worker.once("error", reject);
-				worker.once("close", (code) =>
-					code === 0 && result && !invalid
-						? done(result)
-						: reject(new Error(error || `Update worker failed (${code})`)),
-				);
-			});
+				} satisfies UpdateRequest,
+				{
+					cwd: options.cwd,
+					env: options.env,
+					parse: parseWorkerRecord,
+					progress: (message) => {
+						if (!disposed)
+							hooks.progress(`Updating ${title} → ${latest}\n${message}`);
+					},
+					name: "update worker",
+				},
+			);
 			if (disposed) return;
 			if (!result.updated) {
 				hooks.notify(

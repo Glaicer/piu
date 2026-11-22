@@ -115,7 +115,17 @@ export function createTheme(
 	};
 	const [theme, setTheme] = createStore(resolve());
 	createEffect(() => setTheme(reconcile(resolve())));
+	// why: OpenTUI ignores the mode in a DEC 2031 notice and waits for an OSC 11 reply, which Orca omits after switching to dark.
+	const notice = (sequence: string) => {
+		if (sequence === "\x1b[?997;1n") follow("dark");
+		if (sequence === "\x1b[?997;2n") follow("light");
+		return false;
+	};
 	renderer.on("theme_mode", follow);
-	onCleanup(() => renderer.off("theme_mode", follow));
+	renderer.prependInputHandler(notice);
+	onCleanup(() => {
+		renderer.off("theme_mode", follow);
+		renderer.removeInputHandler(notice);
+	});
 	return theme;
 }

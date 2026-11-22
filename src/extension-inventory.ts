@@ -24,9 +24,11 @@ import {
 } from "./backend-command.ts";
 import { builtinDir, type ExtensionFolders } from "./extensions.ts";
 import { isRecord } from "./json.ts";
+import { packageStash, type StashedPackage } from "./package-stash.ts";
 
 export type ExtensionInventoryOptions = {
 	cwd: string;
+	stash: string;
 	backend: BackendConfig;
 	env: NodeJS.ProcessEnv;
 	folders: ExtensionFolders;
@@ -70,7 +72,13 @@ export function readExtensionInventory(
 	const env = backendEnvironment(options.backend, options.env);
 	const home = env.HOME ?? homedir();
 	const groups = collectInterface(options);
-	const { rows, error } = agenticRows(options.cwd, home, env, groups.piFiles);
+	const { rows, error } = agenticRows(
+		options.cwd,
+		options.stash,
+		home,
+		env,
+		groups.piFiles,
+	);
 	return {
 		agentic: rows,
 		...(error === undefined ? {} : { agenticError: error }),
@@ -81,6 +89,7 @@ export function readExtensionInventory(
 
 function agenticRows(
 	cwd: string,
+	stash: string,
 	home: string,
 	env: NodeJS.ProcessEnv,
 	piFiles: ReadonlySet<string>,
@@ -101,8 +110,17 @@ function agenticRows(
 	const files = collectFiles(agentDir, home, filters, failures);
 	// why: the same file can reach Pi through `extensions` and through a package, and the explicit and discovered rows are the ones a user recognizes; an Extension's own Pi file belongs to Interface, not here.
 	const listed = new Set(files.map((file) => canonical(file.path)));
+	const settingsFile = join(agentDir, "settings.json");
 	const packages = uniquePackages(
-		collectPackages(settings.value.packages, agentDir, home, failures),
+		[
+			...collectPackages(settings.value.packages, agentDir, home, failures),
+			...removedPackages(
+				packageStash(stash, settingsFile).all(),
+				settings.value.packages,
+				agentDir,
+				home,
+			),
+		],
 		(path) => listed.has(path) || piFiles.has(path),
 	);
 	const rows = [
@@ -115,12 +133,16 @@ function agenticRows(
 	return { rows, ...(error === undefined ? {} : { error }) };
 }
 
-// why: two declarations can reach one file through a symlink, and Pi keeps the first of them by declaration order, its `enabled` flag included.
+type PackageEntry =
+	| { path?: undefined; row: AgenticRow }
+	| { path: string; registered: boolean; row: AgenticRow };
+
+// why: Pi keeps the first registered declaration. Unmatched autoload filters only contribute a disabled inventory row when there is no registered declaration.
 function uniquePackages(
-	entries: readonly { path?: string; row: AgenticRow }[],
+	entries: readonly PackageEntry[],
 	skip: (path: string) => boolean,
 ) {
-	const kept = new Map<string, AgenticRow>();
+	const kept = new Map<string, Extract<PackageEntry, { path: string }>>();
 	const rest: AgenticRow[] = [];
 	for (const entry of entries) {
 		if (entry.path === undefined) {
@@ -128,10 +150,12 @@ function uniquePackages(
 			continue;
 		}
 		const path = canonical(entry.path);
-		if (skip(path) || kept.has(path)) continue;
-		kept.set(path, entry.row);
+		if (skip(path)) continue;
+		const previous = kept.get(path);
+		if (!previous || (entry.registered && !previous.registered))
+			kept.set(path, entry);
 	}
-	return [...rest, ...kept.values()];
+	return [...rest, ...Array.from(kept.values(), (entry) => entry.row)];
 }
 
 function collectInterface({
@@ -352,10 +376,14 @@ function discover(target: string, seen = new Set<string>()): string[] {
 	const key = canonical(target);
 	if (seen.has(key)) return [];
 	seen.add(key);
-	const stats = statsOf(target);
-	if (stats?.isFile()) return [target];
-	if (!stats?.isDirectory()) return [];
-	return entryFiles(target, seen) ?? oneLevel(target, seen);
+	try {
+		const stats = statsOf(target);
+		if (stats?.isFile()) return [target];
+		if (!stats?.isDirectory()) return [];
+		return entryFiles(target, seen) ?? oneLevel(target, seen);
+	} finally {
+		seen.delete(key);
+	}
 }
 
 function entryFiles(root: string, seen: Set<string>): string[] | undefined {
@@ -463,7 +491,7 @@ function collectPackages(
 	agentDir: string,
 	home: string,
 	failures: string[],
-): { path?: string; row: AgenticRow }[] {
+): PackageEntry[] {
 	if (!Array.isArray(packages)) return [];
 	return packages.flatMap((entry) => {
 		try {
@@ -487,7 +515,7 @@ function packageRows(
 	entry: unknown,
 	agentDir: string,
 	home: string,
-): { path?: string; row: AgenticRow }[] {
+): PackageEntry[] {
 	const source = packageSource(entry);
 	if (!source) return [];
 	const filter = isRecord(entry) ? entry : undefined;
@@ -513,6 +541,7 @@ function packageRows(
 		return [
 			{
 				path: root,
+				registered: true,
 				row: {
 					kind: "package",
 					source,
@@ -523,21 +552,63 @@ function packageRows(
 			},
 		];
 	if (!stats.isDirectory()) return [];
-	const allowed = packageEntries(root);
+	const delta = filter?.autoload === false;
+	const allowed = packageEntries(root, delta || extensions !== undefined);
 	if (allowed.length === 0) return [];
-	const enabled =
-		filter?.autoload === false
-			? deltaFiltered(allowed, extensions ?? [], root)
-			: filtered(allowed, extensions, root);
-	return allowed.map((path) => ({
+	const registered = delta
+		? deltaFiltered(allowed, extensions ?? [], root)
+		: registeredPackageFiles(allowed, extensions, root);
+	const paths = [
+		...registered.keys(),
+		...allowed.filter((path) => !registered.has(path)),
+	];
+	return paths.map((path) => ({
 		path,
+		registered: registered.has(path),
 		row: {
 			kind: "package" as const,
 			source,
 			name: stripExtension(packagePath(root, path)),
-			state: enabled.has(path) ? ("enabled" as const) : ("disabled" as const),
+			state: registered.get(path)
+				? ("enabled" as const)
+				: ("disabled" as const),
 		},
 	}));
+}
+
+function removedPackages(
+	stashed: Readonly<Record<string, StashedPackage>>,
+	packages: unknown,
+	agentDir: string,
+	home: string,
+): PackageEntry[] {
+	const present = new Set(
+		(Array.isArray(packages) ? packages : []).map(packageSource),
+	);
+	return Object.entries(stashed).flatMap(([source, saved]) => {
+		if ("written" in saved || present.has(source)) return [];
+		const root = packageRoot(source, agentDir, home);
+		return [
+			{
+				row: {
+					kind: "package",
+					source,
+					singleFile: true,
+					name: root ? stripExtension(basename(root)) : source,
+					state: "disabled",
+				},
+			},
+		];
+	});
+}
+
+function registeredPackageFiles(
+	allowed: readonly string[],
+	patterns: readonly string[] | undefined,
+	root: string,
+) {
+	const enabled = filtered(allowed, patterns, root);
+	return new Map(allowed.map((path) => [path, enabled.has(path)]));
 }
 
 function packagePath(root: string, path: string) {
@@ -545,20 +616,24 @@ function packagePath(root: string, path: string) {
 	return rel === "" ? basename(path) : rel;
 }
 
-function packageEntries(root: string): string[] {
+function packageEntries(root: string, hasSettingsFilter: boolean): string[] {
 	const declared = strings(piManifest(root)?.extensions);
 	if (declared.length === 0) return discover(join(root, "extensions"));
 	// why: a manifest that lists extensions narrows the package to exactly those files, its own `!`, `+` and `-` entries included, and Pi does not fall back to `index.ts` for it.
 	const seen = new Set([canonical(root)]);
-	const allowed = declared.flatMap((entry) =>
-		expandManifestEntry(entry, root, seen),
-	);
-	const overrides = declared.filter((entry) => /^[!+-]/.test(entry));
+	const isOverride = (entry: string) => /^[!+-]/.test(entry);
+	const overrides = declared.filter(isOverride);
+	const allowed = declared
+		.filter((entry) => !isOverride(entry))
+		.flatMap((entry) => expandManifestEntry(entry, root, seen));
 	const enabled =
 		overrides.length === 0
 			? new Set(allowed)
 			: filtered(allowed, overrides, root);
-	return allowed.filter((path) => enabled.has(path));
+	// why: Pi adds default entries in manifest order, but passes the filter's order to settings filters.
+	return hasSettingsFilter
+		? [...enabled]
+		: allowed.filter((path) => enabled.has(path));
 }
 
 function filtered(
@@ -598,9 +673,10 @@ function deltaFiltered(
 ) {
 	const enabled = new Map<string, boolean>();
 	for (const pattern of patterns) {
-		const exact = pattern.startsWith("+") || pattern.startsWith("-");
-		const target = exact ? pattern.slice(1) : pattern;
-		const on = !pattern.startsWith("-") && !pattern.startsWith("!");
+		const prefix = pattern[0];
+		const exact = prefix === "+" || prefix === "-";
+		const target = exact || prefix === "!" ? pattern.slice(1) : pattern;
+		const on = prefix !== "-" && prefix !== "!";
 		for (const path of allowed)
 			if (
 				exact
@@ -609,7 +685,7 @@ function deltaFiltered(
 			)
 				enabled.set(path, on);
 	}
-	return new Set(allowed.filter((path) => enabled.get(path) === true));
+	return enabled;
 }
 
 function builtinRows(filters: Filters): AgenticRow[] {
@@ -634,10 +710,12 @@ function packageRoot(source: string, agentDir: string, home: string) {
 	if (isLocalSource(source))
 		return resolve(agentDir, expandPath(source, home, true));
 	const git = parseGitSource(source);
-	if (!git) return resolve(agentDir, expandPath(source, home, true));
+	if (!git) return undefined;
 	const root = join(agentDir, "git");
-	const path = resolve(root, git.host, git.path);
-	return isInside(root, path) ? path : undefined;
+	const host = resolve(root, git.host);
+	if (!isInside(root, host)) return undefined;
+	const path = resolve(host, git.path);
+	return isInside(host, path) ? path : undefined;
 }
 
 function isLocalSource(source: string) {
@@ -674,7 +752,7 @@ function parseGitSource(source: string) {
 	const path = (rest.join("/").split("@")[0] ?? "")
 		.replace(/\/+$/, "")
 		.replace(/\.git$/i, "");
-	return { host, path };
+	return path ? { host, path } : undefined;
 }
 
 export function isInside(root: string, path: string) {

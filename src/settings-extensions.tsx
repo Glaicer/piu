@@ -32,7 +32,10 @@ type Options = {
 		edits: readonly ExtensionEdit[],
 		committed: (edit: ExtensionEdit) => void,
 	): Promise<void>;
+	compile(): Promise<string | undefined>;
 };
+
+const takesEffect = "Changes take effect after Restart.";
 
 export function createExtensionsDraft(
 	context: CommandContext,
@@ -56,13 +59,33 @@ export function createExtensionsDraft(
 			return next;
 		});
 	};
+	const restart = (warnings: string[]) => {
+		const running = context.pi.working
+			? ["A turn is running; Restart interrupts it."]
+			: [];
+		if (warnings.length === 0 && running.length === 0)
+			return context.actions.restart();
+		confirm(
+			context,
+			"Restart to apply Extensions?",
+			[...warnings, ...running],
+			"Restart now",
+			(confirmed) =>
+				confirmed
+					? context.actions.restart()
+					: context.actions.showToast(`Saved Extensions. ${takesEffect}`),
+			running.length === 0,
+		);
+	};
 	const persist = async () => {
 		setBusy(true);
 		let changed = false;
+		let agentic = false;
 		let failed = false;
 		try {
 			await options.save([...edits().values()], ({ target }) => {
 				changed = true;
+				if (target.kind !== "interface") agentic = true;
 				edit(target);
 			});
 		} catch (error) {
@@ -73,11 +96,12 @@ export function createExtensionsDraft(
 			);
 		} finally {
 			if (changed) refresh((n) => n + 1);
-			if (changed && !failed) {
-				context.actions.showToast(
-					"Saved Extensions. Changes take effect after Restart.",
-				);
-			}
+		}
+		try {
+			if (!changed || failed) return;
+			const warning = agentic ? await options.compile() : undefined;
+			restart(warning ? [warning] : []);
+		} finally {
 			setBusy(false);
 		}
 	};
@@ -92,7 +116,9 @@ export function createExtensionsDraft(
 				"Delete extensions?",
 				deletions.map(({ target }) => extensionDeletionLabel(target)),
 				"Delete and save",
-				() => void persist(),
+				(confirmed) => {
+					if (confirmed) void persist();
+				},
 			);
 		else void persist();
 	};
@@ -155,7 +181,9 @@ export function createExtensionsDraft(
 				"Discard unsaved Extension changes?",
 				[],
 				"Discard changes",
-				close,
+				(confirmed) => {
+					if (confirmed) close();
+				},
 			);
 			return false;
 		},
@@ -167,7 +195,8 @@ function confirm(
 	title: string,
 	lines: string[],
 	accept: string,
-	onAccept: () => void,
+	onPick: (confirmed: boolean) => void,
+	acceptByDefault = false,
 ) {
 	const close = context.actions.openModal(
 		moduleModal(
@@ -182,10 +211,10 @@ function confirm(
 								{ label: "Cancel", value: false },
 								{ label: accept, value: true },
 							]}
-							selected={0}
+							selected={acceptByDefault ? 1 : 0}
 							onPick={(confirmed) => {
 								close();
-								if (confirmed) onAccept();
+								onPick(confirmed);
 							}}
 						/>
 						<For each={lines}>
@@ -222,13 +251,7 @@ function ExtensionsView(props: {
 	const rows: BoxRenderable[] = [];
 	onMount(() => list.focus());
 	const toggle = (row: Row) => {
-		if (
-			props.busy() ||
-			row.required ||
-			row.unavailable ||
-			(row.target.kind === "package" && row.target.singleFile)
-		)
-			return;
+		if (props.busy() || row.required || row.unavailable) return;
 		props.edit(
 			row.target,
 			props.operation(row.target)
@@ -285,24 +308,13 @@ function ExtensionsView(props: {
 							{`${row.target.name}  ${row.details(!operation() && row.target.kind !== "interface" ? row.target.state : enabled() ? "enabled" : "disabled")}${row.required ? "   (required)" : ""}${operation() === "delete" ? "   * pending deletion" : operation() ? "   * changed" : ""}`}
 						</text>
 						<box flexDirection="row" gap={1} flexShrink={0}>
-							<Show
-								when={
-									!row.required &&
-									!row.unavailable &&
-									!(row.target.kind === "package" && row.target.singleFile)
-								}
-							>
+							<Show when={!row.required && !row.unavailable}>
 								<PickerLink
 									context={props.context}
 									plain
 									label={`${enabled() ? "[x]" : "[ ]"}${row.target.kind === "package" ? " package" : ""}`}
 									onPress={() => toggle(row)}
 								/>
-							</Show>
-							<Show
-								when={row.target.kind === "package" && row.target.singleFile}
-							>
-								<text fg={theme.muted}>file package (no filter)</text>
 							</Show>
 							<Show when={canDeleteExtension(row.target)}>
 								<PickerLink

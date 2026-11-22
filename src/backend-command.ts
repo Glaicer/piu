@@ -1,6 +1,6 @@
 import { accessSync, constants, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, join, resolve } from "node:path";
+import { basename, delimiter, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BackendConfig } from "./backend.ts";
 
@@ -35,6 +35,31 @@ export function resolveCommand(
 ) {
 	const file = commandPath(command, cwd, pathVar);
 	return file && realpathSync(file);
+}
+
+// why: Pi takes `remove` or `compile` only as its first argument, so the configured RPC arguments are dropped; an `env` wrapper's assignments go to the environment instead, and a `node`/`bun` launcher keeps its script.
+export function backendSubcommand(
+	config: BackendConfig,
+	cwd: string,
+	env: NodeJS.ProcessEnv,
+	subcommand: readonly string[],
+) {
+	const { command, args } = config;
+	const withEnv = basename(command) === "env";
+	const launcher = withEnv
+		? args.findIndex((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))
+		: -1;
+	const executable = withEnv ? args[launcher] : command;
+	if (!executable) throw new Error("Backend command is missing after env");
+	const entrypoint = commandPath(executable, cwd, env.PATH) ?? executable;
+	const script = ["node", "bun"].includes(basename(entrypoint))
+		? args[launcher + 1]
+		: undefined;
+	return [
+		entrypoint,
+		...(script && !script.startsWith("-") ? [resolve(cwd, script)] : []),
+		...subcommand,
+	];
 }
 
 // why: a Backend whose command line starts with `NAME=value` assignments (an `env` wrapper or a launcher) reads settings from a different environment than piu.

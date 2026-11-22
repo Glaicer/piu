@@ -31,6 +31,7 @@ import {
 } from "./config.ts";
 import { useCopyOnSelect } from "./copy-on-select.ts";
 import { bridgeDialogs } from "./dialogs.tsx";
+import { compileExtensions } from "./extension-compile.ts";
 import {
 	type ExtensionInventoryOptions,
 	readExtensionInventory,
@@ -38,7 +39,6 @@ import {
 import { saveExtensions } from "./extension-settings.ts";
 import {
 	builtinDir,
-	extensionActions,
 	findExtensions,
 	type LoadedKeybindingAction,
 	moduleOwner,
@@ -241,7 +241,6 @@ async function prepareKeybindings(
 		...definitions.keys(),
 		...Object.keys(defaultConfig.keybindings),
 	]);
-	let disabledCommands: Set<string> | undefined;
 	for (const id of Object.keys(config.keybindings)) {
 		if (known.has(canonicalAction(id))) continue;
 		const dot = id.indexOf(".");
@@ -258,17 +257,8 @@ async function prepareKeybindings(
 			}
 			if (validName && !placement.enabledExtensions.has(extension)) continue;
 		}
-		if (extension === "command" && validName) {
-			if (!disabledCommands) {
-				disabledCommands = new Set();
-				// why: command IDs do not name their owner. Read disabled declarations only when an otherwise unknown binding needs them.
-				for (const [name, dir] of folders)
-					if (config.extensions[name]?.enabled === false)
-						for (const action of await extensionActions(name, dir))
-							disabledCommands.add(action);
-			}
-			if (disabledCommands.has(id)) continue;
-		}
+		// why: a command ID does not name its Extension, so a binding to a disabled or removed Extension's command cannot be told from a typo without importing disabled code.
+		if (extension === "command" && validName) continue;
 		throw fieldError(
 			`keybindings.${id}`,
 			`unknown action, expected one of: ${[...known].sort().join(", ")}`,
@@ -313,6 +303,7 @@ function App(props: {
 	const path = join(props.home, "config.json");
 	const extensionLocation = {
 		path,
+		stash: join(props.home, "extension-filters.json"),
 		cwd: props.cwd,
 		backend: props.config.backend,
 		env: props.env,
@@ -342,6 +333,26 @@ function App(props: {
 		},
 		saveExtensions: (edits, committed) =>
 			saveExtensions(extensionLocation, edits, committed),
+		compileExtensions: async () => {
+			setUpdateProgress("Checking the Backend");
+			try {
+				const result = await compileExtensions(
+					{
+						config: props.config.backend,
+						cwd: props.cwd,
+						home: props.home,
+						env: props.env,
+					},
+					setUpdateProgress,
+				);
+				if (result.status === "failed")
+					return `Pi-Bolt compile failed, so changed extensions load from their files. Log: ${result.log}`;
+			} catch (error) {
+				return `Pi-Bolt compile did not run: ${error instanceof Error ? error.message : String(error)}`;
+			} finally {
+				setUpdateProgress(undefined);
+			}
+		},
 		notify: (message) => toasts.show(message, "error"),
 	});
 	const theme = createTheme(renderer, overrides, settings.mode);

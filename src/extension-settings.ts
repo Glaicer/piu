@@ -5,7 +5,7 @@ import type { BackendConfig } from "./backend.ts";
 import {
 	backendAgentDir,
 	backendEnvironment,
-	commandPath,
+	backendSubcommand,
 	expandPath,
 } from "./backend-command.ts";
 import { saveExtensionSettings } from "./config.ts";
@@ -19,6 +19,7 @@ import {
 import { type ExtensionFolders, extensionActions } from "./extensions.ts";
 import { isRecord } from "./json.ts";
 import { writeJson } from "./json-file.ts";
+import { packageStash } from "./package-stash.ts";
 
 export type ExtensionTarget =
 	| AgenticRow
@@ -54,6 +55,7 @@ export function canDeleteExtension(target: ExtensionTarget) {
 
 type Location = {
 	path: string;
+	stash: string;
 	cwd: string;
 	backend: BackendConfig;
 	env: NodeJS.ProcessEnv;
@@ -95,13 +97,15 @@ export async function saveExtensions(
 	if (agentic.length === 0 && packages.length === 0) return;
 	const env = backendEnvironment(location.backend, location.env);
 	const dir = backendAgentDir(location.cwd, env);
+	const stash = packageStash(location.stash, join(dir, "settings.json"));
 	for (const edit of agentic) {
 		const { target, operation } = edit;
-		writePiSettings(dir, env.HOME ?? homedir(), target, operation);
+		writePiSettings(dir, env.HOME ?? homedir(), stash, target, operation);
 		committed(edit);
 	}
 	for (const source of packages) {
 		await removePackage(location, dir, env, source);
+		stash.set(source, undefined);
 		const edit = edits.find(
 			({ target }) => target.kind === "package" && target.source === source,
 		);
@@ -109,9 +113,12 @@ export async function saveExtensions(
 	}
 }
 
+type PackageStash = ReturnType<typeof packageStash>;
+
 function writePiSettings(
 	dir: string,
 	home: string,
+	stash: PackageStash,
 	target: ExtensionTarget,
 	operation: ExtensionEdit["operation"],
 ) {
@@ -124,26 +131,7 @@ function writePiSettings(
 		const { value, error } = readSettings(file);
 		if (error) throw new Error(error);
 		if (target.kind === "package") {
-			const packages = value.packages;
-			if (
-				!Array.isArray(packages) ||
-				!packages.some((entry) => packageSource(entry) === target.source)
-			)
-				throw new Error(
-					`Package is no longer in Pi settings: ${target.source}`,
-				);
-			value.packages = packages.map((entry) => {
-				if (packageSource(entry) !== target.source) return entry;
-				const settings: Record<string, unknown> = isRecord(entry)
-					? entry
-					: { source: target.source };
-				if (operation === "disable") return { ...settings, extensions: [] };
-				const { extensions: _filter, ...rest } = settings;
-				return rest.autoload === false
-					? { ...rest, extensions: ["**/*"] }
-					: rest;
-			});
-			writeJson(file, value, 2);
+			writePackage(file, value, stash, target, operation);
 			return;
 		}
 		if (target.kind === "interface") throw new Error("Expected a Pi extension");
@@ -207,6 +195,59 @@ function writePiSettings(
 	}
 }
 
+function writePackage(
+	file: string,
+	value: Record<string, unknown>,
+	stash: PackageStash,
+	{ source, singleFile }: Extract<AgenticRow, { kind: "package" }>,
+	operation: ExtensionEdit["operation"],
+) {
+	const packages = Array.isArray(value.packages) ? [...value.packages] : [];
+	const index = packages.findIndex((entry) => packageSource(entry) === source);
+	const saved = stash.all()[source];
+	const write = () => {
+		value.packages = packages;
+		writeJson(file, value, 2);
+	};
+	if (operation === "enable" && saved && !("written" in saved)) {
+		// why: a package the user added back while it was disabled is theirs now.
+		if (index < 0) {
+			packages.splice(Math.min(saved.index, packages.length), 0, saved.entry);
+			write();
+		}
+		stash.set(source, undefined);
+		return;
+	}
+	if (index < 0)
+		throw new Error(`Package is no longer in Pi settings: ${source}`);
+	const entry = packages[index];
+	if (operation === "disable") {
+		if (singleFile) {
+			stash.set(source, { entry, index });
+			packages.splice(index, 1);
+		} else {
+			const settings = isRecord(entry) ? entry : { source };
+			const written = { ...settings, extensions: [] };
+			stash.set(source, { entry, index, written });
+			packages[index] = written;
+		}
+		write();
+		return;
+	}
+	if (saved && Bun.deepEquals(entry, saved.written))
+		packages[index] = saved.entry;
+	else {
+		const settings: Record<string, unknown> = isRecord(entry)
+			? entry
+			: { source };
+		const { extensions: _filter, ...rest } = settings;
+		packages[index] =
+			rest.autoload === false ? { ...rest, extensions: ["**/*"] } : rest;
+	}
+	write();
+	stash.set(source, undefined);
+}
+
 async function removePackage(
 	location: Location,
 	dir: string,
@@ -220,30 +261,14 @@ async function removePackage(
 		!value.packages.some((entry) => packageSource(entry) === source)
 	)
 		return;
-	const { command, args } = location.backend;
-	const withEnv = basename(command) === "env";
-	const launcher = withEnv
-		? args.findIndex((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))
-		: -1;
-	const executable = withEnv ? args[launcher] : command;
-	if (!executable) throw new Error("Backend command is missing after env");
-	const entrypoint =
-		commandPath(executable, location.cwd, env.PATH) ?? executable;
-	const script = ["node", "bun"].includes(basename(entrypoint))
-		? args[launcher + 1]
-		: undefined;
 	const removeSource = /^[./~]|^file:\/\//.test(source)
 		? resolve(dir, expandPath(source, env.HOME ?? homedir(), true))
 		: source;
 	const proc = Bun.spawn(
-		[
-			entrypoint,
-			...(script && !script.startsWith("-")
-				? [resolve(location.cwd, script)]
-				: []),
+		backendSubcommand(location.backend, location.cwd, env, [
 			"remove",
 			removeSource,
-		],
+		]),
 		{
 			cwd: location.cwd,
 			env,

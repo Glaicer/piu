@@ -103,13 +103,22 @@ function run(command: string, args: string[], options: ProbeOptions) {
 	});
 }
 
+export function installRoot(
+	config: BackendConfig,
+	options: { cwd: string; env: NodeJS.ProcessEnv },
+) {
+	const file = resolveCommand(config.command, options.cwd, options.env.PATH);
+	if (!file) return undefined;
+	return { file, root: installOrigin(config, options)?.root ?? file };
+}
+
 export async function detectInstall(
 	config: BackendConfig,
 	options: ProbeOptions,
 ): Promise<BackendInstall | undefined> {
-	const file = resolveCommand(config.command, options.cwd, options.env.PATH);
-	if (!file) return undefined;
-	const root = installOrigin(config, options)?.root ?? file;
+	const found = installRoot(config, options);
+	if (!found) return undefined;
+	const { file, root } = found;
 	if (options.lease && options.lease.root !== root)
 		throw new Error("The Backend installation changed; retry /update");
 	let releaseProbe: (() => void) | undefined;
