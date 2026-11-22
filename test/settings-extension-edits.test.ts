@@ -14,9 +14,13 @@ import { acquireInstallLock } from "../src/install-lock.ts";
 import { blocker } from "./blocker.ts";
 import {
 	bottomLine,
+	clickExtensionAction,
+	extensionDetails,
+	extensionList,
 	openSettings,
 	type Piu,
 	panelText,
+	selectExtension,
 	startPiu,
 } from "./harness.ts";
 import { eventually } from "./process.ts";
@@ -48,22 +52,29 @@ test("A disabled Extension does not show its Module, even with Module settings",
 	expect(bottomLine(frame)).not.toContain("faux-1");
 });
 
-async function extensions(piu: Piu, ready: string) {
+async function extensions(piu: Piu, row: string) {
+	const name = extensionName(row);
 	await openSettings(piu);
 	piu.mockInput.pressKey("\x1b[6;5~");
-	return piu.waitForFrame(
-		(frame) => frame.includes(ready) && frame.includes("Save [ctrl+s]"),
+	await piu.waitForFrame(
+		(frame) =>
+			extensionList(piu, frame)
+				.split("\n")
+				.some((line) => line.slice(2).replace(/ \*$/, "") === name) &&
+			frame.includes("Save [ctrl+s]"),
 	);
+	return selectExtension(piu, name);
 }
 
-function click(piu: Piu, frame: string, row: string, action: string) {
-	const lines = frame.split("\n");
-	const y = lines.findIndex(
-		(line) => line.includes(row) && line.includes(action),
-	);
-	const x = lines[y]?.lastIndexOf(action);
-	if (x === undefined || x < 0) throw new Error(`No ${action} on ${row}`);
-	return piu.mockMouse.click(x + 1, y);
+const extensionName = (row: string) => row.split("  ")[0] ?? row;
+
+async function click(piu: Piu, _details: string, row: string, action: string) {
+	await selectExtension(piu, extensionName(row));
+	const toggle = { "[x]": "Disable", "[ ]": "Enable" }[action];
+	const label = toggle
+		? `${toggle}${row.includes("package:") ? " package" : ""}`
+		: action;
+	return clickExtensionAction(piu, label);
 }
 
 const save = (piu: Piu) => piu.mockInput.pressKey("s", { ctrl: true });
@@ -188,7 +199,9 @@ test("Interface toggles in a draft, persists on Save, and restores placement aft
 		const frame = await extensions(piu, "editable  personal");
 		await click(piu, frame, "editable  personal", "[x]");
 		await piu.waitForFrame((frame) =>
-			/editable +personal +disabled.*changed/.test(frame),
+			/editable +personal +disabled.*changed/.test(
+				extensionDetails(piu, frame),
+			),
 		);
 		expect(read(path)).toBe(before);
 		await applied(piu);
@@ -265,11 +278,11 @@ test("Deleting shows both targets, cancel leaves them intact, and accepting clea
 		expect(read(settings)).toBe(JSON.stringify(original));
 		await click(piu, initial, "loose  file:", "Delete");
 		const first = await piu.waitForFrame((frame) =>
-			/loose +file:.*pending deletion/.test(frame),
+			/loose +file:.*pending deletion/.test(extensionDetails(piu, frame)),
 		);
 		await click(piu, first, "editable  personal", "Delete");
 		await piu.waitForFrame((frame) =>
-			/editable +personal.*pending deletion/.test(frame),
+			/editable +personal.*pending deletion/.test(extensionDetails(piu, frame)),
 		);
 		piu.mockInput.pressEscape();
 		await piu.waitForFrame((frame) =>
@@ -279,7 +292,9 @@ test("Deleting shows both targets, cancel leaves them intact, and accepting clea
 		await piu.waitForFrame(
 			(frame) =>
 				!frame.includes("Discard unsaved") &&
-				/editable +personal.*pending deletion/.test(frame),
+				/editable +personal.*pending deletion/.test(
+					extensionDetails(piu, frame),
+				),
 		);
 		save(piu);
 		const confirmation = (frame: string) =>
@@ -290,7 +305,9 @@ test("Deleting shows both targets, cancel leaves them intact, and accepting clea
 		await piu.waitForFrame(
 			(frame) =>
 				!confirmation(frame) &&
-				/editable +personal.*pending deletion/.test(frame),
+				/editable +personal.*pending deletion/.test(
+					extensionDetails(piu, frame),
+				),
 		);
 		expect(existsSync(file)).toBe(true);
 		expect(existsSync(folder)).toBe(true);
@@ -333,7 +350,7 @@ test("A Pi extension file is disabled and enabled without overwriting other sett
 		await extensions(piu, "loose  file:");
 		piu.mockInput.pressEnter();
 		await piu.waitForFrame((frame) =>
-			/loose +file:.*disabled.*changed/.test(frame),
+			/loose +file:.*disabled.*changed/.test(extensionDetails(piu, frame)),
 		);
 		mkdirSync(`${path}.lock`);
 		save(piu);
@@ -555,7 +572,7 @@ test("While a turn runs, Restart waits for confirmation and declining keeps the 
 	const declined = await piu.waitForFrame(
 		(frame) =>
 			frame.includes("Changes take effect after Restart") &&
-			/model +builtin +disabled/.test(frame),
+			/^model .* {2}builtin {2}disabled/.test(extensionDetails(piu, frame)),
 	);
 	expect(piu.exits).toEqual([]);
 	await click(piu, declined, "model  builtin", "[ ]");

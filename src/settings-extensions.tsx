@@ -16,13 +16,15 @@ import {
 import { moduleModal } from "./modal.tsx";
 import type { CommandContext, SettingsTab } from "./module.ts";
 import { Picker, PickerLink } from "./picker.tsx";
-import { scrollIntoView } from "./scroll.ts";
+import { scrollBoxOf, scrollIntoView } from "./scroll.ts";
 import type { Theme } from "./theme.ts";
 
 type Row = {
 	target: ExtensionTarget;
 	enabled: boolean;
-	details(state: string): string;
+	description?: string;
+	origin: string;
+	notes: string[];
 	unavailable?: boolean;
 	required?: boolean;
 };
@@ -45,6 +47,7 @@ export function createExtensionsDraft(
 		new Map(),
 	);
 	const [busy, setBusy] = createSignal(false);
+	const [selected, setSelected] = createSignal<string>();
 	const [revision, refresh] = createSignal(0);
 	const dirty = () => edits().size > 0;
 	const edit = (
@@ -149,6 +152,8 @@ export function createExtensionsDraft(
 									context={context}
 									view={inventory}
 									busy={busy}
+									selected={selected}
+									select={setSelected}
 									operation={(target) =>
 										edits().get(extensionEditKey(target))?.operation
 									}
@@ -233,10 +238,15 @@ function confirm(
 	);
 }
 
+export const extensionListId = "settings-extension-list";
+export const extensionDetailsId = "settings-extension-details";
+
 function ExtensionsView(props: {
 	context: CommandContext;
 	view: ExtensionInventory;
 	busy(): boolean;
+	selected(): string | undefined;
+	select(key: string): void;
 	operation(target: ExtensionTarget): ExtensionEdit["operation"] | undefined;
 	edit(target: ExtensionTarget, operation?: ExtensionEdit["operation"]): void;
 }) {
@@ -246,28 +256,46 @@ function ExtensionsView(props: {
 	const builtin = view.builtin.map((row) => interfaceItem(row, false));
 	const personal = view.external.map((row) => interfaceItem(row, true));
 	const items = [...agentic, ...builtin, ...personal];
-	const [index, setIndex] = createSignal(0);
+	const index = () =>
+		Math.max(
+			0,
+			items.findIndex(
+				({ target }) => extensionEditKey(target) === props.selected(),
+			),
+		);
+	const setIndex = (at: number) => {
+		const row = items[at];
+		if (row) props.select(extensionEditKey(row.target));
+	};
+	const nameWidth = Math.min(
+		40,
+		Math.max(16, ...items.map(({ target }) => target.name.length + 6)),
+	);
 	let list: BoxRenderable;
+	let details: BoxRenderable | undefined;
 	const rows: BoxRenderable[] = [];
 	onMount(() => list.focus());
+	const operation = (row: Row) => props.operation(row.target);
+	const enabled = (row: Row) =>
+		operation(row) === "enable" ||
+		(operation(row) !== "disable" && row.enabled);
 	const toggle = (row: Row) => {
 		if (props.busy() || row.required || row.unavailable) return;
 		props.edit(
 			row.target,
-			props.operation(row.target)
-				? undefined
-				: row.enabled
-					? "disable"
-					: "enable",
+			operation(row) ? undefined : row.enabled ? "disable" : "enable",
 		);
 	};
 	const remove = (row: Row) => {
 		if (props.busy() || !canDeleteExtension(row.target)) return;
-		props.edit(
-			row.target,
-			props.operation(row.target) === "delete" ? undefined : "delete",
-		);
+		props.edit(row.target, operation(row) === "delete" ? undefined : "delete");
 	};
+	const mark = (row: Row) =>
+		operation(row) === "delete"
+			? { glyph: "✕", color: theme.error }
+			: enabled(row)
+				? { glyph: "●", color: row.unavailable ? theme.error : theme.success }
+				: { glyph: "○", color: row.unavailable ? theme.error : theme.faint };
 	const group = (groupItems: Row[]) => (
 		<For
 			each={groupItems}
@@ -280,10 +308,6 @@ function ExtensionsView(props: {
 			{(row) => {
 				const at = items.indexOf(row);
 				const selected = () => at === index();
-				const operation = () => props.operation(row.target);
-				const enabled = () =>
-					operation() === "enable" ||
-					(operation() !== "disable" && row.enabled);
 				return (
 					<box
 						ref={(node: BoxRenderable) => {
@@ -300,76 +324,159 @@ function ExtensionsView(props: {
 							list.focus();
 						}}
 					>
+						<text fg={mark(row).color}>{mark(row).glyph}</text>
 						<text
 							flexShrink={1}
-							wrapMode="word"
-							fg={selected() ? theme.barText : theme.text}
+							wrapMode="none"
+							truncate
+							fg={
+								selected()
+									? theme.barText
+									: enabled(row) && operation(row) !== "delete"
+										? theme.text
+										: theme.muted
+							}
 						>
-							{`${row.target.name}  ${row.details(!operation() && row.target.kind !== "interface" ? row.target.state : enabled() ? "enabled" : "disabled")}${row.required ? "   (required)" : ""}${operation() === "delete" ? "   * pending deletion" : operation() ? "   * changed" : ""}`}
+							{`${row.target.name}${operation(row) ? " *" : ""}`}
 						</text>
-						<box flexDirection="row" gap={1} flexShrink={0}>
-							<Show when={!row.required && !row.unavailable}>
-								<PickerLink
-									context={props.context}
-									plain
-									label={`${enabled() ? "[x]" : "[ ]"}${row.target.kind === "package" ? " package" : ""}`}
-									onPress={() => toggle(row)}
-								/>
-							</Show>
-							<Show when={canDeleteExtension(row.target)}>
-								<PickerLink
-									context={props.context}
-									plain
-									label={operation() === "delete" ? "Undo delete" : "Delete"}
-									onPress={() => remove(row)}
-								/>
-							</Show>
-						</box>
 					</box>
 				);
 			}}
 		</For>
 	);
+	const card = (row: Row) => {
+		const state = () =>
+			!operation(row) && row.target.kind !== "interface"
+				? row.target.state
+				: enabled(row)
+					? "enabled"
+					: "disabled";
+		const flags = () =>
+			[
+				...(row.required ? ["(required)"] : []),
+				...(operation(row) === "delete"
+					? ["* pending deletion"]
+					: operation(row)
+						? ["* changed"]
+						: []),
+			].join("   ");
+		return (
+			<box flexDirection="column" gap={1}>
+				<box flexDirection="column">
+					<text fg={theme.text} attributes={TextAttributes.BOLD}>
+						{row.target.name}
+					</text>
+					<Show when={row.description}>
+						<text fg={theme.text} wrapMode="word">
+							{row.description}
+						</text>
+					</Show>
+					<text fg={theme.muted} wrapMode="char">
+						{row.origin}
+					</text>
+					<box flexDirection="row" gap={3}>
+						<text fg={mark(row).color}>{state()}</text>
+						<Show when={flags()}>
+							<text fg={operation(row) ? theme.warning : theme.muted}>
+								{flags()}
+							</text>
+						</Show>
+					</box>
+					<Show when={row.notes.length > 0}>
+						<text fg={theme.muted}>{row.notes.join("   ")}</text>
+					</Show>
+				</box>
+				<box flexDirection="row" gap={2}>
+					<Show when={!row.required && !row.unavailable}>
+						<PickerLink
+							context={props.context}
+							label={`${enabled(row) ? "Disable" : "Enable"}${row.target.kind === "package" ? " package" : ""}`}
+							onPress={() => toggle(row)}
+						/>
+					</Show>
+					<Show when={canDeleteExtension(row.target)}>
+						<PickerLink
+							context={props.context}
+							color={theme.error}
+							label={operation(row) === "delete" ? "Undo delete" : "Delete"}
+							onPress={() => remove(row)}
+						/>
+					</Show>
+				</box>
+			</box>
+		);
+	};
 	return (
-		<box
-			ref={(node: BoxRenderable) => {
-				list = node;
-			}}
-			focusable
-			flexDirection="column"
-			marginTop={1}
-			onKeyDown={(event) => {
-				if (event.ctrl || event.meta || event.shift) return;
-				if (event.name === "up" || event.name === "down") {
-					setIndex((at) =>
-						Math.max(
-							0,
-							Math.min(items.length - 1, at + (event.name === "up" ? -1 : 1)),
-						),
-					);
-					scrollIntoView(rows[index()]);
-				} else {
-					const row = items[index()];
-					if (!row) return;
-					if (event.name === "space" || event.name === "return") toggle(row);
-					else if (event.name === "delete") remove(row);
-					else return;
-				}
-				event.preventDefault();
-			}}
-		>
+		<box flexDirection="column" marginTop={1}>
 			<Heading theme={theme} label="Agentic" />
 			<Show when={view.agenticError}>
 				<text fg={theme.error} wrapMode="word" paddingLeft={1}>
 					{view.agenticError}
 				</text>
 			</Show>
-			{group(agentic)}
-			<Heading theme={theme} label="Interface" margin />
-			<Heading theme={theme} label="Builtin extensions" small />
-			{group(builtin)}
-			<Heading theme={theme} label="External extensions" small />
-			{group(personal)}
+			<box
+				flexDirection="row"
+				gap={3}
+				renderBefore={() => {
+					// why: the tab scrolls as one box inside the Modal, so the details follow its scroll offset to stay beside whichever rows are in view.
+					const top = scrollBoxOf(list)?.scrollTop ?? 0;
+					if (details && details.translateY !== top) details.translateY = top;
+				}}
+			>
+				<box
+					id={extensionListId}
+					ref={(node: BoxRenderable) => {
+						list = node;
+					}}
+					focusable
+					flexDirection="column"
+					width={nameWidth}
+					flexShrink={0}
+					onKeyDown={(event) => {
+						if (event.ctrl || event.meta || event.shift) return;
+						if (event.name === "up" || event.name === "down") {
+							setIndex(
+								Math.max(
+									0,
+									Math.min(
+										items.length - 1,
+										index() + (event.name === "up" ? -1 : 1),
+									),
+								),
+							);
+							scrollIntoView(rows[index()]);
+						} else {
+							const row = items[index()];
+							if (!row) return;
+							if (event.name === "space" || event.name === "return")
+								toggle(row);
+							else if (event.name === "delete") remove(row);
+							else return;
+						}
+						event.preventDefault();
+					}}
+				>
+					{group(agentic)}
+					<Heading theme={theme} label="Interface" margin />
+					<Heading theme={theme} label="Builtin extensions" small />
+					{group(builtin)}
+					<Heading theme={theme} label="External extensions" small />
+					{group(personal)}
+				</box>
+				<box
+					id={extensionDetailsId}
+					ref={(node: BoxRenderable) => {
+						details = node;
+					}}
+					flexDirection="column"
+					flexGrow={1}
+					flexShrink={1}
+				>
+					<Show when={items[index()]} keyed>
+						{(row: Row) => card(row)}
+					</Show>
+				</box>
+			</box>
 		</box>
 	);
 }
@@ -412,7 +519,8 @@ function agenticItem(row: AgenticRow, rows: readonly AgenticRow[]): Row {
 		target: row,
 		enabled,
 		unavailable: row.state === "unavailable",
-		details: (state) => `${origin}   ${state}`,
+		origin,
+		notes: [],
 	};
 }
 
@@ -421,12 +529,11 @@ function interfaceItem(row: InterfaceRow, personal: boolean): Row {
 		target: { kind: "interface", name: row.name, removable: row.removable },
 		enabled: row.enabled,
 		required: requiredExtension(row.name),
-		details: (state) =>
-			[
-				personal ? "personal" : "builtin",
-				state,
-				...(row.hasPiExtension ? ["+ Pi extension"] : []),
-				...(!row.placed ? ["not placed"] : []),
-			].join("   "),
+		...(row.description ? { description: row.description } : {}),
+		origin: personal ? "personal" : "builtin",
+		notes: [
+			...(row.hasPiExtension ? ["+ Pi extension"] : []),
+			...(!row.placed ? ["not placed"] : []),
+		],
 	};
 }

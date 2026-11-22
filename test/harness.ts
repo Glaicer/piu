@@ -26,6 +26,10 @@ import { createApp, type ExitRequest } from "../src/app.tsx";
 import type { UpdateCheckOptions } from "../src/backend-updates.ts";
 import { modalContentInsets, panelIdPrefix } from "../src/layout.tsx";
 import { modalIdPrefix } from "../src/modal.tsx";
+import {
+	extensionDetailsId,
+	extensionListId,
+} from "../src/settings-extensions.tsx";
 import { darkTheme } from "../src/theme.ts";
 import "./hooks.ts";
 
@@ -170,6 +174,65 @@ export function modalText(piu: Piu, frame: string) {
 			),
 		)
 		.join("\n");
+}
+
+function regionText(piu: Piu, frame: string, id: string) {
+	const node = piu.renderer.root.findDescendantById(id);
+	const bounds = modalBounds(piu);
+	if (!node || !bounds) return [];
+	const top = Math.max(node.screenY, bounds.top + modalContentInsets.top);
+	const bottom = Math.min(
+		node.screenY + node.height,
+		bounds.top + bounds.height - modalContentInsets.bottom,
+	);
+	return frame
+		.split("\n")
+		.slice(top, Math.max(top, bottom))
+		.map((row) => row.slice(node.screenX, node.screenX + node.width).trim());
+}
+
+// why: the Extensions tab shows a row's origin, state and actions only in the details beside the list, so tests read that pane as one line.
+export function extensionDetails(piu: Piu, frame: string) {
+	return regionText(piu, frame, extensionDetailsId)
+		.filter((line) => line.length > 0)
+		.join("  ");
+}
+
+export function extensionList(piu: Piu, frame: string) {
+	return regionText(piu, frame, extensionListId).join("\n");
+}
+
+export async function selectExtension(piu: Piu, name: string) {
+	const row = new RegExp(
+		`[●○✕] ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( \\*)?$`,
+		"u",
+	);
+	const frame = piu.captureCharFrame();
+	const node = piu.renderer.root.findDescendantById(extensionListId);
+	if (!node) throw new Error("No Extensions list");
+	const lines = frame.split("\n");
+	const y = lines.findIndex((line) =>
+		row.test(line.slice(node.screenX, node.screenX + node.width).trim()),
+	);
+	if (y < 0) throw new Error(`No Extensions row ${name}`);
+	await piu.mockMouse.click(node.screenX + 3, y);
+	const shown = await piu.waitForFrame((frame) =>
+		extensionDetails(piu, frame).startsWith(`${name}  `),
+	);
+	return extensionDetails(piu, shown);
+}
+
+export async function clickExtensionAction(piu: Piu, action: string) {
+	const node = piu.renderer.root.findDescendantById(extensionDetailsId);
+	if (!node) throw new Error("No Extension details");
+	const lines = piu.captureCharFrame().split("\n");
+	for (let y = node.screenY; y < node.screenY + node.height; y++) {
+		const x = (lines[y] ?? "")
+			.slice(node.screenX, node.screenX + node.width)
+			.indexOf(` ${action} `);
+		if (x >= 0) return piu.mockMouse.click(node.screenX + x + 1, y);
+	}
+	throw new Error(`No ${action} in the Extension details`);
 }
 
 export function messageBar(text: string, width?: number) {

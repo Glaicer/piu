@@ -47,6 +47,7 @@ export type AgenticRow = {
 
 export type InterfaceRow = {
 	name: string;
+	description?: string;
 	enabled: boolean;
 	placed: boolean;
 	removable: boolean;
@@ -170,8 +171,10 @@ function collectInterface({
 		const piExtension = join(dir, "pi-extension.ts");
 		const hasPiExtension = existsSync(piExtension);
 		if (hasPiExtension) piFiles.add(canonical(piExtension));
+		const description = packageDescription(dir);
 		const row = {
 			name,
+			...(description ? { description } : {}),
 			enabled: !disabledExtensions.has(name),
 			placed: placedExtensions.has(name),
 			removable: dirname(dir) !== builtinDir,
@@ -187,6 +190,19 @@ function collectInterface({
 		external: external.sort(byName),
 		piFiles,
 	};
+}
+
+function packageDescription(dir: string) {
+	try {
+		const manifest: unknown = JSON.parse(
+			readFileSync(join(dir, "package.json"), "utf8"),
+		);
+		const description = isRecord(manifest) ? manifest.description : undefined;
+		return typeof description === "string" ? description.trim() : undefined;
+	} catch {
+		// why: a missing or broken package.json only costs the Extension its description; the tab still lists it.
+		return undefined;
+	}
 }
 
 type SettingsRead = {
