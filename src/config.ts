@@ -118,7 +118,12 @@ export const defaultConfig: Omit<Config, "keybindings"> & {
 		],
 		status: ["status.line", "modes.bridge"],
 		side: [],
-		bottom: ["model.current", "input.dir", "status.working"],
+		bottom: [
+			"model.current",
+			"input.dir",
+			"status.working",
+			"context-meter.gauge",
+		],
 	},
 	modules: {},
 	extensions: {},

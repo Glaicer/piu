@@ -65,7 +65,9 @@ test("the bottom line is the screen's last row, black across the whole width, wi
 			line(f).includes("no reasoning") &&
 			f.includes("What would you like to build?"),
 	);
-	expect(line(frame)).toBe("faux-1 · no reasoning    project");
+	expect(line(frame)).toMatch(
+		/^faux-1 · no reasoning {4}project +▱{10} 0\/128k$/,
+	);
 	const bottom = panelBoxes(piu).find((box) => box.id === bottomPanel);
 	expect(bottom).toMatchObject({ x: 0, y: 29, width: 100, height: 1 });
 	const black = RGBA.fromHex(lightTheme.bar);
@@ -91,7 +93,9 @@ test("in a Git repository the bottom line shows the folder and the branch", asyn
 	const frame = await piu.waitForFrame(
 		(f) => line(f).includes("feature/bottom") && line(f).includes("faux-1"),
 	);
-	expect(line(frame)).toBe("faux-1 · no reasoning    project · feature/bottom");
+	expect(line(frame)).toMatch(
+		/^faux-1 · no reasoning {4}project · feature\/bottom +[▰▱]{10} \S+$/,
+	);
 });
 
 test("switching the model and thinking level updates the bottom line", async () => {
@@ -131,7 +135,7 @@ test("clicking the reasoning level on the bottom line opens the reasoning picker
 	expect(frame).not.toContain(modalTitle("Models"));
 });
 
-test("a red working sits at the right of the bottom line while the agent works and goes after the turn", async () => {
+test("a red working sits right before the context meter while the agent works and goes after the turn", async () => {
 	await using piu = await startPiu({
 		script: {
 			replies: [
@@ -145,8 +149,8 @@ test("a red working sits at the right of the bottom line while the agent works a
 	expect(line(await piu.waitForFrame(() => true))).not.toContain("working");
 
 	await send(piu, "Go");
-	const working = await piu.waitForFrame((f) => line(f).endsWith("working"));
-	expect(bottomLine(working)).toEndWith("working ");
+	const working = await piu.waitForFrame((f) => line(f).includes("working"));
+	expect(line(working)).toMatch(/working +[▰▱]{10} \S+$/);
 	expect(
 		spanWith(piu, "working")?.fg.equals(RGBA.fromHex(darkTheme.signal)),
 	).toBe(true);

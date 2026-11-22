@@ -121,6 +121,11 @@ export type DialogAnswer =
 
 export type EditorText = { readonly seq: number; readonly text: string };
 
+export type ContextFill = {
+	readonly tokens: number | null;
+	readonly window: number;
+};
+
 export type PiState = {
 	readonly sessionFile: string | null;
 	readonly commands: readonly BackendCommand[];
@@ -144,6 +149,7 @@ export type PiState = {
 	readonly btw: BtwThread | null;
 	readonly contextUsage: ContextUsageView | null;
 	readonly contextInjections: ContextInjections | null;
+	readonly contextFill: ContextFill | null;
 	readonly title: string | null;
 	readonly editorText: EditorText;
 };
@@ -205,6 +211,7 @@ export function createPiState(options: {
 		btw: BtwThread | null;
 		contextUsage: ContextUsageView | null;
 		contextInjections: ContextInjections | null;
+		contextFill: ContextFill | null;
 		title: string | null;
 		editorText: EditorText;
 	}>({
@@ -230,6 +237,7 @@ export function createPiState(options: {
 		btw: null,
 		contextUsage: null,
 		contextInjections: null,
+		contextFill: null,
 		title: null,
 		editorText: { seq: 0, text: "" },
 	});
@@ -327,6 +335,7 @@ export function createPiState(options: {
 			if (health.status !== "running") {
 				setState("contextUsage", null);
 				setState("contextInjections", null);
+				setState("contextFill", null);
 				setState("agentMode", BUILD_MODE);
 			}
 		});
@@ -404,7 +413,27 @@ export function createPiState(options: {
 		}
 	}
 
+	let contextFillRequest = 0;
+	async function refreshContextFill() {
+		const session = backend;
+		const request = ++contextFillRequest;
+		const response = await session
+			.request({ type: "get_session_stats" })
+			.catch(ignoreDeadBackend);
+		if (!response || session !== backend || request !== contextFillRequest)
+			return;
+		if (response.command !== "get_session_stats" || !response.success) return;
+		const usage = response.data.contextUsage;
+		setState(
+			"contextFill",
+			reconcile(
+				usage ? { tokens: usage.tokens, window: usage.contextWindow } : null,
+			),
+		);
+	}
+
 	async function refreshSession() {
+		void refreshContextFill();
 		const session = backend;
 		try {
 			const [stateResponse, levelsResponse] = await Promise.all([
@@ -477,6 +506,7 @@ export function createPiState(options: {
 					reconcile(record.message),
 				);
 				setState("streamingMessage", null);
+				if (record.message.role === "assistant") void refreshContextFill();
 				break;
 			case "tool_execution_start":
 				runningTools.add(record.toolCallId);
@@ -504,6 +534,7 @@ export function createPiState(options: {
 				break;
 			case "compaction_end":
 				finishRow("compaction", compactionOutcome(record));
+				void refreshContextFill();
 				if (record.result) void syncAfterCompaction();
 				break;
 			case "auto_retry_start":

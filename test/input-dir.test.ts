@@ -25,7 +25,8 @@ const modelPart = "faux-1 · no reasoning    ";
 
 function directoryLine(frame: string) {
 	const line = bottomLine(frame).trim();
-	return line.startsWith(modelPart) ? line.slice(modelPart.length) : "";
+	if (!line.startsWith(modelPart)) return "";
+	return line.slice(modelPart.length).replace(/ +[▰▱]{10} \S+$/, "");
 }
 
 test("the directory Module is on the bottom line, not in the input, and omits the branch outside Git", async () => {
@@ -82,7 +83,7 @@ test("long directory and branch names retain their endings on one line", async (
 	await using piu = await startPiu({
 		script: { replies: [] },
 		cwd: project.cwd,
-		width: 80,
+		width: 100,
 	});
 	const frame = await piu.waitForFrame((frame) =>
 		directoryLine(frame).includes("branch-tail"),
@@ -91,7 +92,7 @@ test("long directory and branch names retain their endings on one line", async (
 	expect(line).toStartWith("…");
 	expect(line).toContain("directory-tail · …");
 	expect(line).toEndWith("branch-tail");
-	expect(stringWidth(line)).toBeLessThanOrEqual(80 - 2 - modelPart.length - 1);
+	expect(stringWidth(line)).toBeLessThanOrEqual(100 - 2 - modelPart.length - 1);
 });
 
 test("wide characters in directory and branch names fit the visible cells", async () => {
@@ -101,7 +102,7 @@ test("wide characters in directory and branch names fit the visible cells", asyn
 	await using piu = await startPiu({
 		script: { replies: [] },
 		cwd: project.cwd,
-		width: 60,
+		width: 80,
 	});
 	const frame = await piu.waitForFrame((frame) =>
 		directoryLine(frame).includes("分支尾部"),
@@ -109,7 +110,7 @@ test("wide characters in directory and branch names fit the visible cells", asyn
 	const line = directoryLine(frame);
 	expect(line).toContain("末尾 · …");
 	expect(line).toEndWith("分支尾部");
-	expect(stringWidth(line)).toBeLessThanOrEqual(60 - 2 - modelPart.length - 1);
+	expect(stringWidth(line)).toBeLessThanOrEqual(80 - 2 - modelPart.length - 1);
 });
 
 test("the directory Module can be placed without the prompt", async () => {

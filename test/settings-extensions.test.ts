@@ -759,7 +759,7 @@ test("Agentic keeps the agent dir exactly as the Backend environment spells it",
 });
 
 test("Selecting an extension shows its origin, state and actions beside the list", async () => {
-	await using piu = await startPiu({ script, height: 40 });
+	await using piu = await startPiu({ script, height: 44 });
 	await piu.waitForFrame((frame) => frame.includes("faux-1"));
 	const agentDir = join(piu.dir, "agent");
 	mkdirSync(join(agentDir, "extensions"), { recursive: true });

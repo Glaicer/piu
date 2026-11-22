@@ -19,6 +19,7 @@ import {
 	formatTokens,
 } from "../src/context-usage.ts";
 import { lightTheme } from "../src/theme.ts";
+import { oracle } from "./context-oracle.ts";
 import {
 	type FauxScript,
 	glyphs,
@@ -119,25 +120,6 @@ function total(rows: UsageFrame["rows"]): string {
 	return formatTokens(
 		CONTEXT_CATEGORIES.reduce((sum, { id }) => sum + shown(rows[id].tokens), 0),
 	);
-}
-
-async function oracle(piu: Piu): Promise<{
-	tokens: number | null;
-	contextWindow: number;
-}> {
-	const path = `${join(piu.dir, "script.json")}.context-oracle.json`;
-	rmSync(path, { force: true });
-	const actions = hooks.probe.actions;
-	if (!actions) throw new Error("The probe Extension is not placed.");
-	await actions.prompt("/context-oracle");
-	const deadline = Date.now() + 4000;
-	while (!existsSync(path)) {
-		if (Date.now() > deadline)
-			throw new Error("The oracle command wrote no usage.");
-		await Bun.sleep(10);
-	}
-	const value = JSON.parse(readFileSync(path, "utf8"));
-	return { tokens: value.tokens ?? null, contextWindow: value.contextWindow };
 }
 
 test("context before the first turn is an estimate and does not call the model", async () => {
