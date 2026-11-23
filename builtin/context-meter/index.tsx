@@ -23,7 +23,7 @@ export default {
 									Math.round((CELLS * fill.tokens) / fill.window),
 								);
 					const used = fill.tokens === null ? "?" : formatTokens(fill.tokens);
-					return `${"▰".repeat(filled)}${"▱".repeat(CELLS - filled)} ${used}/${formatTokens(fill.window)}`;
+					return `${"▰".repeat(filled)}${"▱".repeat(CELLS - filled)}  ${used}/${formatTokens(fill.window)}`;
 				};
 				return (
 					<text wrapMode="none" fg={context.bar ? theme.barMuted : theme.muted}>

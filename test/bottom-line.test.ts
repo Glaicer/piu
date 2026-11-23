@@ -66,7 +66,7 @@ test("the bottom line is the screen's last row, black across the whole width, wi
 			f.includes("What would you like to build?"),
 	);
 	expect(line(frame)).toMatch(
-		/^faux-1 · no reasoning {4}project +▱{10} 0\/128k$/,
+		/^faux-1 · no reasoning {4}project +▱{10} {2}0\/128k$/,
 	);
 	const bottom = panelBoxes(piu).find((box) => box.id === bottomPanel);
 	expect(bottom).toMatchObject({ x: 0, y: 29, width: 100, height: 1 });
@@ -94,7 +94,7 @@ test("in a Git repository the bottom line shows the folder and the branch", asyn
 		(f) => line(f).includes("feature/bottom") && line(f).includes("faux-1"),
 	);
 	expect(line(frame)).toMatch(
-		/^faux-1 · no reasoning {4}project · feature\/bottom +[▰▱]{10} \S+$/,
+		/^faux-1 · no reasoning {4}project · feature\/bottom +[▰▱]{10} +\S+$/,
 	);
 });
 
@@ -150,7 +150,7 @@ test("a red working sits right before the context meter while the agent works an
 
 	await send(piu, "Go");
 	const working = await piu.waitForFrame((f) => line(f).includes("working"));
-	expect(line(working)).toMatch(/working +[▰▱]{10} \S+$/);
+	expect(line(working)).toMatch(/working +[▰▱]{10} +\S+$/);
 	expect(
 		spanWith(piu, "working")?.fg.equals(RGBA.fromHex(darkTheme.signal)),
 	).toBe(true);

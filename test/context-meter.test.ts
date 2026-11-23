@@ -19,7 +19,7 @@ type Piu = Awaited<ReturnType<typeof startPiu>>;
 const WINDOW = 8000;
 const line = (frame: string) => bottomLine(frame).trim();
 const agentPanel = (frame: string) => panelText(frame, 10, 0);
-const meter = /[▰▱]{10} \S+\/\S+$/;
+const meter = /[▰▱]{10} +\S+\/\S+$/;
 
 function fixture(script: FauxScript) {
 	return {
@@ -39,7 +39,7 @@ async function send(piu: Piu, text: string) {
 
 function gauge(tokens: number, window: number) {
 	const filled = Math.round((10 * tokens) / window);
-	return `${"▰".repeat(filled)}${"▱".repeat(10 - filled)} ${formatTokens(tokens)}/${formatTokens(window)}`;
+	return `${"▰".repeat(filled)}${"▱".repeat(10 - filled)}  ${formatTokens(tokens)}/${formatTokens(window)}`;
 }
 
 test("the context meter ends the bottom line with Pi's usage after a turn, in one muted colour", async () => {
@@ -88,7 +88,7 @@ test("working appears right before the context meter, which follows each model r
 	const busy = await piu.waitForFrame(
 		(frame) => working(frame) && line(frame).match(meter)?.[0] !== before,
 	);
-	expect(line(busy)).toMatch(/working +[▰▱]{10} \S+\/128k$/);
+	expect(line(busy)).toMatch(/working +[▰▱]{10} +\S+\/128k$/);
 
 	const done = await piu.waitForFrame(
 		(f) => f.includes("All done") && !working(f),
@@ -108,5 +108,5 @@ test("after a compaction the context meter shows an unknown count until the next
 	);
 	await send(piu, "/compact");
 	const frame = await piu.waitForFrame((f) => line(f).endsWith("?/128k"));
-	expect(line(frame)).toEndWith("▱▱▱▱▱▱▱▱▱▱ ?/128k");
+	expect(line(frame)).toEndWith("▱▱▱▱▱▱▱▱▱▱  ?/128k");
 }, 20000);

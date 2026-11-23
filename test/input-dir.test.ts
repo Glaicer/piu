@@ -26,7 +26,7 @@ const modelPart = "faux-1 · no reasoning    ";
 function directoryLine(frame: string) {
 	const line = bottomLine(frame).trim();
 	if (!line.startsWith(modelPart)) return "";
-	return line.slice(modelPart.length).replace(/ +[▰▱]{10} \S+$/, "");
+	return line.slice(modelPart.length).replace(/ +[▰▱]{10} +\S+$/, "");
 }
 
 test("the directory Module is on the bottom line, not in the input, and omits the branch outside Git", async () => {
